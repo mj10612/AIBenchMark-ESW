@@ -1,6 +1,6 @@
 # EmbEval: An Open-Source Embedded AI Coding Benchmark
 
-[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+[![License: Apache 2.0](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](LICENSE)
 [![Python Version](https://img.shields.io/badge/python-3.9%2B-blue)](https://www.python.org/)
 [![C Standard](https://img.shields.io/badge/standard-C99%2FC11-orange)](https://en.wikipedia.org/wiki/C99)
 [![Test Harness](https://img.shields.io/badge/harness-Unity%20TDD-brightgreen)](https://github.com/ThrowTheSwitch/Unity)
@@ -168,6 +168,6 @@ To contribute new benchmark tasks, hardware mock abstractions, or evaluation met
 
 ## 📜 License
 
-This project is licensed under the [MIT License](LICENSE).
+This project is licensed under the [Apache License 2.0](LICENSE).
 Third-party components:
 * [Unity](https://github.com/ThrowTheSwitch/Unity) is licensed under the MIT License by Mike Karlesky, Mark VanderVoord, and Greg Williams.
