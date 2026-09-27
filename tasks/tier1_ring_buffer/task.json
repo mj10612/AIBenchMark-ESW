@@ -1,0 +1,19 @@
+{
+  "id": "tier1_ring_buffer",
+  "name": "Lock-free SPSC Ring Buffer",
+  "tier": 1,
+  "category": "core_fundamentals",
+  "target_standard": "c99",
+  "description": "Implement a deterministic, lock-free Single-Producer Single-Consumer (SPSC) ring buffer in C99.",
+  "limits": {
+    "max_flash_bytes": 1024,
+    "max_ram_bytes": 128,
+    "timeout_seconds": 5
+  },
+  "weights": {
+    "functional": 0.6,
+    "memory": 0.2,
+    "safety": 0.2
+  },
+  "entry_file": "src/ring_buffer.c"
+}

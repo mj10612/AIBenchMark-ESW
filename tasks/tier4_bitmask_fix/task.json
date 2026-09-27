@@ -1,0 +1,19 @@
+{
+  "id": "tier4_bitmask_fix",
+  "name": "W1C Interrupt Register & Priority Masking Bug Fix",
+  "tier": 4,
+  "category": "bug_fix_and_safety",
+  "target_standard": "c99",
+  "description": "Diagnose and fix a critical interrupt status register W1C race condition and priority bitmask corruption bug.",
+  "limits": {
+    "max_flash_bytes": 1024,
+    "max_ram_bytes": 128,
+    "timeout_seconds": 5
+  },
+  "weights": {
+    "functional": 0.6,
+    "memory": 0.2,
+    "safety": 0.2
+  },
+  "entry_file": "src/irq_manager.c"
+}
