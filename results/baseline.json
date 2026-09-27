@@ -1,0 +1,162 @@
+{
+  "model_name": "baseline",
+  "overall_score": 100.0,
+  "pass_at_1_pct": 100.0,
+  "tasks": [
+    {
+      "task_id": "tier1_crc16",
+      "tier": 1,
+      "model_name": "baseline",
+      "compiled": true,
+      "test_result": {
+        "total": 5,
+        "passed": 5,
+        "failed": 0,
+        "ignored": 0,
+        "all_passed": true
+      },
+      "size_metrics": {
+        "flash_bytes": 0,
+        "ram_bytes": 0,
+        "ref_flash_bytes": 0,
+        "ref_ram_bytes": 0
+      },
+      "safety_metrics": {
+        "error_count": 0,
+        "warning_count": 0
+      },
+      "scores": {
+        "functional": 100.0,
+        "memory": 100.0,
+        "safety": 100.0,
+        "total": 100.0
+      },
+      "execution_time_sec": 0.13,
+      "error_log": null
+    },
+    {
+      "task_id": "tier1_ring_buffer",
+      "tier": 1,
+      "model_name": "baseline",
+      "compiled": true,
+      "test_result": {
+        "total": 6,
+        "passed": 6,
+        "failed": 0,
+        "ignored": 0,
+        "all_passed": true
+      },
+      "size_metrics": {
+        "flash_bytes": 0,
+        "ram_bytes": 0,
+        "ref_flash_bytes": 0,
+        "ref_ram_bytes": 0
+      },
+      "safety_metrics": {
+        "error_count": 0,
+        "warning_count": 0
+      },
+      "scores": {
+        "functional": 100.0,
+        "memory": 100.0,
+        "safety": 100.0,
+        "total": 100.0
+      },
+      "execution_time_sec": 0.107,
+      "error_log": null
+    },
+    {
+      "task_id": "tier2_debounce_fsm",
+      "tier": 2,
+      "model_name": "baseline",
+      "compiled": true,
+      "test_result": {
+        "total": 5,
+        "passed": 5,
+        "failed": 0,
+        "ignored": 0,
+        "all_passed": true
+      },
+      "size_metrics": {
+        "flash_bytes": 0,
+        "ram_bytes": 0,
+        "ref_flash_bytes": 0,
+        "ref_ram_bytes": 0
+      },
+      "safety_metrics": {
+        "error_count": 0,
+        "warning_count": 0
+      },
+      "scores": {
+        "functional": 100.0,
+        "memory": 100.0,
+        "safety": 100.0,
+        "total": 100.0
+      },
+      "execution_time_sec": 0.154,
+      "error_log": null
+    },
+    {
+      "task_id": "tier3_i2c_sensor",
+      "tier": 3,
+      "model_name": "baseline",
+      "compiled": true,
+      "test_result": {
+        "total": 7,
+        "passed": 7,
+        "failed": 0,
+        "ignored": 0,
+        "all_passed": true
+      },
+      "size_metrics": {
+        "flash_bytes": 0,
+        "ram_bytes": 0,
+        "ref_flash_bytes": 0,
+        "ref_ram_bytes": 0
+      },
+      "safety_metrics": {
+        "error_count": 0,
+        "warning_count": 0
+      },
+      "scores": {
+        "functional": 100.0,
+        "memory": 100.0,
+        "safety": 100.0,
+        "total": 100.0
+      },
+      "execution_time_sec": 0.127,
+      "error_log": null
+    },
+    {
+      "task_id": "tier4_bitmask_fix",
+      "tier": 4,
+      "model_name": "baseline",
+      "compiled": true,
+      "test_result": {
+        "total": 5,
+        "passed": 5,
+        "failed": 0,
+        "ignored": 0,
+        "all_passed": true
+      },
+      "size_metrics": {
+        "flash_bytes": 0,
+        "ram_bytes": 0,
+        "ref_flash_bytes": 0,
+        "ref_ram_bytes": 0
+      },
+      "safety_metrics": {
+        "error_count": 0,
+        "warning_count": 0
+      },
+      "scores": {
+        "functional": 100.0,
+        "memory": 100.0,
+        "safety": 100.0,
+        "total": 100.0
+      },
+      "execution_time_sec": 0.118,
+      "error_log": null
+    }
+  ]
+}

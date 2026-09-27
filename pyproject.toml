@@ -1,0 +1,33 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "embeval"
+version = "0.1.0"
+description = "Embedded AI Coding Benchmark Framework"
+readme = "README.md"
+requires-python = ">=3.9"
+license = { text = "MIT" }
+authors = [
+    { name = "EmbEval Contributors" }
+]
+keywords = ["embedded", "ai-benchmark", "llm-eval", "c99", "unity", "misra"]
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "Programming Language :: C",
+    "Topic :: Software Development :: Testing",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence"
+]
+dependencies = []
+
+[project.optional-dependencies]
+llm = ["litellm>=1.0.0"]
+full = ["litellm>=1.0.0", "rich>=13.0.0"]
+
+[project.scripts]
+embeval = "embeval.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["embeval*"]
