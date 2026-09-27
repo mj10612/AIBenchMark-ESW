@@ -1,4 +1,4 @@
-# Copyright 2026 EmbEval Contributors
+# Copyright 2026 AIBenchMark-ESW Contributors
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -13,7 +13,7 @@
 # limitations under the License.
 
 """
-EmbEval: An open-source AI Coding Benchmark specialized for Embedded Systems.
+AIBenchMark-ESW: An open-source AI Coding Benchmark specialized for Embedded Systems.
 """
 
 __version__ = "0.1.0"

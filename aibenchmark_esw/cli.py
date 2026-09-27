@@ -6,20 +6,20 @@ import argparse
 from pathlib import Path
 from typing import List, Optional
 
-from embeval.models import TaskEvaluationResult
-from embeval.dataset import DatasetLoader
-from embeval.sandbox.executor import ExecutionSandbox
-from embeval.sandbox.size_analyzer import SizeAnalyzer
-from embeval.sandbox.static_analyzer import StaticAnalyzer
-from embeval.metrics.scorer import BenchmarkScorer
-from embeval.metrics.reporter import BenchmarkReporter
-from embeval.llm.client import LLMClient
+from aibenchmark_esw.models import TaskEvaluationResult
+from aibenchmark_esw.dataset import DatasetLoader
+from aibenchmark_esw.sandbox.executor import ExecutionSandbox
+from aibenchmark_esw.sandbox.size_analyzer import SizeAnalyzer
+from aibenchmark_esw.sandbox.static_analyzer import StaticAnalyzer
+from aibenchmark_esw.metrics.scorer import BenchmarkScorer
+from aibenchmark_esw.metrics.reporter import BenchmarkReporter
+from aibenchmark_esw.llm.client import LLMClient
 
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
-        prog="embeval",
-        description="EmbEval: Open-Source Embedded AI Coding Benchmark Framework",
+        prog="aibenchmark-esw",
+        description="AIBenchMark-ESW: Open-Source Embedded AI Coding Benchmark Framework",
     )
     subparsers = parser.add_subparsers(dest="command", help="Command to run")
 
@@ -54,7 +54,7 @@ def cmd_list(args: argparse.Namespace) -> int:
     loader = DatasetLoader()
     tasks = loader.list_tasks(tier=args.tier)
     print("=" * 80)
-    print(f" EmbEval Tasks (Total: {len(tasks)})")
+    print(f" AIBenchMark-ESW Tasks (Total: {len(tasks)})")
     print("=" * 80)
     print(f"{'Tier':<6} {'Task ID':<24} {'Category':<20} {'Standard':<10} {'Name'}")
     print("-" * 80)
@@ -149,7 +149,7 @@ def cmd_run(args: argparse.Namespace) -> int:
         print("No matching tasks found.", file=sys.stderr)
         return 1
 
-    print(f"Starting EmbEval run on {len(tasks)} tasks using model '{args.model}'...")
+    print(f"Starting AIBenchMark-ESW run on {len(tasks)} tasks using model '{args.model}'...")
     executor = ExecutionSandbox(compiler_path=args.compiler)
     size_analyzer = SizeAnalyzer()
     static_analyzer = StaticAnalyzer()

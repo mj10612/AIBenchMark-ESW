@@ -3,7 +3,7 @@ import shutil
 import subprocess
 from pathlib import Path
 from typing import Optional
-from embeval.models import StaticSafetyMetrics
+from aibenchmark_esw.models import StaticSafetyMetrics
 
 
 class StaticAnalyzer:

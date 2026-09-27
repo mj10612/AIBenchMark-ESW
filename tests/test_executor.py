@@ -1,6 +1,6 @@
 import unittest
-from embeval.dataset import DatasetLoader
-from embeval.sandbox.executor import ExecutionSandbox
+from aibenchmark_esw.dataset import DatasetLoader
+from aibenchmark_esw.sandbox.executor import ExecutionSandbox
 
 
 class TestExecutionSandbox(unittest.TestCase):

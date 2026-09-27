@@ -1,6 +1,6 @@
 import unittest
 from pathlib import Path
-from embeval.models import (
+from aibenchmark_esw.models import (
     TaskConfig,
     TaskLimits,
     TaskWeights,
@@ -9,7 +9,7 @@ from embeval.models import (
     SizeMetrics,
     StaticSafetyMetrics,
 )
-from embeval.metrics.scorer import BenchmarkScorer
+from aibenchmark_esw.metrics.scorer import BenchmarkScorer
 
 
 class TestBenchmarkScorer(unittest.TestCase):

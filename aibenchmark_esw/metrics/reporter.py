@@ -1,6 +1,6 @@
 import json
 from typing import List, Dict, Any
-from embeval.models import TaskEvaluationResult
+from aibenchmark_esw.models import TaskEvaluationResult
 
 
 class BenchmarkReporter:
@@ -19,12 +19,12 @@ class BenchmarkReporter:
         avg_total = sum(r.scores.total_score for r in results) / total_tasks
 
         md = []
-        md.append(f"# EmbEval Benchmark Report: `{model_name}`\n")
+        md.append(f"# AIBenchMark-ESW Benchmark Report: `{model_name}`\n")
         md.append("### Summary Overview")
         md.append(f"- **Total Tasks**: {total_tasks}")
         md.append(f"- **Compilation Rate**: {compiled_tasks}/{total_tasks} ({compiled_tasks/total_tasks*100:.1f}%)")
         md.append(f"- **Pass@1 (All Tests Passed)**: {all_passed_tasks}/{total_tasks} ({all_passed_tasks/total_tasks*100:.1f}%)")
-        md.append(f"- **Overall EmbEval Score**: **{avg_total:.2f} / 100.0**\n")
+        md.append(f"- **Overall AIBenchMark-ESW Score**: **{avg_total:.2f} / 100.0**\n")
 
         md.append("### Dimensional Scores")
         md.append("| Dimension | Average Score | Weight |")
@@ -53,7 +53,7 @@ class BenchmarkReporter:
     def generate_cli_table(results: List[TaskEvaluationResult], model_name: str) -> str:
         lines = []
         lines.append("=" * 78)
-        lines.append(f" EmbEval Benchmark Results - Model: {model_name}")
+        lines.append(f" AIBenchMark-ESW Benchmark Results - Model: {model_name}")
         lines.append("=" * 78)
         header = f"{'Tier':<5} {'Task ID':<22} {'Comp':<6} {'Tests':<8} {'Flash/RAM':<14} {'Score':<8}"
         lines.append(header)

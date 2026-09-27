@@ -1,4 +1,4 @@
-from embeval.models import (
+from aibenchmark_esw.models import (
     TaskConfig,
     CompilationResult,
     TestResult,

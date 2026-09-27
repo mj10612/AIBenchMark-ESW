@@ -4,7 +4,7 @@ import struct
 import subprocess
 from pathlib import Path
 from typing import Optional, Tuple
-from embeval.models import SizeMetrics
+from aibenchmark_esw.models import SizeMetrics
 
 
 class SizeAnalyzer:

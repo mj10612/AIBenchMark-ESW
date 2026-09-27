@@ -3,14 +3,14 @@ requires = ["setuptools>=61.0"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "embeval"
+name = "aibenchmark-esw"
 version = "0.1.0"
-description = "Embedded AI Coding Benchmark Framework"
+description = "Embedded AI Coding Benchmark Framework (AIBenchMark-ESW)"
 readme = "README.md"
 requires-python = ">=3.9"
 license = { text = "Apache-2.0" }
 authors = [
-    { name = "EmbEval Contributors" }
+    { name = "AIBenchMark-ESW Contributors" }
 ]
 keywords = ["embedded", "ai-benchmark", "llm-eval", "c99", "unity", "misra"]
 classifiers = [
@@ -26,8 +26,8 @@ llm = ["litellm>=1.0.0"]
 full = ["litellm>=1.0.0", "rich>=13.0.0"]
 
 [project.scripts]
-embeval = "embeval.cli:main"
+aibenchmark-esw = "aibenchmark_esw.cli:main"
 
 [tool.setuptools.packages.find]
 where = ["."]
-include = ["embeval*"]
+include = ["aibenchmark_esw*"]

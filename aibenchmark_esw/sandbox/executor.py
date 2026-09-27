@@ -5,7 +5,7 @@ import tempfile
 import subprocess
 from pathlib import Path
 from typing import Optional, Tuple
-from embeval.models import TaskConfig, CompilationResult, TestResult
+from aibenchmark_esw.models import TaskConfig, CompilationResult, TestResult
 
 
 class ExecutionSandbox:
@@ -50,7 +50,7 @@ class ExecutionSandbox:
             work_dir = Path(custom_workspace)
             work_dir.mkdir(parents=True, exist_ok=True)
         else:
-            temp_dir = tempfile.mkdtemp(prefix=f"embeval_{task.id}_")
+            temp_dir = tempfile.mkdtemp(prefix=f"aibenchmark_esw_{task.id}_")
             work_dir = Path(temp_dir)
 
         try:

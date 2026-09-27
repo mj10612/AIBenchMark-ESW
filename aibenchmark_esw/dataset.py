@@ -1,7 +1,7 @@
 import json
 from pathlib import Path
 from typing import List, Optional, Dict
-from embeval.models import TaskConfig
+from aibenchmark_esw.models import TaskConfig
 
 
 class DatasetLoader:

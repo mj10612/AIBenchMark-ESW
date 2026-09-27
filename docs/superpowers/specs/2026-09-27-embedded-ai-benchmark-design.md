@@ -1,8 +1,8 @@
-# Embedded AI Coding Benchmark (`EmbEval`) Design Document
+# Embedded AI Coding Benchmark (`AIBenchMark-ESW`) Design Document
 
 ## 1. 개요 (Overview)
 
-`EmbEval`은 임베디드 소프트웨어 개발 영역에 특화된 최초의 오픈소스 AI 코딩 벤치마크 프레임워크입니다.
+`AIBenchMark-ESW`은 임베디드 소프트웨어 개발 영역에 특화된 최초의 오픈소스 AI 코딩 벤치마크 프레임워크입니다.
 기존의 SWE-bench, HumanEval 등이 Python, Web, 일반 알고리즘 위주의 평가를 수행하는 한계를 극복하고, 자원 제약(Flash/RAM), 하드웨어 인터페이스(Mock HAL), 상태 머신(FSM), 동시성/인터럽트, 그리고 정적 안전 규칙(MISRA-C) 등 **실제 임베디드 펌웨어 개발 환경의 요구사항을 반영한 다차원 평가**를 제공합니다.
 
 ---
@@ -27,7 +27,7 @@
 ```mermaid
 flowchart TD
     subgraph Host["Host / Orchestrator (Python)"]
-        CLI["CLI Runner (embeval)"]
+        CLI["CLI Runner (aibenchmark-esw)"]
         DatasetMgr["Dataset Loader (JSON/YAML)"]
         LLMClient["LLM Adapter (LiteLLM / OpenAI / Anthropic / Ollama)"]
         Evaluator["Evaluation Engine & Metric Aggregator"]
@@ -63,21 +63,21 @@ flowchart TD
 
 ### 3.2 컴포넌트 상세 명세
 
-1. **`embeval.llm.client` (LLM Client)**:
+1. **`aibenchmark_esw.llm.client` (LLM Client)**:
    - LiteLLM을 래핑하여 모델 호출 통일화.
    - 프롬프트 템플릿(시스템 프롬프트, 인터페이스 헤더, C99 제약사항) 주입.
    - 코드 블록(````c ... ````) 자동 추출 및 구문 클리닝.
-2. **`embeval.sandbox.executor` (Execution Sandbox)**:
+2. **`aibenchmark_esw.sandbox.executor` (Execution Sandbox)**:
    - 태스크별 임시 작업 디렉토리 생성 및 코드 주입.
    - CMake 빌드 및 CTest 실행 제어.
    - 실행 타임아웃 및 메모리 제한 관리.
-3. **`embeval.sandbox.size_analyzer` (Size Analyzer)**:
+3. **`aibenchmark_esw.sandbox.size_analyzer` (Size Analyzer)**:
    - 빌드된 오브젝트/ELF 파일에 대해 `size` 도구를 구동.
    - `.text` + `.rodata` (Flash 소비량) 및 `.data` + `.bss` (RAM 소비량) 파싱.
-4. **`embeval.sandbox.static_analyzer` (Static Analyzer)**:
+4. **`aibenchmark_esw.sandbox.static_analyzer` (Static Analyzer)**:
    - `cppcheck --enable=all` 및 `clang-tidy` 실행.
    - 경고/에러 건수 및 치명적 취약점(메모리 오버런, 널 포인터) 검출.
-5. **`embeval.metrics.scorer` (Score Aggregator)**:
+5. **`aibenchmark_esw.metrics.scorer` (Score Aggregator)**:
    - 수집된 메트릭을 바탕으로 복합 점수 산출 및 결과 JSON 생성.
 
 ---
@@ -162,7 +162,7 @@ tasks/
 
 ## 6. CLI 인터페이스
 
-- `embeval list [--tier <N>]`: 사용 가능한 태스크 목록 조회
-- `embeval run --model <model_name> [--tasks <task_id>] [--tier <N>] [--output <file>]`: AI 모델 호출 및 벤치마크 평가 실행
-- `embeval eval --task <task_id> --solution-dir <dir>`: 로컬 작성 코드 직접 평가 (테스트 및 디버깅용)
-- `embeval report --results <file_or_dir> [--format markdown|json]`: 리포트 및 리더보드 출력
+- `aibenchmark-esw list [--tier <N>]`: 사용 가능한 태스크 목록 조회
+- `aibenchmark-esw run --model <model_name> [--tasks <task_id>] [--tier <N>] [--output <file>]`: AI 모델 호출 및 벤치마크 평가 실행
+- `aibenchmark-esw eval --task <task_id> --solution-dir <dir>`: 로컬 작성 코드 직접 평가 (테스트 및 디버깅용)
+- `aibenchmark-esw report --results <file_or_dir> [--format markdown|json]`: 리포트 및 리더보드 출력

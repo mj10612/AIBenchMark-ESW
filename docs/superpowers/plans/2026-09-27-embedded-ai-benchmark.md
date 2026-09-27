@@ -1,10 +1,10 @@
-# Embedded AI Coding Benchmark (EmbEval) Implementation Plan
+# Embedded AI Coding Benchmark (AIBenchMark-ESW) Implementation Plan
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Build and release `EmbEval`, an open-source AI coding benchmark framework specialized for embedded systems, evaluating functional correctness, memory footprint, and static safety across 4 problem tiers with automated host-based Unity/CMake verification.
+**Goal:** Build and release `AIBenchMark-ESW`, an open-source AI coding benchmark framework specialized for embedded systems, evaluating functional correctness, memory footprint, and static safety across 4 problem tiers with automated host-based Unity/CMake verification.
 
-**Architecture:** Python-based CLI orchestrator (`embeval`) manages task loading, LLM interaction via LiteLLM, and execution within an isolated sandbox. The sandbox compiles C99 code, runs Unity unit test suites, extracts ELF Flash/RAM sizes, runs static analysis, and computes a composite multi-dimensional score.
+**Architecture:** Python-based CLI orchestrator (`aibenchmark_esw`) manages task loading, LLM interaction via LiteLLM, and execution within an isolated sandbox. The sandbox compiles C99 code, runs Unity unit test suites, extracts ELF Flash/RAM sizes, runs static analysis, and computes a composite multi-dimensional score.
 
 **Tech Stack:** Python 3.10+, Click/Typer, Pydantic, LiteLLM, Rich, C99, CMake, Unity Test Framework, GCC/Clang/MSVC, size/readelf.
 
@@ -54,16 +54,16 @@
 
 **Files:**
 - Create: `pyproject.toml`
-- Create: `embeval/__init__.py`
-- Create: `embeval/models.py`
-- Create: `embeval/dataset.py`
-- Create: `embeval/sandbox/executor.py`
-- Create: `embeval/sandbox/size_analyzer.py`
-- Create: `embeval/sandbox/static_analyzer.py`
-- Create: `embeval/metrics/scorer.py`
-- Create: `embeval/metrics/reporter.py`
-- Create: `embeval/llm/client.py`
-- Create: `embeval/cli.py`
+- Create: `aibenchmark_esw/__init__.py`
+- Create: `aibenchmark_esw/models.py`
+- Create: `aibenchmark_esw/dataset.py`
+- Create: `aibenchmark_esw/sandbox/executor.py`
+- Create: `aibenchmark_esw/sandbox/size_analyzer.py`
+- Create: `aibenchmark_esw/sandbox/static_analyzer.py`
+- Create: `aibenchmark_esw/metrics/scorer.py`
+- Create: `aibenchmark_esw/metrics/reporter.py`
+- Create: `aibenchmark_esw/llm/client.py`
+- Create: `aibenchmark_esw/cli.py`
 
 - [ ] **Step 1: Define data models (TaskConfig, EvaluationResult, DimensionScores)**
 - [ ] **Step 2: Implement DatasetLoader for discovering and parsing task directories**

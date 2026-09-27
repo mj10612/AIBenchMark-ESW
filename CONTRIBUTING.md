@@ -1,12 +1,12 @@
-# Contributing to EmbEval
+# Contributing to AIBenchMark-ESW
 
-Thank you for your interest in contributing to **EmbEval**! We aim to make this benchmark the industry standard for evaluating AI coding assistants in embedded systems and firmware development.
+Thank you for your interest in contributing to **AIBenchMark-ESW**! We aim to make this benchmark the industry standard for evaluating AI coding assistants in embedded systems and firmware development.
 
 ---
 
 ## How to Add a New Benchmark Task
 
-Every task in EmbEval lives in its own directory under `tasks/<task_id>/` and must be fully self-contained.
+Every task in AIBenchMark-ESW lives in its own directory under `tasks/<task_id>/` and must be fully self-contained.
 
 ### 1. Task Directory Layout
 
@@ -62,7 +62,7 @@ Create `task.json` with the following schema:
 3. **Comprehensive Tests**: Include boundary conditions, null pointer checks, and wrap-around logic in `tests/test_<module>.c`.
 4. **Golden Reference**: Ensure `reference/<module>.c` passes all test cases with a score of 100.0:
    ```bash
-   embeval eval --task <task_id> --reference
+   aibenchmark-esw eval --task <task_id> --reference
    ```
 
 ---

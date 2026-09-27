@@ -1,5 +1,5 @@
 import unittest
-from embeval.dataset import DatasetLoader
+from aibenchmark_esw.dataset import DatasetLoader
 
 
 class TestDatasetLoader(unittest.TestCase):

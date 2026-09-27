@@ -1,4 +1,4 @@
-# EmbEval: An Open-Source Embedded AI Coding Benchmark
+# AIBenchMark-ESW: An Open-Source Embedded AI Coding Benchmark
 
 [![License: Apache 2.0](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](LICENSE)
 [![Python Version](https://img.shields.io/badge/python-3.9%2B-blue)](https://www.python.org/)
@@ -9,7 +9,7 @@
 
 ---
 
-## 📌 Why EmbEval?
+## 📌 Why AIBenchMark-ESW?
 
 Existing AI coding benchmarks (like *HumanEval*, *MBPP*, and *SWE-bench*) are almost exclusively built around Python, JavaScript, or enterprise applications. They evaluate models purely on boolean unit test pass rates ($Pass@k$).
 
@@ -18,7 +18,7 @@ However, **embedded systems software (firmware)** operates under fundamentally d
 2. **Hardware & Peripheral Abstraction**: Embedded code directly controls registers, timers, interrupts, and communication buses (I2C, SPI, UART).
 3. **Safety & Reliability Standards**: Dynamic memory allocation (`malloc`/`free`) is forbidden in automotive and medical standards (MISRA-C, ISO 26262, IEC 62304). Race conditions on interrupt flags or bitmask errors lead to hard faults and system deadlocks.
 
-**EmbEval fills this gap** by providing an automated, host-based testbed that evaluates AI-generated embedded C code across **functional correctness**, **memory footprint**, and **static code safety**.
+**AIBenchMark-ESW fills this gap** by providing an automated, host-based testbed that evaluates AI-generated embedded C code across **functional correctness**, **memory footprint**, and **static code safety**.
 
 ---
 
@@ -70,17 +70,17 @@ pip install -e ".[full]"
 
 #### List Available Tasks
 ```bash
-embeval list
+aibenchmark-esw list
 ```
 
 #### Evaluate Local Solution or Reference
 Test a specific task against the built-in golden reference:
 ```bash
-embeval eval --task tier1_ring_buffer --reference
+aibenchmark-esw eval --task tier1_ring_buffer --reference
 ```
 Or test your own local C solution:
 ```bash
-embeval eval --task tier1_ring_buffer --solution ./my_ring_buffer.c
+aibenchmark-esw eval --task tier1_ring_buffer --solution ./my_ring_buffer.c
 ```
 
 #### Run Benchmark with LLM Models
@@ -88,22 +88,22 @@ Run the benchmark across all tasks using any LLM:
 ```bash
 # Evaluate OpenAI GPT-4o
 export OPENAI_API_KEY="your-api-key"
-embeval run --model gpt-4o --output results/gpt4o_results.json
+aibenchmark-esw run --model gpt-4o --output results/gpt4o_results.json
 
 # Evaluate Anthropic Claude 3.5 Sonnet
 export ANTHROPIC_API_KEY="your-api-key"
-embeval run --model claude-3-5-sonnet-20241022 --output results/claude_results.json
+aibenchmark-esw run --model claude-3-5-sonnet-20241022 --output results/claude_results.json
 
 # Evaluate a local Ollama model (no API key needed)
-embeval run --model ollama/qwen2.5-coder:7b --output results/ollama_results.json
+aibenchmark-esw run --model ollama/qwen2.5-coder:7b --output results/ollama_results.json
 
 # Run reference baseline
-embeval run --model baseline --output results/baseline.json
+aibenchmark-esw run --model baseline --output results/baseline.json
 ```
 
 #### View Results
 ```bash
-embeval report --results results/baseline.json
+aibenchmark-esw report --results results/baseline.json
 ```
 
 ---
@@ -138,8 +138,9 @@ Checks compliance with MISRA-C and embedded safety rules (using `cppcheck` or bu
 AIBenchMark-ESW/
 ├── pyproject.toml              # Python packaging & dependencies
 ├── README.md                   # Project documentation & quickstart
+├── NOTICE                      # Copyright & third-party license notices
 ├── CONTRIBUTING.md             # Guide for contributing new tasks
-├── embeval/                    # Python benchmark orchestrator
+├── aibenchmark_esw/            # Python benchmark orchestrator
 │   ├── cli.py                  # CLI command entry point
 │   ├── dataset.py              # Task discovery & loader
 │   ├── models.py               # Data models and evaluation types
