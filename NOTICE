@@ -1,0 +1,16 @@
+EmbEval: Embedded AI Coding Benchmark Framework (AIBenchMark-ESW)
+Copyright 2026 EmbEval Contributors
+
+This product is licensed under the Apache License, Version 2.0.
+See the LICENSE file for details.
+
+================================================================================
+Third-Party Dependencies & Acknowledgments
+================================================================================
+
+This project bundles the following third-party software:
+
+1. Unity Project (located in `third_party/unity/`)
+   Copyright (c) 2007-21 Mike Karlesky, Mark VanderVoord, Greg Williams
+   License: MIT License
+   https://github.com/ThrowTheSwitch/Unity

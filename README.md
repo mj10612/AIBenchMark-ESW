@@ -169,5 +169,4 @@ To contribute new benchmark tasks, hardware mock abstractions, or evaluation met
 ## 📜 License
 
 This project is licensed under the [Apache License 2.0](LICENSE).
-Third-party components:
-* [Unity](https://github.com/ThrowTheSwitch/Unity) is licensed under the MIT License by Mike Karlesky, Mark VanderVoord, and Greg Williams.
+See the [NOTICE](NOTICE) file for third-party software acknowledgments.
