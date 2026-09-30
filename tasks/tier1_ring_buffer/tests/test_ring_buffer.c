@@ -79,6 +79,52 @@ void test_null_pointer_safety(void) {
     TEST_ASSERT_EQUAL_UINT(0, ring_buffer_count(NULL));
 }
 
+void test_non_power_of_two_capacity_rollover(void) {
+    uint8_t storage[3] = {0};
+    ring_buffer_t local;
+    ring_buffer_init(&local, storage, 3);
+    /* Many fill/drain cycles cross the implementation's counter rollover. */
+    for (uint16_t cycle = 0; cycle < 300; cycle++) {
+        for (uint8_t i = 0; i < 3; i++) {
+            TEST_ASSERT_TRUE(ring_buffer_push(&local, (uint8_t)(cycle + i)));
+        }
+        TEST_ASSERT_TRUE(ring_buffer_is_full(&local));
+        TEST_ASSERT_FALSE(ring_buffer_push(&local, 0xFF));
+        for (uint8_t i = 0; i < 3; i++) {
+            uint8_t value = 0;
+            TEST_ASSERT_TRUE(ring_buffer_pop(&local, &value));
+            TEST_ASSERT_EQUAL_HEX8((uint8_t)(cycle + i), value);
+            TEST_ASSERT_EQUAL_UINT(2U - i, ring_buffer_count(&local));
+        }
+    }
+}
+
+void test_invalid_storage_and_capacity(void) {
+    uint8_t value = 0;
+    ring_buffer_init(&rb, NULL, BUFFER_SIZE);
+    TEST_ASSERT_FALSE(ring_buffer_push(&rb, 1));
+    TEST_ASSERT_FALSE(ring_buffer_pop(&rb, &value));
+    TEST_ASSERT_TRUE(ring_buffer_is_empty(&rb));
+    TEST_ASSERT_EQUAL_UINT(0, ring_buffer_count(&rb));
+    ring_buffer_init(&rb, raw_buffer, 0);
+    TEST_ASSERT_FALSE(ring_buffer_push(&rb, 1));
+    ring_buffer_init(&rb, raw_buffer, SIZE_MAX);
+    TEST_ASSERT_FALSE(ring_buffer_push(&rb, 1));
+}
+
+void test_capacity_one(void) {
+    uint8_t storage[1];
+    ring_buffer_t local;
+    ring_buffer_init(&local, storage, 1);
+    for (uint8_t i = 0; i < 20; i++) {
+        uint8_t value = 0;
+        TEST_ASSERT_TRUE(ring_buffer_push(&local, i));
+        TEST_ASSERT_FALSE(ring_buffer_push(&local, 0xFF));
+        TEST_ASSERT_TRUE(ring_buffer_pop(&local, &value));
+        TEST_ASSERT_EQUAL_HEX8(i, value);
+    }
+}
+
 int main(void) {
     UNITY_BEGIN();
     RUN_TEST(test_init_and_empty);
@@ -87,5 +133,8 @@ int main(void) {
     RUN_TEST(test_fifo_ordering);
     RUN_TEST(test_wrap_around_continuous);
     RUN_TEST(test_null_pointer_safety);
+    RUN_TEST(test_non_power_of_two_capacity_rollover);
+    RUN_TEST(test_invalid_storage_and_capacity);
+    RUN_TEST(test_capacity_one);
     return UNITY_END();
 }

@@ -9,12 +9,12 @@ set(TARGET_SRC "${CMAKE_CURRENT_SOURCE_DIR}/../src/debounce_fsm.c" CACHE FILEPAT
 add_executable(test_runner
     test_debounce_fsm.c
     ${TARGET_SRC}
-    ${CMAKE_CURRENT_SOURCE_DIR}/../../third_party/unity/unity.c
+    ${CMAKE_CURRENT_SOURCE_DIR}/../../../third_party/unity/unity.c
 )
 
 target_include_directories(test_runner PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/../include
-    ${CMAKE_CURRENT_SOURCE_DIR}/../../third_party/unity
+    ${CMAKE_CURRENT_SOURCE_DIR}/../../../third_party/unity
 )
 
 enable_testing()

@@ -1,9 +1,37 @@
-import json
 from typing import List, Dict, Any
-from aibenchmark_esw.models import TaskEvaluationResult
+from aibenchmark_esw.models import (
+    TaskEvaluationResult, TestResult, SizeMetrics, StaticSafetyMetrics, DimensionScores,
+)
 
 
 class BenchmarkReporter:
+    @staticmethod
+    def from_json_dict(data: Dict[str, Any]) -> List[TaskEvaluationResult]:
+        if not isinstance(data, dict) or not isinstance(data.get("tasks"), list):
+            raise ValueError("Results must be an object containing a tasks array")
+        results = []
+        for item in data["tasks"]:
+            tests = item["test_result"]
+            size = item["size_metrics"]
+            safety = item["safety_metrics"]
+            scores = item["scores"]
+            results.append(TaskEvaluationResult(
+                task_id=item["task_id"], tier=item["tier"],
+                model_name=item.get("model_name", data.get("model_name", "unknown")),
+                compiled=item["compiled"],
+                test_result=TestResult(
+                    total_tests=tests["total"], passed_tests=tests["passed"],
+                    failed_tests=tests["failed"], ignored_tests=tests.get("ignored", 0),
+                    passed=tests["all_passed"], completed=tests.get("completed", True),
+                    returncode=tests.get("returncode"),
+                ),
+                size_metrics=SizeMetrics(**size), safety_metrics=StaticSafetyMetrics(**safety),
+                scores=DimensionScores(scores["functional"], scores["memory"],
+                                       scores["safety"], scores["total"]),
+                execution_time_sec=item["execution_time_sec"], error_log=item.get("error_log"),
+            ))
+        return results
+
     @staticmethod
     def generate_markdown(results: List[TaskEvaluationResult], model_name: str) -> str:
         if not results:
@@ -39,9 +67,12 @@ class BenchmarkReporter:
         md.append("| :---: | :--- | :---: | :---: | :---: | :---: | :---: | :---: |")
 
         for r in results:
-            status_comp = "✅" if r.compiled else "❌"
+            status_comp = "PASS" if r.compiled else "FAIL"
             test_str = f"{r.test_result.passed_tests}/{r.test_result.total_tests}"
-            mem_str = f"{r.size_metrics.flash_bytes} / {r.size_metrics.ram_bytes}"
+            if not r.test_result.completed:
+                test_str += " (incomplete)"
+            mem_str = (f"{r.size_metrics.flash_bytes} / {r.size_metrics.ram_bytes}"
+                       if r.size_metrics.measured else "Unavailable")
             safe_str = f"Err:{r.safety_metrics.error_count}, Warn:{r.safety_metrics.warning_count}"
             score_str = f"**{r.scores.total_score:.1f}**"
             time_str = f"{r.execution_time_sec:.2f}s"
@@ -61,8 +92,10 @@ class BenchmarkReporter:
 
         for r in results:
             comp = "PASS" if r.compiled else "FAIL"
-            tests = f"{r.test_result.passed_tests}/{r.test_result.total_tests}"
-            mem = f"{r.size_metrics.flash_bytes}/{r.size_metrics.ram_bytes}B"
+            tests = (f"{r.test_result.passed_tests}/{r.test_result.total_tests}"
+                     if r.test_result.completed else "INCOMP")
+            mem = (f"{r.size_metrics.flash_bytes}/{r.size_metrics.ram_bytes}B"
+                   if r.size_metrics.measured else "Unavailable")
             score = f"{r.scores.total_score:.1f}"
             lines.append(f"{r.tier:<5} {r.task_id:<22} {comp:<6} {tests:<8} {mem:<14} {score:<8}")
 

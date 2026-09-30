@@ -60,7 +60,7 @@ Create `task.json` with the following schema:
    - Zero dynamic allocation (`malloc`/`free`).
 2. **Deterministic Mocking**: If hardware interaction is required, provide clean mock interfaces (function pointers or mock register arrays) in `include/mock_<peripheral>.h`.
 3. **Comprehensive Tests**: Include boundary conditions, null pointer checks, and wrap-around logic in `tests/test_<module>.c`.
-4. **Golden Reference**: Ensure `reference/<module>.c` passes all test cases with a score of 100.0:
+4. **Golden Reference**: Ensure `reference/<module>.c` passes all test cases. Verify its measured Flash/RAM fit the budgets with the compiler used for comparisons; a reference exceeding a budget does not receive full memory points:
    ```bash
    aibenchmark-esw eval --task <task_id> --reference
    ```
@@ -77,6 +77,7 @@ Create `task.json` with the following schema:
    ```bash
    python -m unittest discover tests
    ```
+   Install `pip install -e ".[dev]"` to include the sdist/wheel packaging integration test. It builds a wheel from the sdist and executes the bundled baseline outside the checkout.
 3. Commit your changes with clear messages:
    ```bash
    git commit -m "feat(tasks): add tier2 modbus parser task"

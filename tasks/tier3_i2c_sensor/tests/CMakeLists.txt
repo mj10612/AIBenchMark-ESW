@@ -9,12 +9,12 @@ set(TARGET_SRC "${CMAKE_CURRENT_SOURCE_DIR}/../src/i2c_sensor.c" CACHE FILEPATH 
 add_executable(test_runner
     test_i2c_sensor.c
     ${TARGET_SRC}
-    ${CMAKE_CURRENT_SOURCE_DIR}/../../third_party/unity/unity.c
+    ${CMAKE_CURRENT_SOURCE_DIR}/../../../third_party/unity/unity.c
 )
 
 target_include_directories(test_runner PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/../include
-    ${CMAKE_CURRENT_SOURCE_DIR}/../../third_party/unity
+    ${CMAKE_CURRENT_SOURCE_DIR}/../../../third_party/unity
 )
 
 enable_testing()

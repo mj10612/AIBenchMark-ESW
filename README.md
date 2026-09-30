@@ -26,8 +26,8 @@ However, **embedded systems software (firmware)** operates under fundamentally d
 
 * **Deterministic Host-Based Testing**: Validates code using mocked hardware abstraction layers (Mock HAL) and [Unity TDD](https://github.com/ThrowTheSwitch/Unity). No physical development boards required; runs seamlessly in any CI/CD pipeline or Docker container.
 * **Multi-Dimensional Scoring**:
-  $$\text{Total Score} = 0.6 \times S_{\text{func}} + 0.2 \times S_{\text{mem}} + 0.2 \times S_{\text{safety}}$$
-  Combines test pass rate, Flash/RAM footprint consumption, and MISRA-C/static analysis warnings.
+  $$\text{Total Score} = 0.6 \times S_{\text{func}} + \frac{S_{\text{func}}}{100} \times (0.2 \times S_{\text{mem}} + 0.2 \times S_{\text{safety}})$$
+  Combines test pass rate, Flash/RAM footprint consumption, and static safety warnings. For partially passing suites, the memory and safety contributions are multiplied by the functional pass fraction.
 * **4-Tier Problem Progression**: Tasks range from core embedded data structures to asynchronous protocol state machines, register-level device drivers, and real-world race condition bug fixes.
 * **Broad LLM Ecosystem Support**: Integrates with [LiteLLM](https://github.com/BerriAI/litellm) to evaluate OpenAI (GPT-4o), Anthropic (Claude 3.5), DeepSeek, and local models via Ollama or vLLM.
 
@@ -60,9 +60,15 @@ pip install -e .
 
 # Or install with full LLM and UI dependencies
 pip install -e ".[full]"
+
+# Development and distribution validation
+pip install -e ".[dev]"
+python -m unittest discover -s tests -v
 ```
 
-*Prerequisites*: A C compiler in your PATH (`gcc`, `clang`, `tcc`, or `cl`).
+*Prerequisites*: A C compiler in your PATH (`gcc`, `clang`, `tcc`, or `cl`). Candidate and reference code use the same compiler and settings. GCC/Clang use `-Os`; TCC uses its native code generation; MSVC uses `/O1` and C11 for C99 tasks.
+
+Regular wheel installations also include all tasks, headers, reference implementations, and the Unity harness. Editable installations use the checkout's `tasks/` and `third_party/` directories.
 
 ---
 
@@ -104,6 +110,9 @@ aibenchmark-esw run --model baseline --output results/baseline.json
 #### View Results
 ```bash
 aibenchmark-esw report --results results/baseline.json
+
+# Render a Markdown report
+aibenchmark-esw report --results results/baseline.json --format markdown
 ```
 
 ---
@@ -115,17 +124,25 @@ Each task is evaluated across three weighted dimensions:
 ### 1. Functional Correctness ($S_{\text{func}}$, 60%)
 Evaluates whether the candidate implementation compiles without errors and passes all test cases in the Unity suite.
 $$S_{\text{func}} = \frac{\text{Passed Test Cases}}{\text{Total Test Cases}} \times 100$$
-*(Note: If compilation fails, $S_{\text{func}} = 0$ and the overall task score is 0).*
+*(Note: Compilation failure, timeout, abnormal process termination, or an incomplete test suite gives an overall task score of 0. Completed suites with assertion failures retain partial credit. Ignored tests do not count toward Pass@1.)*
+
+Every selected task is included in the results, including model API failures and missing references. `eval` and `run` return a nonzero exit status if any task fails or an evaluation error occurs; `run --output` still saves the results.
 
 ### 2. Memory Footprint Efficiency ($S_{\text{mem}}$, 20%)
-Measures the compiled code and data size ($\text{Flash} + \text{RAM}$) compared to the reference implementation ($M_{\text{ref}}$) and the maximum budget limit ($M_{\text{max}}$).
+Measures a separately compiled implementation object, excluding Unity, test code, and the host executable runtime. Candidate and reference objects are compiled with the same settings. Allocated code and read-only sections count toward Flash; initialized writable data counts toward both Flash and RAM; zero-initialized data counts toward RAM. Debug and symbol sections are excluded. This is a host object footprint, not an MCU-linked image or a stack usage measurement.
+
+The combined size ($\text{Flash} + \text{RAM}$) is compared to the measured reference ($M_{\text{ref}}$) and combined maximum budget ($M_{\text{max}}$). Each individual Flash and RAM limit must also be respected:
 * If $M_{\text{actual}} \le M_{\text{ref}}$: $S_{\text{mem}} = 100$
 * If $M_{\text{ref}} < M_{\text{actual}} \le M_{\text{max}}$: Linear decay toward 0.
 * If $M_{\text{actual}} > M_{\text{max}}$: $S_{\text{mem}} = 0$
+* If either individual resource limit is exceeded: $S_{\text{mem}} = 0$
+* Missing or unreadable measurements are reported as unavailable and receive no memory points.
+
+Reference implementations must pass all functional tests, but their memory score depends on the host compiler. The refreshed TCC baseline scores 96/100: all 31 tests pass, while the ring buffer's 1474-byte Flash footprint exceeds its existing 1024-byte budget. Its RAM footprint is legitimately zero because it uses caller-owned storage.
 
 ### 3. Static Code Safety ($S_{\text{safety}}$, 20%)
-Checks compliance with MISRA-C and embedded safety rules (using `cppcheck` or built-in static analyzers). Penalizes:
-* Dynamic memory allocation (`malloc`, `free`) — **Fatal error in safety profiles**
+Checks selected embedded safety rules using built-in heuristics and, when installed, `cppcheck`. These checks are not full MISRA-C certification. Penalizes:
+* Dynamic memory allocation (`malloc`, `free`) — reported as an error by the built-in checks
 * Unrestricted `goto` jumps (MISRA Rule 15.1)
 * Non-fixed-width standard types (MISRA Rule 4.6)
 * Buffer overflows and uninitialized variables

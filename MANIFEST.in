@@ -1,0 +1,3 @@
+recursive-include tasks *.json *.md *.h *.c CMakeLists.txt
+recursive-include third_party *.h *.c CMakeLists.txt
+include NOTICE

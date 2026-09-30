@@ -75,6 +75,30 @@ class TestBenchmarkScorer(unittest.TestCase):
         expected_total = (0.6 * 100.0) + (0.2 * 100.0) + (0.2 * 79.0)
         self.assertAlmostEqual(scores.total_score, expected_total, places=1)
 
+    def test_abnormal_exit_has_zero_scores(self):
+        scores = BenchmarkScorer.calculate_scores(
+            self.task, CompilationResult(True, ""),
+            TestResult(total_tests=10, passed_tests=10, completed=False, returncode=7),
+            SizeMetrics(500, 100, 500, 100), StaticSafetyMetrics())
+        self.assertEqual(scores.total_score, 0)
+        self.assertEqual(scores.functional_score, 0)
+
+    def test_missing_memory_measurement_is_not_perfect(self):
+        for size in [SizeMetrics(measured=False), SizeMetrics()]:
+            with self.subTest(size=size):
+                scores = BenchmarkScorer.calculate_scores(
+                    self.task, CompilationResult(True, ""),
+                    TestResult(total_tests=1, passed_tests=1, passed=True), size,
+                    StaticSafetyMetrics())
+                self.assertEqual(scores.memory_score, 0)
+
+    def test_individual_ram_limit_is_enforced(self):
+        scores = BenchmarkScorer.calculate_scores(
+            self.task, CompilationResult(True, ""),
+            TestResult(total_tests=1, passed_tests=1, passed=True),
+            SizeMetrics(400, 201, 500, 100), StaticSafetyMetrics())
+        self.assertEqual(scores.memory_score, 0)
+
 
 if __name__ == "__main__":
     unittest.main()

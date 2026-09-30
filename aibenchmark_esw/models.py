@@ -66,6 +66,14 @@ class CompilationResult:
     output: str
     binary_path: Optional[Path] = None
     error_message: Optional[str] = None
+    _workspace: Optional[Any] = field(default=None, repr=False, compare=False)
+
+    def cleanup(self) -> None:
+        """Release an automatically created workspace after consuming its artifacts."""
+        if self._workspace is not None:
+            self._workspace.cleanup()
+            self._workspace = None
+            self.binary_path = None
 
 
 @dataclass
@@ -76,6 +84,8 @@ class TestResult:
     ignored_tests: int = 0
     output: str = ""
     passed: bool = False
+    completed: bool = True
+    returncode: Optional[int] = None
 
 
 @dataclass
@@ -84,6 +94,7 @@ class SizeMetrics:
     ram_bytes: int = 0
     ref_flash_bytes: int = 0
     ref_ram_bytes: int = 0
+    measured: bool = True
 
 
 @dataclass
@@ -126,16 +137,20 @@ class TaskEvaluationResult:
                 "failed": self.test_result.failed_tests,
                 "ignored": self.test_result.ignored_tests,
                 "all_passed": self.test_result.passed,
+                "completed": self.test_result.completed,
+                "returncode": self.test_result.returncode,
             },
             "size_metrics": {
                 "flash_bytes": self.size_metrics.flash_bytes,
                 "ram_bytes": self.size_metrics.ram_bytes,
                 "ref_flash_bytes": self.size_metrics.ref_flash_bytes,
                 "ref_ram_bytes": self.size_metrics.ref_ram_bytes,
+                "measured": self.size_metrics.measured,
             },
             "safety_metrics": {
                 "error_count": self.safety_metrics.error_count,
                 "warning_count": self.safety_metrics.warning_count,
+                "violations": self.safety_metrics.violations,
             },
             "scores": {
                 "functional": round(self.scores.functional_score, 2),

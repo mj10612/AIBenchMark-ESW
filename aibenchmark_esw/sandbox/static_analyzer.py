@@ -2,7 +2,7 @@ import re
 import shutil
 import subprocess
 from pathlib import Path
-from typing import Optional
+from typing import Optional, List
 from aibenchmark_esw.models import StaticSafetyMetrics
 
 
@@ -10,37 +10,46 @@ class StaticAnalyzer:
     def __init__(self, cppcheck_cmd: Optional[str] = None):
         self.cppcheck_cmd = cppcheck_cmd or shutil.which("cppcheck")
 
-    def analyze(self, source_path: Path) -> StaticSafetyMetrics:
+    def analyze(self, source_path: Path, include_dirs: Optional[List[Path]] = None,
+                standard: str = "c99") -> StaticSafetyMetrics:
         """
-        Runs cppcheck if available; otherwise uses embedded C safety heuristics.
+        Always check embedded rules; add cppcheck diagnostics when available.
         """
+        metrics = self._heuristic_check(source_path)
         if self.cppcheck_cmd and source_path.exists():
-            metrics = self._run_cppcheck(source_path)
-            if metrics is not None:
-                return metrics
+            cppcheck_metrics = self._run_cppcheck(source_path, include_dirs, standard)
+            if cppcheck_metrics is not None:
+                metrics.error_count += cppcheck_metrics.error_count
+                metrics.warning_count += cppcheck_metrics.warning_count
+                metrics.violations.extend(cppcheck_metrics.violations)
+        return metrics
 
-        return self._heuristic_check(source_path)
-
-    def _run_cppcheck(self, source_path: Path) -> Optional[StaticSafetyMetrics]:
+    def _run_cppcheck(self, source_path: Path, include_dirs: Optional[List[Path]] = None,
+                      standard: str = "c99") -> Optional[StaticSafetyMetrics]:
         try:
             cmd = [
                 self.cppcheck_cmd,
                 "--enable=warning,style,performance,portability",
                 "--inconclusive",
-                "--std=c99",
+                f"--std={standard}",
+                "--template={severity}:{id}:{message}",
                 "--quiet",
-                str(source_path),
             ]
+            for directory in include_dirs or []:
+                cmd += ["-I", str(directory)]
+            cmd.append(str(source_path))
             proc = subprocess.run(cmd, capture_output=True, text=True, timeout=10)
+            if proc.returncode != 0:
+                return None
             errors = 0
             warnings = 0
             violations = []
 
             for line in proc.stderr.splitlines():
-                if ": error:" in line:
+                if line.startswith("error:"):
                     errors += 1
                     violations.append(line.strip())
-                elif ": warning:" in line or ": style:" in line:
+                elif line.startswith(("warning:", "style:", "performance:", "portability:")):
                     warnings += 1
                     violations.append(line.strip())
 

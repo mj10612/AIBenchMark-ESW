@@ -1,6 +1,6 @@
 {
   "model_name": "baseline",
-  "overall_score": 100.0,
+  "overall_score": 96.0,
   "pass_at_1_pct": 100.0,
   "tasks": [
     {
@@ -13,17 +13,21 @@
         "passed": 5,
         "failed": 0,
         "ignored": 0,
-        "all_passed": true
+        "all_passed": true,
+        "completed": true,
+        "returncode": 0
       },
       "size_metrics": {
-        "flash_bytes": 0,
+        "flash_bytes": 361,
         "ram_bytes": 0,
-        "ref_flash_bytes": 0,
-        "ref_ram_bytes": 0
+        "ref_flash_bytes": 361,
+        "ref_ram_bytes": 0,
+        "measured": true
       },
       "safety_metrics": {
         "error_count": 0,
-        "warning_count": 0
+        "warning_count": 0,
+        "violations": []
       },
       "scores": {
         "functional": 100.0,
@@ -31,7 +35,7 @@
         "safety": 100.0,
         "total": 100.0
       },
-      "execution_time_sec": 0.127,
+      "execution_time_sec": 0.249,
       "error_log": null
     },
     {
@@ -40,29 +44,33 @@
       "model_name": "baseline",
       "compiled": true,
       "test_result": {
-        "total": 6,
-        "passed": 6,
+        "total": 9,
+        "passed": 9,
         "failed": 0,
         "ignored": 0,
-        "all_passed": true
+        "all_passed": true,
+        "completed": true,
+        "returncode": 0
       },
       "size_metrics": {
-        "flash_bytes": 0,
+        "flash_bytes": 1474,
         "ram_bytes": 0,
-        "ref_flash_bytes": 0,
-        "ref_ram_bytes": 0
+        "ref_flash_bytes": 1474,
+        "ref_ram_bytes": 0,
+        "measured": true
       },
       "safety_metrics": {
         "error_count": 0,
-        "warning_count": 0
+        "warning_count": 0,
+        "violations": []
       },
       "scores": {
         "functional": 100.0,
-        "memory": 100.0,
+        "memory": 0.0,
         "safety": 100.0,
-        "total": 100.0
+        "total": 80.0
       },
-      "execution_time_sec": 0.127,
+      "execution_time_sec": 0.301,
       "error_log": null
     },
     {
@@ -75,17 +83,21 @@
         "passed": 5,
         "failed": 0,
         "ignored": 0,
-        "all_passed": true
+        "all_passed": true,
+        "completed": true,
+        "returncode": 0
       },
       "size_metrics": {
-        "flash_bytes": 0,
+        "flash_bytes": 1134,
         "ram_bytes": 0,
-        "ref_flash_bytes": 0,
-        "ref_ram_bytes": 0
+        "ref_flash_bytes": 1134,
+        "ref_ram_bytes": 0,
+        "measured": true
       },
       "safety_metrics": {
         "error_count": 0,
-        "warning_count": 0
+        "warning_count": 0,
+        "violations": []
       },
       "scores": {
         "functional": 100.0,
@@ -93,7 +105,7 @@
         "safety": 100.0,
         "total": 100.0
       },
-      "execution_time_sec": 0.159,
+      "execution_time_sec": 0.195,
       "error_log": null
     },
     {
@@ -106,17 +118,21 @@
         "passed": 7,
         "failed": 0,
         "ignored": 0,
-        "all_passed": true
+        "all_passed": true,
+        "completed": true,
+        "returncode": 0
       },
       "size_metrics": {
-        "flash_bytes": 0,
+        "flash_bytes": 751,
         "ram_bytes": 0,
-        "ref_flash_bytes": 0,
-        "ref_ram_bytes": 0
+        "ref_flash_bytes": 751,
+        "ref_ram_bytes": 0,
+        "measured": true
       },
       "safety_metrics": {
         "error_count": 0,
-        "warning_count": 0
+        "warning_count": 0,
+        "violations": []
       },
       "scores": {
         "functional": 100.0,
@@ -124,7 +140,7 @@
         "safety": 100.0,
         "total": 100.0
       },
-      "execution_time_sec": 0.146,
+      "execution_time_sec": 0.2,
       "error_log": null
     },
     {
@@ -137,17 +153,21 @@
         "passed": 5,
         "failed": 0,
         "ignored": 0,
-        "all_passed": true
+        "all_passed": true,
+        "completed": true,
+        "returncode": 0
       },
       "size_metrics": {
-        "flash_bytes": 0,
+        "flash_bytes": 463,
         "ram_bytes": 0,
-        "ref_flash_bytes": 0,
-        "ref_ram_bytes": 0
+        "ref_flash_bytes": 463,
+        "ref_ram_bytes": 0,
+        "measured": true
       },
       "safety_metrics": {
         "error_count": 0,
-        "warning_count": 0
+        "warning_count": 0,
+        "violations": []
       },
       "scores": {
         "functional": 100.0,
@@ -155,7 +175,7 @@
         "safety": 100.0,
         "total": 100.0
       },
-      "execution_time_sec": 0.114,
+      "execution_time_sec": 0.225,
       "error_log": null
     }
   ]

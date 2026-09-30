@@ -17,7 +17,7 @@ class BenchmarkScorer:
         size_metrics: SizeMetrics,
         safety_metrics: StaticSafetyMetrics,
     ) -> DimensionScores:
-        if not comp_res.success:
+        if not comp_res.success or not test_res.completed:
             return DimensionScores(0.0, 0.0, 0.0, 0.0)
 
         # 1. Functional Score (0.0 - 100.0)
@@ -31,10 +31,11 @@ class BenchmarkScorer:
         actual_size = size_metrics.flash_bytes + size_metrics.ram_bytes
         ref_size = size_metrics.ref_flash_bytes + size_metrics.ref_ram_bytes
 
-        if ref_size <= 0:
-            ref_size = max(1, max_budget // 2)
-
-        if actual_size <= ref_size:
+        if (not size_metrics.measured or ref_size <= 0
+                or size_metrics.flash_bytes > task.limits.max_flash_bytes
+                or size_metrics.ram_bytes > task.limits.max_ram_bytes):
+            mem_score = 0.0
+        elif actual_size <= ref_size:
             mem_score = 100.0
         elif actual_size >= max_budget:
             mem_score = 0.0

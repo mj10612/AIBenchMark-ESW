@@ -16,3 +16,7 @@ You are an expert embedded software engineer. Implement a Single-Producer Single
    - Do NOT use dynamic memory allocation (`malloc`, `free`).
    - Follow MISRA-C guidelines: use fixed-width integers (`stdint.h`), avoid undefined behavior.
 3. Write clean, portable C99 code in `src/ring_buffer.c`.
+4. Support all capacities from `1` through `SIZE_MAX / 2`, including non-power-of-two capacities. Invalid capacity or NULL storage disables the buffer.
+5. Repeated index rollover must preserve FIFO order without overwriting unread data. Callers do not modify `head` or `tail`.
+
+The host tests are sequential. ISR deployment requires platform-specific atomic access and memory ordering; the C99 `volatile` fields alone do not guarantee synchronization between host threads.

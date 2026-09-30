@@ -1,19 +1,15 @@
 import sys
-import os
 import json
-import time
 import argparse
 from pathlib import Path
-from typing import List, Optional
+from typing import List
 
 from aibenchmark_esw.models import TaskEvaluationResult
 from aibenchmark_esw.dataset import DatasetLoader
 from aibenchmark_esw.sandbox.executor import ExecutionSandbox
-from aibenchmark_esw.sandbox.size_analyzer import SizeAnalyzer
-from aibenchmark_esw.sandbox.static_analyzer import StaticAnalyzer
-from aibenchmark_esw.metrics.scorer import BenchmarkScorer
 from aibenchmark_esw.metrics.reporter import BenchmarkReporter
 from aibenchmark_esw.llm.client import LLMClient
+from aibenchmark_esw.evaluation import evaluate_task, failed_evaluation
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -91,143 +87,73 @@ def cmd_eval(args: argparse.Namespace) -> int:
         solution_code = loader.get_starter_code(args.task)
         model_name = "starter_stub"
 
+    if not solution_code:
+        print(f"Error: No solution available for '{args.task}'.", file=sys.stderr)
+        return 1
+
     executor = ExecutionSandbox(compiler_path=args.compiler)
-    size_analyzer = SizeAnalyzer()
-    static_analyzer = StaticAnalyzer()
-
-    start_time = time.time()
-    comp_res, test_res = executor.compile_and_test(task, solution_code)
-    exec_time = time.time() - start_time
-
-    # Size analysis
-    size_metrics = size_analyzer.analyze(
-        comp_res.binary_path if comp_res.binary_path else Path("dummy"),
-    )
-
-    # Static analysis (save code to temp file for inspection)
-    temp_c = task.task_dir / f"_temp_eval_{task.id}.c"
-    try:
-        with open(temp_c, "w", encoding="utf-8") as f:
-            f.write(solution_code)
-        safety_metrics = static_analyzer.analyze(temp_c)
-    finally:
-        if temp_c.exists():
-            temp_c.unlink(missing_ok=True)
-
-    scores = BenchmarkScorer.calculate_scores(
-        task, comp_res, test_res, size_metrics, safety_metrics
-    )
-
-    result = TaskEvaluationResult(
-        task_id=task.id,
-        tier=task.tier,
-        model_name=model_name,
-        compiled=comp_res.success,
-        test_result=test_res,
-        size_metrics=size_metrics,
-        safety_metrics=safety_metrics,
-        scores=scores,
-        execution_time_sec=exec_time,
-        error_log=comp_res.output if not comp_res.success else None,
-    )
-
+    result = evaluate_task(task, solution_code, loader.get_reference_solution(task.id),
+                           model_name, executor)
     print(BenchmarkReporter.generate_cli_table([result], model_name=model_name))
-    if not comp_res.success:
-        print("\n[Compilation Error Details]")
-        print(comp_res.output)
-    return 0 if test_res.passed else 1
+    if result.error_log:
+        print("\n[Evaluation Error Details]")
+        print(result.error_log)
+    return 0 if result.test_result.passed and not result.error_log else 1
 
 
 def cmd_run(args: argparse.Namespace) -> int:
     loader = DatasetLoader()
     tasks = loader.list_tasks(tier=args.tier)
     if args.tasks:
-        selected_ids = [s.strip() for s in args.tasks.split(",")]
-        tasks = [t for t in tasks if t.id in selected_ids]
-
+        selected_ids = [item.strip() for item in args.tasks.split(",") if item.strip()]
+        unknown = [item for item in selected_ids if loader.get_task(item) is None]
+        if unknown:
+            print(f"Error: Unknown task IDs: {', '.join(unknown)}", file=sys.stderr)
+            return 1
+        tasks = [task for task in tasks if task.id in selected_ids]
     if not tasks:
         print("No matching tasks found.", file=sys.stderr)
         return 1
 
     print(f"Starting AIBenchMark-ESW run on {len(tasks)} tasks using model '{args.model}'...")
     executor = ExecutionSandbox(compiler_path=args.compiler)
-    size_analyzer = SizeAnalyzer()
-    static_analyzer = StaticAnalyzer()
-    llm_client = None
-    if args.model != "baseline":
-        llm_client = LLMClient(model_name=args.model)
-
+    llm_client = LLMClient(model_name=args.model) if args.model != "baseline" else None
     results: List[TaskEvaluationResult] = []
-
     for task in tasks:
         print(f" -> Running [{task.id}] (Tier {task.tier})...", end="", flush=True)
-        if args.model == "baseline":
-            solution_code = loader.get_reference_solution(task.id)
-            if not solution_code:
-                print(" [ERROR: Missing reference]")
-                continue
-        else:
-            # Query LLM
-            include_dir = task.task_dir / "include"
-            headers_text = ""
-            for h in include_dir.glob("*.h"):
-                with open(h, "r", encoding="utf-8") as hf:
-                    headers_text += f"// --- {h.name} ---\n" + hf.read() + "\n"
-            starter_code = loader.get_starter_code(task.id) or ""
-            messages = llm_client.build_prompt(task.prompt, headers_text, starter_code)
-            try:
-                solution_code = llm_client.generate_solution(messages)
-            except Exception as e:
-                print(f" [LLM ERROR: {e}]")
-                continue
-
-        start_time = time.time()
-        comp_res, test_res = executor.compile_and_test(task, solution_code)
-        exec_time = time.time() - start_time
-
-        size_metrics = size_analyzer.analyze(
-            comp_res.binary_path if comp_res.binary_path else Path("dummy"),
-        )
-
-        temp_c = task.task_dir / f"_temp_run_{task.id}.c"
         try:
-            with open(temp_c, "w", encoding="utf-8") as f:
-                f.write(solution_code)
-            safety_metrics = static_analyzer.analyze(temp_c)
-        finally:
-            if temp_c.exists():
-                temp_c.unlink(missing_ok=True)
-
-        scores = BenchmarkScorer.calculate_scores(
-            task, comp_res, test_res, size_metrics, safety_metrics
-        )
-
-        res = TaskEvaluationResult(
-            task_id=task.id,
-            tier=task.tier,
-            model_name=args.model,
-            compiled=comp_res.success,
-            test_result=test_res,
-            size_metrics=size_metrics,
-            safety_metrics=safety_metrics,
-            scores=scores,
-            execution_time_sec=exec_time,
-            error_log=comp_res.output if not comp_res.success else None,
-        )
-        results.append(res)
-        status_sym = "PASS" if test_res.passed else ("FAIL" if comp_res.success else "NO_COMPILE")
-        print(f" [{status_sym} - Score: {scores.total_score:.1f}]")
+            reference_code = loader.get_reference_solution(task.id)
+            if args.model == "baseline":
+                if not reference_code:
+                    raise ValueError("Missing reference implementation")
+                solution_code = reference_code
+            else:
+                headers_text = "\n".join(
+                    f"// --- {header.name} ---\n{header.read_text(encoding='utf-8')}"
+                    for header in sorted((task.task_dir / "include").glob("*.h"))
+                )
+                messages = llm_client.build_prompt(task.prompt, headers_text,
+                                                    loader.get_starter_code(task.id) or "")
+                solution_code = llm_client.generate_solution(messages)
+                if not solution_code:
+                    raise ValueError("Model returned an empty implementation")
+            result = evaluate_task(task, solution_code, reference_code, args.model, executor)
+        except Exception as error:
+            result = failed_evaluation(task, args.model, str(error))
+        results.append(result)
+        status = "PASS" if result.test_result.passed and not result.error_log else "FAIL"
+        print(f" [{status} - Score: {result.scores.total_score:.1f}]")
+        if result.error_log:
+            print(f"    {result.error_log}")
 
     print("\n" + BenchmarkReporter.generate_cli_table(results, model_name=args.model))
-
     if args.output:
         out_path = Path(args.output)
         out_path.parent.mkdir(parents=True, exist_ok=True)
-        with open(out_path, "w", encoding="utf-8") as f:
-            json.dump(BenchmarkReporter.to_json_dict(results, args.model), f, indent=2)
+        out_path.write_text(json.dumps(BenchmarkReporter.to_json_dict(results, args.model),
+                                      indent=2), encoding="utf-8")
         print(f"\nResults successfully saved to: {out_path}")
-
-    return 0
+    return 0 if all(result.test_result.passed and not result.error_log for result in results) else 1
 
 
 def cmd_report(args: argparse.Namespace) -> int:
@@ -236,11 +162,17 @@ def cmd_report(args: argparse.Namespace) -> int:
         print(f"Error: File not found: {args.results}", file=sys.stderr)
         return 1
 
-    with open(report_file, "r", encoding="utf-8") as f:
-        data = json.load(f)
-
-    # Simple pretty dump
-    print(json.dumps(data, indent=2))
+    try:
+        data = json.loads(report_file.read_text(encoding="utf-8"))
+        results = BenchmarkReporter.from_json_dict(data)
+    except (OSError, ValueError, TypeError, KeyError) as error:
+        print(f"Error: Invalid results file: {error}", file=sys.stderr)
+        return 1
+    model_name = data.get("model_name", "unknown")
+    if args.format == "markdown":
+        print(BenchmarkReporter.generate_markdown(results, model_name))
+    else:
+        print(BenchmarkReporter.generate_cli_table(results, model_name))
     return 0
 
 

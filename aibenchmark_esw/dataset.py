@@ -2,14 +2,15 @@ import json
 from pathlib import Path
 from typing import List, Optional, Dict
 from aibenchmark_esw.models import TaskConfig
+from aibenchmark_esw.resources import data_root
 
 
 class DatasetLoader:
     def __init__(self, tasks_root: Optional[Path] = None):
         if tasks_root is None:
-            # Default to tasks/ under project root
-            project_root = Path(__file__).resolve().parent.parent
-            self.tasks_root = project_root / "tasks"
+            self.tasks_root = data_root() / "tasks"
+            if not self.tasks_root.is_dir():
+                raise FileNotFoundError(f"Benchmark task data not found: {self.tasks_root}")
         else:
             self.tasks_root = Path(tasks_root)
         self._tasks: Dict[str, TaskConfig] = {}
