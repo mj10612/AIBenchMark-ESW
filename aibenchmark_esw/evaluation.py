@@ -20,6 +20,7 @@ def failed_evaluation(task: TaskConfig, model_name: str, error: str) -> TaskEval
         task.id, task.tier, model_name, False,
         TestResult(output=error, completed=False), SizeMetrics(measured=False),
         StaticSafetyMetrics(), DimensionScores(), 0.0, error_log=error,
+        weights=task.weights, target_standard=task.target_standard,
     )
 
 
@@ -49,10 +50,13 @@ def evaluate_task(task: TaskConfig, solution_code: str, reference_code: Optional
                 errors.append(f"Memory analysis failed: {error}")
 
         source = work_dir / Path(task.entry_file).name
-        safety = StaticAnalyzer().analyze(source, [task.task_dir / "include"], task.target_standard)
+        safety = StaticAnalyzer().analyze(source, [task.task_dir / "include"],
+                                           comp.effective_standard or task.target_standard)
         scores = BenchmarkScorer.calculate_scores(task, comp, tests, size, safety)
 
     return TaskEvaluationResult(
         task.id, task.tier, model_name, comp.success, tests, size, safety, scores,
         time.perf_counter() - start, error_log="\n".join(errors) if errors else None,
+        weights=task.weights, target_standard=task.target_standard,
+        effective_standard=comp.effective_standard,
     )

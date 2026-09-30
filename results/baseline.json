@@ -1,6 +1,6 @@
 {
   "model_name": "baseline",
-  "overall_score": 96.0,
+  "overall_score": 100.0,
   "pass_at_1_pct": 100.0,
   "tasks": [
     {
@@ -35,8 +35,15 @@
         "safety": 100.0,
         "total": 100.0
       },
-      "execution_time_sec": 0.249,
-      "error_log": null
+      "execution_time_sec": 0.323,
+      "error_log": null,
+      "weights": {
+        "functional": 0.6,
+        "memory": 0.2,
+        "safety": 0.2
+      },
+      "target_standard": "c99",
+      "effective_standard": "c99"
     },
     {
       "task_id": "tier1_ring_buffer",
@@ -66,12 +73,19 @@
       },
       "scores": {
         "functional": 100.0,
-        "memory": 0.0,
+        "memory": 100.0,
         "safety": 100.0,
-        "total": 80.0
+        "total": 100.0
       },
-      "execution_time_sec": 0.301,
-      "error_log": null
+      "execution_time_sec": 0.288,
+      "error_log": null,
+      "weights": {
+        "functional": 0.6,
+        "memory": 0.2,
+        "safety": 0.2
+      },
+      "target_standard": "c99",
+      "effective_standard": "c99"
     },
     {
       "task_id": "tier2_debounce_fsm",
@@ -105,8 +119,15 @@
         "safety": 100.0,
         "total": 100.0
       },
-      "execution_time_sec": 0.195,
-      "error_log": null
+      "execution_time_sec": 0.225,
+      "error_log": null,
+      "weights": {
+        "functional": 0.6,
+        "memory": 0.2,
+        "safety": 0.2
+      },
+      "target_standard": "c99",
+      "effective_standard": "c99"
     },
     {
       "task_id": "tier3_i2c_sensor",
@@ -140,8 +161,15 @@
         "safety": 100.0,
         "total": 100.0
       },
-      "execution_time_sec": 0.2,
-      "error_log": null
+      "execution_time_sec": 0.229,
+      "error_log": null,
+      "weights": {
+        "functional": 0.6,
+        "memory": 0.2,
+        "safety": 0.2
+      },
+      "target_standard": "c99",
+      "effective_standard": "c99"
     },
     {
       "task_id": "tier4_bitmask_fix",
@@ -176,7 +204,14 @@
         "total": 100.0
       },
       "execution_time_sec": 0.225,
-      "error_log": null
+      "error_log": null,
+      "weights": {
+        "functional": 0.6,
+        "memory": 0.2,
+        "safety": 0.2
+      },
+      "target_standard": "c99",
+      "effective_standard": "c99"
     }
   ]
 }

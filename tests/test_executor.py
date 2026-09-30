@@ -1,4 +1,9 @@
 import unittest
+import subprocess
+import sys
+from pathlib import Path
+from tempfile import TemporaryDirectory
+from unittest.mock import patch
 from aibenchmark_esw.dataset import DatasetLoader
 from aibenchmark_esw.sandbox.executor import ExecutionSandbox
 
@@ -66,6 +71,47 @@ class TestExecutionSandbox(unittest.TestCase):
             task, self.loader.get_reference_solution(task.id))
         self.assertFalse(comp.success)
         self.assertFalse(result.completed)
+
+    def test_msvc_rejects_c99_without_explicit_opt_in(self):
+        task = self.loader.get_task("tier1_crc16")
+        with TemporaryDirectory() as directory:
+            with patch("aibenchmark_esw.sandbox.executor.subprocess.run") as run:
+                result = ExecutionSandbox("cl").compile_object(
+                    task, self.loader.get_reference_solution(task.id), Path(directory))
+                run.assert_not_called()
+        self.assertFalse(result.success)
+        self.assertIn("--allow-standard-fallback", result.output)
+        self.assertIsNone(result.effective_standard)
+
+    def test_msvc_opt_in_records_actual_standard(self):
+        task = self.loader.get_task("tier1_crc16")
+        with TemporaryDirectory() as directory:
+            def compile_fixture(command, **kwargs):
+                self.assertIn("/std:c11", command)
+                output = next(argument[3:] for argument in command if argument.startswith("/Fo"))
+                Path(output).write_bytes(b"fixture object")
+                return subprocess.CompletedProcess(command, 0, "", "")
+            with patch("aibenchmark_esw.sandbox.executor.subprocess.run", side_effect=compile_fixture):
+                result = ExecutionSandbox("cl", allow_standard_fallback=True).compile_object(
+                    task, self.loader.get_reference_solution(task.id), Path(directory))
+        self.assertTrue(result.success)
+        self.assertEqual(result.effective_standard, "c11")
+
+    def test_compiler_output_with_invalid_encoding_remains_a_failed_result(self):
+        task = self.loader.get_task("tier1_crc16")
+        real_run = subprocess.run
+        def failing_compiler(command, **kwargs):
+            # Exercise decoding rather than mocking a decoded CompletedProcess.
+            kwargs["encoding"] = "utf-8"
+            return real_run([sys.executable, "-c",
+                             "import sys; sys.stdout.buffer.write(b'bad byte: \\xff'); sys.exit(1)"],
+                            **kwargs)
+        with TemporaryDirectory() as directory:
+            with patch("aibenchmark_esw.sandbox.executor.subprocess.run", side_effect=failing_compiler):
+                result = self.sandbox.compile_object(task, "invalid C", Path(directory))
+        self.assertFalse(result.success)
+        self.assertIn("bad byte:", result.output)
+        self.assertIn("\\xff", result.output)
 
 
 if __name__ == "__main__":

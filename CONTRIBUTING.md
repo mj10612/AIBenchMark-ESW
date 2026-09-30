@@ -47,9 +47,12 @@ Create `task.json` with the following schema:
     "memory": 0.2,
     "safety": 0.2
   },
-  "entry_file": "src/my_task.c"
+  "entry_file": "src/my_task.c",
+  "reference_file": "reference/my_task.c"
 }
 ```
+
+`entry_file` and `reference_file` must be relative paths within the task directory. `reference_file` is optional for older datasets and defaults to `reference/<entry_file basename>`. Weights must be finite, nonnegative, and sum to 1. Flash and timeout limits must be positive integers; the RAM limit may be zero. Invalid metadata or duplicate IDs abort dataset loading so tasks cannot silently disappear from a benchmark.
 
 ### 3. Guidelines for Task Design
 
@@ -60,7 +63,7 @@ Create `task.json` with the following schema:
    - Zero dynamic allocation (`malloc`/`free`).
 2. **Deterministic Mocking**: If hardware interaction is required, provide clean mock interfaces (function pointers or mock register arrays) in `include/mock_<peripheral>.h`.
 3. **Comprehensive Tests**: Include boundary conditions, null pointer checks, and wrap-around logic in `tests/test_<module>.c`.
-4. **Golden Reference**: Ensure `reference/<module>.c` passes all test cases. Verify its measured Flash/RAM fit the budgets with the compiler used for comparisons; a reference exceeding a budget does not receive full memory points:
+4. **Golden Reference**: Ensure the declared reference passes all test cases and its measured Flash/RAM fit the budgets with the compiler used for comparisons. Calibrate host object budgets using that compiler and record it when sharing results; a reference exceeding a budget does not receive full memory points:
    ```bash
    aibenchmark-esw eval --task <task_id> --reference
    ```

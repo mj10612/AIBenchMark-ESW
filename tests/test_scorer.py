@@ -29,7 +29,7 @@ class TestBenchmarkScorer(unittest.TestCase):
 
     def test_perfect_score(self):
         comp = CompilationResult(success=True, output="")
-        tests = TestResult(total_tests=10, passed_tests=10, failed_tests=0, passed=True)
+        tests = TestResult(total_tests=10, passed_tests=10, failed_tests=0, passed=True, completed=True)
         size = SizeMetrics(flash_bytes=500, ram_bytes=100, ref_flash_bytes=500, ref_ram_bytes=100)
         safety = StaticSafetyMetrics(error_count=0, warning_count=0)
 
@@ -51,7 +51,7 @@ class TestBenchmarkScorer(unittest.TestCase):
 
     def test_partial_tests_passed(self):
         comp = CompilationResult(success=True, output="")
-        tests = TestResult(total_tests=10, passed_tests=5, failed_tests=5, passed=False)
+        tests = TestResult(total_tests=10, passed_tests=5, failed_tests=5, passed=False, completed=True)
         size = SizeMetrics(flash_bytes=500, ram_bytes=100, ref_flash_bytes=500, ref_ram_bytes=100)
         safety = StaticSafetyMetrics(error_count=0, warning_count=0)
 
@@ -65,7 +65,7 @@ class TestBenchmarkScorer(unittest.TestCase):
 
     def test_safety_violations_deductions(self):
         comp = CompilationResult(success=True, output="")
-        tests = TestResult(total_tests=5, passed_tests=5, failed_tests=0, passed=True)
+        tests = TestResult(total_tests=5, passed_tests=5, failed_tests=0, passed=True, completed=True)
         size = SizeMetrics(flash_bytes=500, ram_bytes=100, ref_flash_bytes=500, ref_ram_bytes=100)
         # 1 error (-15), 2 warnings (-6) -> safety = 100 - 21 = 79.0
         safety = StaticSafetyMetrics(error_count=1, warning_count=2)
@@ -88,16 +88,24 @@ class TestBenchmarkScorer(unittest.TestCase):
             with self.subTest(size=size):
                 scores = BenchmarkScorer.calculate_scores(
                     self.task, CompilationResult(True, ""),
-                    TestResult(total_tests=1, passed_tests=1, passed=True), size,
+                    TestResult(total_tests=1, passed_tests=1, passed=True, completed=True), size,
                     StaticSafetyMetrics())
                 self.assertEqual(scores.memory_score, 0)
 
     def test_individual_ram_limit_is_enforced(self):
         scores = BenchmarkScorer.calculate_scores(
             self.task, CompilationResult(True, ""),
-            TestResult(total_tests=1, passed_tests=1, passed=True),
+            TestResult(total_tests=1, passed_tests=1, passed=True, completed=True),
             SizeMetrics(400, 201, 500, 100), StaticSafetyMetrics())
         self.assertEqual(scores.memory_score, 0)
+
+    def test_result_without_explicit_completion_cannot_score(self):
+        result = TestResult(total_tests=10, passed_tests=10, passed=True)
+        self.assertFalse(result.completed)
+        scores = BenchmarkScorer.calculate_scores(
+            self.task, CompilationResult(True, ""), result,
+            SizeMetrics(500, 100, 500, 100), StaticSafetyMetrics())
+        self.assertEqual(scores.total_score, 0)
 
 
 if __name__ == "__main__":

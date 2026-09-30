@@ -1,10 +1,38 @@
 from typing import List, Dict, Any
 from aibenchmark_esw.models import (
-    TaskEvaluationResult, TestResult, SizeMetrics, StaticSafetyMetrics, DimensionScores,
+    TaskEvaluationResult, TestResult, SizeMetrics, StaticSafetyMetrics, DimensionScores, TaskWeights,
 )
 
 
 class BenchmarkReporter:
+    @staticmethod
+    def _all_tests_passed(result: TaskEvaluationResult) -> bool:
+        return result.compiled and result.test_result.completed and result.test_result.passed
+
+    @staticmethod
+    def _weight_summary(results: List[TaskEvaluationResult], dimension: str) -> str:
+        if any(result.weights is None for result in results):
+            return "Unknown (legacy report)"
+        values = {getattr(result.weights, dimension) for result in results}
+        return f"{next(iter(values)) * 100:g}%" if len(values) == 1 else "Varies by task"
+
+    @staticmethod
+    def _task_weights(result: TaskEvaluationResult) -> str:
+        if result.weights is None:
+            return "Unknown"
+        return "/".join(f"{getattr(result.weights, key) * 100:g}%"
+                        for key in ("functional", "memory", "safety"))
+
+    @staticmethod
+    def _standard(result: TaskEvaluationResult) -> str:
+        if result.target_standard is None:
+            return "Unknown"
+        if result.effective_standard is None:
+            return f"{result.target_standard} (not run)"
+        if result.target_standard != result.effective_standard:
+            return f"{result.target_standard}->{result.effective_standard}"
+        return result.effective_standard
+
     @staticmethod
     def from_json_dict(data: Dict[str, Any]) -> List[TaskEvaluationResult]:
         if not isinstance(data, dict) or not isinstance(data.get("tasks"), list):
@@ -22,13 +50,16 @@ class BenchmarkReporter:
                 test_result=TestResult(
                     total_tests=tests["total"], passed_tests=tests["passed"],
                     failed_tests=tests["failed"], ignored_tests=tests.get("ignored", 0),
-                    passed=tests["all_passed"], completed=tests.get("completed", True),
+                    passed=tests["all_passed"], completed=tests.get("completed", tests["total"] > 0),
                     returncode=tests.get("returncode"),
                 ),
                 size_metrics=SizeMetrics(**size), safety_metrics=StaticSafetyMetrics(**safety),
                 scores=DimensionScores(scores["functional"], scores["memory"],
                                        scores["safety"], scores["total"]),
                 execution_time_sec=item["execution_time_sec"], error_log=item.get("error_log"),
+                weights=TaskWeights(**item["weights"]) if item.get("weights") is not None else None,
+                target_standard=item.get("target_standard"),
+                effective_standard=item.get("effective_standard"),
             ))
         return results
 
@@ -39,7 +70,7 @@ class BenchmarkReporter:
 
         total_tasks = len(results)
         compiled_tasks = sum(1 for r in results if r.compiled)
-        all_passed_tasks = sum(1 for r in results if r.test_result.passed)
+        all_passed_tasks = sum(1 for r in results if BenchmarkReporter._all_tests_passed(r))
 
         avg_func = sum(r.scores.functional_score for r in results) / total_tasks
         avg_mem = sum(r.scores.memory_score for r in results) / total_tasks
@@ -57,14 +88,15 @@ class BenchmarkReporter:
         md.append("### Dimensional Scores")
         md.append("| Dimension | Average Score | Weight |")
         md.append("| :--- | :--- | :--- |")
-        md.append(f"| **Functional Correctness** | {avg_func:.2f} / 100 | 60% |")
-        md.append(f"| **Memory Efficiency** | {avg_mem:.2f} / 100 | 20% |")
-        md.append(f"| **Safety & Code Rules** | {avg_safe:.2f} / 100 | 20% |")
+        md.append(f"| **Functional Correctness** | {avg_func:.2f} / 100 | {BenchmarkReporter._weight_summary(results, 'functional')} |")
+        md.append(f"| **Memory Efficiency** | {avg_mem:.2f} / 100 | {BenchmarkReporter._weight_summary(results, 'memory')} |")
+        md.append(f"| **Safety & Code Rules** | {avg_safe:.2f} / 100 | {BenchmarkReporter._weight_summary(results, 'safety')} |")
         md.append(f"| **Composite Score** | **{avg_total:.2f} / 100** | 100% |\n")
 
         md.append("### Detailed Task Breakdown")
-        md.append("| Tier | Task ID | Compile | Tests Passed | Flash/RAM (B) | Safety | Score | Time |")
-        md.append("| :---: | :--- | :---: | :---: | :---: | :---: | :---: | :---: |")
+        md.append("Weights below are functional/memory/safety. Memory and safety contributions are scaled by the functional pass fraction.\n")
+        md.append("| Tier | Task ID | Standard | Weights | Compile | Tests Passed | Flash/RAM (B) | Safety | Score | Time |")
+        md.append("| :---: | :--- | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: |")
 
         for r in results:
             status_comp = "PASS" if r.compiled else "FAIL"
@@ -76,19 +108,19 @@ class BenchmarkReporter:
             safe_str = f"Err:{r.safety_metrics.error_count}, Warn:{r.safety_metrics.warning_count}"
             score_str = f"**{r.scores.total_score:.1f}**"
             time_str = f"{r.execution_time_sec:.2f}s"
-            md.append(f"| {r.tier} | `{r.task_id}` | {status_comp} | {test_str} | {mem_str} | {safe_str} | {score_str} | {time_str} |")
+            md.append(f"| {r.tier} | `{r.task_id}` | {BenchmarkReporter._standard(r)} | {BenchmarkReporter._task_weights(r)} | {status_comp} | {test_str} | {mem_str} | {safe_str} | {score_str} | {time_str} |")
 
         return "\n".join(md)
 
     @staticmethod
     def generate_cli_table(results: List[TaskEvaluationResult], model_name: str) -> str:
         lines = []
-        lines.append("=" * 78)
+        lines.append("=" * 110)
         lines.append(f" AIBenchMark-ESW Benchmark Results - Model: {model_name}")
-        lines.append("=" * 78)
-        header = f"{'Tier':<5} {'Task ID':<22} {'Comp':<6} {'Tests':<8} {'Flash/RAM':<14} {'Score':<8}"
+        lines.append("=" * 110)
+        header = f"{'Tier':<5} {'Task ID':<22} {'Standard':<14} {'Weights F/M/S':<16} {'Comp':<6} {'Tests':<8} {'Flash/RAM':<14} {'Score':<8}"
         lines.append(header)
-        lines.append("-" * 78)
+        lines.append("-" * 110)
 
         for r in results:
             comp = "PASS" if r.compiled else "FAIL"
@@ -97,13 +129,15 @@ class BenchmarkReporter:
             mem = (f"{r.size_metrics.flash_bytes}/{r.size_metrics.ram_bytes}B"
                    if r.size_metrics.measured else "Unavailable")
             score = f"{r.scores.total_score:.1f}"
-            lines.append(f"{r.tier:<5} {r.task_id:<22} {comp:<6} {tests:<8} {mem:<14} {score:<8}")
+            standard = BenchmarkReporter._standard(r)
+            weights = BenchmarkReporter._task_weights(r)
+            lines.append(f"{r.tier:<5} {r.task_id:<22} {standard:<14} {weights:<16} {comp:<6} {tests:<8} {mem:<14} {score:<8}")
 
-        lines.append("-" * 78)
+        lines.append("-" * 110)
         avg_total = sum(r.scores.total_score for r in results) / max(1, len(results))
-        pass_at_1 = sum(1 for r in results if r.test_result.passed) / max(1, len(results)) * 100.0
+        pass_at_1 = sum(1 for r in results if BenchmarkReporter._all_tests_passed(r)) / max(1, len(results)) * 100.0
         lines.append(f"Final Score: {avg_total:.2f}/100.0 | Pass@1: {pass_at_1:.1f}%")
-        lines.append("=" * 78)
+        lines.append("=" * 110)
         return "\n".join(lines)
 
     @staticmethod
@@ -111,6 +145,6 @@ class BenchmarkReporter:
         return {
             "model_name": model_name,
             "overall_score": round(sum(r.scores.total_score for r in results) / max(1, len(results)), 2),
-            "pass_at_1_pct": round(sum(1 for r in results if r.test_result.passed) / max(1, len(results)) * 100.0, 2),
+            "pass_at_1_pct": round(sum(1 for r in results if BenchmarkReporter._all_tests_passed(r)) / max(1, len(results)) * 100.0, 2),
             "tasks": [r.to_dict() for r in results],
         }

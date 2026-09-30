@@ -64,6 +64,8 @@ class TestCLI(unittest.TestCase):
             task["test_result"].pop("returncode", None)
             task["size_metrics"].pop("measured", None)
             task["safety_metrics"].pop("violations", None)
+            for key in ("weights", "target_standard", "effective_standard"):
+                task.pop(key, None)
         with TemporaryDirectory() as directory:
             report = Path(directory) / "legacy.json"
             report.write_text(json.dumps(data), encoding="utf-8")
@@ -75,6 +77,15 @@ class TestCLI(unittest.TestCase):
                     output.getvalue().encode("cp949")
         restored = BenchmarkReporter.from_json_dict(data)
         self.assertEqual(len(restored), 5)
+
+    def test_invalid_dataset_exits_cleanly(self):
+        with patch("sys.argv", ["aibenchmark-esw", "list"]), \
+                patch.object(cli, "DatasetLoader", side_effect=ValueError("Invalid task")), \
+                redirect_stderr(io.StringIO()) as output:
+            with self.assertRaises(SystemExit) as exit:
+                cli.main()
+        self.assertEqual(exit.exception.code, 1)
+        self.assertIn("Error: Invalid task", output.getvalue())
 
 
 if __name__ == "__main__":

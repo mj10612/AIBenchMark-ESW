@@ -15,5 +15,6 @@
     "memory": 0.2,
     "safety": 0.2
   },
-  "entry_file": "src/irq_manager.c"
+  "entry_file": "src/irq_manager.c",
+  "reference_file": "reference/irq_manager.c"
 }

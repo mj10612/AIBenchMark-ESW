@@ -7,6 +7,10 @@ from typing import Optional, Tuple
 from aibenchmark_esw.models import SizeMetrics
 
 
+class UnsupportedBinaryFormat(ValueError):
+    pass
+
+
 class SizeAnalyzer:
     def __init__(self, size_tool: Optional[str] = None):
         self.size_tool = size_tool or shutil.which("size")
@@ -19,20 +23,32 @@ class SizeAnalyzer:
     def _measure_file(self, file_path: Path) -> Tuple[int, int]:
         if not file_path.is_file():
             raise FileNotFoundError(f"Memory measurement artifact not found: {file_path}")
+        # Native object parsing includes common symbols, which the default GNU
+        # size summary can omit. Never let a tool summary override those counts.
+        try:
+            return self._parse_binary_sections(file_path)
+        except UnsupportedBinaryFormat:
+            pass
+        except (struct.error, IndexError) as error:
+            raise ValueError(f"Malformed memory measurement artifact: {file_path}") from error
         if self.size_tool:
             try:
                 proc = subprocess.run([self.size_tool, str(file_path)], capture_output=True,
                                       text=True, timeout=5)
-                lines = proc.stdout.strip().splitlines()
-                if proc.returncode == 0 and len(lines) >= 2:
-                    text, data, bss = map(int, lines[1].split()[:3])
-                    return text + data, data + bss
+                if proc.returncode == 0:
+                    for line in proc.stdout.splitlines():
+                        parts = line.split()
+                        if len(parts) < 3:
+                            continue
+                        try:
+                            text, data, bss = map(int, parts[:3])
+                        except ValueError:
+                            continue
+                        if min(text, data, bss) >= 0:
+                            return text + data, data + bss
             except (OSError, ValueError, subprocess.TimeoutExpired):
                 pass
-        try:
-            return self._parse_binary_sections(file_path)
-        except (struct.error, IndexError) as error:
-            raise ValueError(f"Malformed memory measurement artifact: {file_path}") from error
+        raise UnsupportedBinaryFormat(f"Unsupported binary format: {file_path}")
 
     def _parse_binary_sections(self, file_path: Path) -> Tuple[int, int]:
         data = file_path.read_bytes()
@@ -45,7 +61,7 @@ class SizeAnalyzer:
             return self._parse_coff(data, pe_offset + 4, image=True)
         if len(data) >= 20 and struct.unpack_from("<H", data)[0] in (0x014C, 0x8664, 0xAA64):
             return self._parse_coff(data, 0)
-        raise ValueError("Unsupported binary format; memory usage cannot be estimated reliably")
+        raise UnsupportedBinaryFormat("Unsupported binary format; memory usage cannot be estimated reliably")
 
     def _parse_coff(self, data: bytes, header: int, image: bool = False) -> Tuple[int, int]:
         count = struct.unpack_from("<H", data, header + 2)[0]
@@ -68,6 +84,21 @@ class SizeAnalyzer:
                     ram += size
             elif flags & 0x00000080:
                 ram += size
+        if not image:
+            # MSVC can represent tentative external definitions as common
+            # symbols instead of .bss sections. Their Value field is their size.
+            symbol_offset, symbol_count = struct.unpack_from("<II", data, header + 8)
+            if symbol_count and (not symbol_offset or symbol_offset + symbol_count * 18 > len(data)):
+                raise ValueError("Invalid COFF symbol table")
+            index = 0
+            while index < symbol_count:
+                entry = symbol_offset + index * 18
+                value, section, _, storage, auxiliaries = struct.unpack_from("<IhHBB", data, entry + 8)
+                if storage == 2 and section == 0 and value > 0:
+                    ram += value
+                index += 1 + auxiliaries
+                if index > symbol_count:
+                    raise ValueError("Invalid COFF auxiliary symbol count")
         return flash, ram
 
     def _parse_elf(self, data: bytes) -> Tuple[int, int]:

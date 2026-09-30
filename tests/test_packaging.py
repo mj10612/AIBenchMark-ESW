@@ -6,6 +6,7 @@ import sys
 import unittest
 import zipfile
 import venv
+from email.parser import BytesParser
 from pathlib import Path
 from tempfile import TemporaryDirectory
 
@@ -30,6 +31,12 @@ class TestPackaging(unittest.TestCase):
                 names = archive.namelist()
                 self.assertEqual(len([name for name in names if name.endswith("task.json")]), 5)
                 self.assertIn("aibenchmark_esw/_data/third_party/unity/unity.c", names)
+                metadata_name = next(name for name in names if name.endswith(".dist-info/METADATA"))
+                metadata = BytesParser().parsebytes(archive.read(metadata_name))
+                self.assertEqual(metadata["License-Expression"], "Apache-2.0")
+                self.assertEqual(set(metadata.get_all("License-File")), {"LICENSE", "NOTICE"})
+                for name in ("LICENSE", "NOTICE"):
+                    self.assertTrue(any(item.endswith(f".dist-info/licenses/{name}") for item in names))
             environment = work / "environment"
             venv.EnvBuilder(with_pip=True).create(environment)
             scripts = environment / ("Scripts" if os.name == "nt" else "bin")

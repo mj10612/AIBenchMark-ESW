@@ -15,5 +15,6 @@
     "memory": 0.2,
     "safety": 0.2
   },
-  "entry_file": "src/i2c_sensor.c"
+  "entry_file": "src/i2c_sensor.c",
+  "reference_file": "reference/i2c_sensor.c"
 }

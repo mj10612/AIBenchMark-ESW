@@ -11,9 +11,10 @@ from aibenchmark_esw.resources import data_root
 
 
 class ExecutionSandbox:
-    def __init__(self, compiler_path: Optional[str] = None):
+    def __init__(self, compiler_path: Optional[str] = None, allow_standard_fallback: bool = False):
         self.compiler_path = compiler_path or self._find_c_compiler()
         self.unity_dir = data_root() / "third_party" / "unity"
+        self.allow_standard_fallback = allow_standard_fallback
 
     def _find_c_compiler(self) -> str:
         for cmd in ["gcc", "clang", "tcc", "cl"]:
@@ -33,8 +34,14 @@ class ExecutionSandbox:
         compiler_name = Path(self.compiler_path).stem.lower()
         includes = [task.task_dir.resolve() / "include", self.unity_dir.resolve()]
         sources = [str(Path(source).resolve()) for source in sources]
+        standard = task.target_standard
         if compiler_name == "cl":
-            standard = "c11" if task.target_standard == "c99" else task.target_standard
+            if standard == "c99":
+                if not self.allow_standard_fallback:
+                    message = ("MSVC does not support strict C99. Use GCC/Clang/TCC or "
+                               "--allow-standard-fallback to explicitly evaluate as C11.")
+                    return CompilationResult(False, message, error_message="Unsupported C standard")
+                standard = "c11"
             cmd = [self.compiler_path, "/nologo", "/TC", f"/std:{standard}", "/O1"]
             cmd += [f"/I{directory}" for directory in includes]
             if object_only:
@@ -52,14 +59,16 @@ class ExecutionSandbox:
                 cmd.append("-c")
             cmd += sources + ["-o", str(output)]
         try:
-            proc = subprocess.run(cmd, capture_output=True, text=True, timeout=30,
+            proc = subprocess.run(cmd, capture_output=True, text=True, errors="backslashreplace", timeout=30,
                                   cwd=str(output.parent))
             log = proc.stdout + proc.stderr
             if proc.returncode != 0 or not output.is_file():
-                return CompilationResult(False, log, error_message="Compilation failed")
-            return CompilationResult(True, log, binary_path=output)
+                return CompilationResult(False, log, error_message="Compilation failed",
+                                         effective_standard=standard)
+            return CompilationResult(True, log, binary_path=output, effective_standard=standard)
         except (OSError, subprocess.TimeoutExpired) as error:
-            return CompilationResult(False, str(error), error_message="Compiler unavailable or timed out")
+            return CompilationResult(False, str(error), error_message="Compiler unavailable or timed out",
+                                     effective_standard=standard)
 
     def compile_object(self, task: TaskConfig, solution_code: str,
                        workspace: Path, name: str = "candidate") -> CompilationResult:
@@ -97,7 +106,7 @@ class ExecutionSandbox:
             comp_result._workspace = workspace
             retained = True
             try:
-                proc = subprocess.run([str(binary_path)], capture_output=True, text=True,
+                proc = subprocess.run([str(binary_path)], capture_output=True, text=True, errors="backslashreplace",
                                       timeout=task.limits.timeout_seconds, cwd=str(work_dir))
                 test_result = self._parse_unity_output(proc.stdout + "\n" + proc.stderr, proc.returncode)
             except (OSError, subprocess.TimeoutExpired) as error:

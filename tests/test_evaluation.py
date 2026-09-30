@@ -56,6 +56,16 @@ class TestEvaluation(unittest.TestCase):
         self.assertTrue(result.passed, result.output)
         self.assertEqual(result.total_tests, 9)
 
+    def test_all_reference_implementations_fit_current_compiler_budgets(self):
+        for task in self.loader.list_tasks():
+            with self.subTest(task=task.id):
+                reference = self.loader.get_reference_solution(task.id)
+                result = evaluate_task(task, reference, reference, "baseline", self.executor)
+                self.assertTrue(result.test_result.passed, result.error_log)
+                self.assertLessEqual(result.size_metrics.flash_bytes, task.limits.max_flash_bytes)
+                self.assertLessEqual(result.size_metrics.ram_bytes, task.limits.max_ram_bytes)
+                self.assertEqual(result.scores.total_score, 100)
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -1,6 +1,7 @@
-from dataclasses import dataclass, field
+from dataclasses import asdict, dataclass, field
+import math
 from typing import Optional, List, Dict, Any
-from pathlib import Path
+from pathlib import Path, PureWindowsPath
 
 
 @dataclass
@@ -9,12 +10,27 @@ class TaskLimits:
     max_ram_bytes: int = 256
     timeout_seconds: int = 10
 
+    def __post_init__(self):
+        for name in ("max_flash_bytes", "max_ram_bytes", "timeout_seconds"):
+            value = getattr(self, name)
+            minimum = 0 if name == "max_ram_bytes" else 1
+            if isinstance(value, bool) or not isinstance(value, int) or value < minimum:
+                raise ValueError(f"{name} must be an integer >= {minimum}")
+
 
 @dataclass
 class TaskWeights:
     functional: float = 0.6
     memory: float = 0.2
     safety: float = 0.2
+
+    def __post_init__(self):
+        values = (self.functional, self.memory, self.safety)
+        if any(isinstance(value, bool) or not isinstance(value, (int, float))
+               or not math.isfinite(value) or value < 0 for value in values):
+            raise ValueError("Task weights must be finite nonnegative numbers")
+        if not math.isclose(sum(values), 1.0, abs_tol=1e-9):
+            raise ValueError("Task weights must sum to 1")
 
 
 @dataclass
@@ -30,16 +46,41 @@ class TaskConfig:
     entry_file: str
     task_dir: Path
     prompt: str = ""
+    reference_file: Optional[str] = None
+
+    def __post_init__(self):
+        if not isinstance(self.id, str) or not self.id or any(char in self.id for char in "/\\"):
+            raise ValueError("Task id must be a nonempty name without path separators")
+        if isinstance(self.tier, bool) or not isinstance(self.tier, int) or self.tier not in (1, 2, 3, 4):
+            raise ValueError("Task tier must be 1, 2, 3, or 4")
+        if self.target_standard not in ("c99", "c11", "c17"):
+            raise ValueError("target_standard must be c99, c11, or c17")
+        for name in ("entry_file", "reference_file"):
+            value = getattr(self, name)
+            if value is None and name == "reference_file":
+                continue
+            if not isinstance(value, str) or not value:
+                raise ValueError(f"{name} must be a nonempty relative file path")
+            path = Path(value.replace("\\", "/"))
+            if path.is_absolute() or PureWindowsPath(value).drive or ".." in path.parts or path == Path("."):
+                raise ValueError(f"{name} must stay within the task directory")
+            setattr(self, name, path.as_posix())
 
     @classmethod
     def from_dict(cls, data: Dict[str, Any], task_dir: Path, prompt: str = "") -> "TaskConfig":
+        if not isinstance(data, dict):
+            raise ValueError("Task metadata must be a JSON object")
         limits_data = data.get("limits", {})
+        if not isinstance(limits_data, dict):
+            raise ValueError("Task limits must be an object")
         limits = TaskLimits(
             max_flash_bytes=limits_data.get("max_flash_bytes", 2048),
             max_ram_bytes=limits_data.get("max_ram_bytes", 256),
             timeout_seconds=limits_data.get("timeout_seconds", 10),
         )
         weights_data = data.get("weights", {})
+        if not isinstance(weights_data, dict):
+            raise ValueError("Task weights must be an object")
         weights = TaskWeights(
             functional=weights_data.get("functional", 0.6),
             memory=weights_data.get("memory", 0.2),
@@ -57,6 +98,7 @@ class TaskConfig:
             entry_file=data.get("entry_file", "src/solution.c"),
             task_dir=task_dir,
             prompt=prompt,
+            reference_file=data.get("reference_file"),
         )
 
 
@@ -66,6 +108,7 @@ class CompilationResult:
     output: str
     binary_path: Optional[Path] = None
     error_message: Optional[str] = None
+    effective_standard: Optional[str] = None
     _workspace: Optional[Any] = field(default=None, repr=False, compare=False)
 
     def cleanup(self) -> None:
@@ -84,7 +127,7 @@ class TestResult:
     ignored_tests: int = 0
     output: str = ""
     passed: bool = False
-    completed: bool = True
+    completed: bool = False
     returncode: Optional[int] = None
 
 
@@ -124,6 +167,9 @@ class TaskEvaluationResult:
     scores: DimensionScores
     execution_time_sec: float
     error_log: Optional[str] = None
+    weights: Optional[TaskWeights] = None
+    target_standard: Optional[str] = None
+    effective_standard: Optional[str] = None
 
     def to_dict(self) -> Dict[str, Any]:
         return {
@@ -160,4 +206,7 @@ class TaskEvaluationResult:
             },
             "execution_time_sec": round(self.execution_time_sec, 3),
             "error_log": self.error_log,
+            "weights": asdict(self.weights) if self.weights is not None else None,
+            "target_standard": self.target_standard,
+            "effective_standard": self.effective_standard,
         }

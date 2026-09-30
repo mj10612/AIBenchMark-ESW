@@ -1,25 +1,29 @@
 import json
+import logging
 from pathlib import Path
 from typing import List, Optional, Dict
 from aibenchmark_esw.models import TaskConfig
 from aibenchmark_esw.resources import data_root
 
 
+logger = logging.getLogger(__name__)
+
+
 class DatasetLoader:
     def __init__(self, tasks_root: Optional[Path] = None):
         if tasks_root is None:
             self.tasks_root = data_root() / "tasks"
-            if not self.tasks_root.is_dir():
-                raise FileNotFoundError(f"Benchmark task data not found: {self.tasks_root}")
         else:
             self.tasks_root = Path(tasks_root)
+        if not self.tasks_root.exists():
+            raise FileNotFoundError(f"Benchmark task data not found: {self.tasks_root}")
+        if not self.tasks_root.is_dir():
+            raise NotADirectoryError(f"Benchmark task root is not a directory: {self.tasks_root}")
         self._tasks: Dict[str, TaskConfig] = {}
         self._load_all()
 
     def _load_all(self) -> None:
-        self._tasks.clear()
-        if not self.tasks_root.exists():
-            return
+        tasks = {}
 
         for task_dir in sorted(self.tasks_root.iterdir()):
             if not task_dir.is_dir():
@@ -31,7 +35,7 @@ class DatasetLoader:
             try:
                 with open(task_json, "r", encoding="utf-8") as f:
                     data = json.load(f)
-                
+
                 prompt_file = task_dir / "prompt.md"
                 prompt_content = ""
                 if prompt_file.is_file():
@@ -39,9 +43,13 @@ class DatasetLoader:
                         prompt_content = pf.read()
 
                 config = TaskConfig.from_dict(data, task_dir=task_dir, prompt=prompt_content)
-                self._tasks[config.id] = config
-            except Exception as e:
-                print(f"[Warning] Failed to load task at {task_dir}: {e}")
+                if config.id in tasks:
+                    raise ValueError(f"Duplicate task id: {config.id}")
+                tasks[config.id] = config
+            except (OSError, UnicodeError, ValueError, KeyError, TypeError) as error:
+                logger.error("Failed to load task at %s: %s", task_dir, error)
+                raise ValueError(f"Invalid task at {task_dir}: {error}") from error
+        self._tasks = tasks
 
     def list_tasks(self, tier: Optional[int] = None) -> List[TaskConfig]:
         tasks = list(self._tasks.values())
@@ -56,8 +64,9 @@ class DatasetLoader:
         task = self.get_task(task_id)
         if not task:
             return None
-        # Reference solution filename matches entry_file basename under reference/
-        ref_file = task.task_dir / "reference" / Path(task.entry_file).name
+        # Existing datasets may use the documented basename convention.
+        relative_path = task.reference_file or f"reference/{Path(task.entry_file).name}"
+        ref_file = task.task_dir / relative_path
         if ref_file.is_file():
             with open(ref_file, "r", encoding="utf-8") as f:
                 return f.read()

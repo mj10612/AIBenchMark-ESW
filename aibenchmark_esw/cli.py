@@ -29,6 +29,8 @@ def build_parser() -> argparse.ArgumentParser:
     eval_p.add_argument("--solution", type=str, help="Path to C solution file")
     eval_p.add_argument("--reference", action="store_true", help="Evaluate the built-in reference solution")
     eval_p.add_argument("--compiler", type=str, help="Custom C compiler executable path")
+    eval_p.add_argument("--allow-standard-fallback", action="store_true",
+                        help="Allow MSVC to evaluate C99 tasks as C11; recorded in results")
 
     # Command: run (LLM or baseline benchmark)
     run_p = subparsers.add_parser("run", help="Run benchmark across tasks using an LLM or reference baseline")
@@ -37,6 +39,8 @@ def build_parser() -> argparse.ArgumentParser:
     run_p.add_argument("--tasks", type=str, help="Comma-separated task IDs to evaluate")
     run_p.add_argument("--output", type=str, help="Path to save output JSON report")
     run_p.add_argument("--compiler", type=str, help="Custom C compiler executable path")
+    run_p.add_argument("--allow-standard-fallback", action="store_true",
+                       help="Allow MSVC to evaluate C99 tasks as C11; recorded in results")
 
     # Command: report
     report_p = subparsers.add_parser("report", help="Generate report from evaluation JSON")
@@ -91,7 +95,8 @@ def cmd_eval(args: argparse.Namespace) -> int:
         print(f"Error: No solution available for '{args.task}'.", file=sys.stderr)
         return 1
 
-    executor = ExecutionSandbox(compiler_path=args.compiler)
+    executor = ExecutionSandbox(compiler_path=args.compiler,
+                                allow_standard_fallback=getattr(args, "allow_standard_fallback", False))
     result = evaluate_task(task, solution_code, loader.get_reference_solution(task.id),
                            model_name, executor)
     print(BenchmarkReporter.generate_cli_table([result], model_name=model_name))
@@ -116,7 +121,8 @@ def cmd_run(args: argparse.Namespace) -> int:
         return 1
 
     print(f"Starting AIBenchMark-ESW run on {len(tasks)} tasks using model '{args.model}'...")
-    executor = ExecutionSandbox(compiler_path=args.compiler)
+    executor = ExecutionSandbox(compiler_path=args.compiler,
+                                allow_standard_fallback=getattr(args, "allow_standard_fallback", False))
     llm_client = LLMClient(model_name=args.model) if args.model != "baseline" else None
     results: List[TaskEvaluationResult] = []
     for task in tasks:
@@ -191,7 +197,11 @@ def main() -> None:
         "report": cmd_report,
     }
 
-    exit_code = dispatch[args.command](args)
+    try:
+        exit_code = dispatch[args.command](args)
+    except (OSError, ValueError) as error:
+        print(f"Error: {error}", file=sys.stderr)
+        exit_code = 1
     sys.exit(exit_code)
 
 
