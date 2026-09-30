@@ -6,6 +6,7 @@ from contextlib import redirect_stdout, redirect_stderr
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from unittest.mock import patch
+from dataclasses import replace
 
 from aibenchmark_esw import cli
 from aibenchmark_esw.dataset import DatasetLoader
@@ -13,6 +14,24 @@ from aibenchmark_esw.metrics.reporter import BenchmarkReporter
 
 
 class TestCLI(unittest.TestCase):
+    def test_task_standard_is_used_for_model_prompt(self):
+        for standard in ("c99", "c11", "c17"):
+            with self.subTest(standard=standard):
+                loader = DatasetLoader()
+                task = replace(loader.get_task("tier1_crc16"), target_standard=standard,
+                               prompt=f"Implement the API using {standard.upper()}.")
+                loader._tasks = {task.id: task}
+                captured = []
+                def generate(messages):
+                    captured.extend(messages)
+                    return loader.get_reference_solution(task.id)
+                args = Namespace(tier=None, tasks=None, model="mock", compiler=None, output=None)
+                with patch.object(cli, "DatasetLoader", return_value=loader), \
+                        patch.object(cli.LLMClient, "generate_solution", side_effect=generate), \
+                        redirect_stdout(io.StringIO()):
+                    self.assertEqual(cli.cmd_run(args), 0)
+                self.assertIn(f"portable {standard.upper()} code", captured[0]["content"])
+
     def test_generation_failure_is_saved_and_included_in_denominator(self):
         loader = DatasetLoader()
         with TemporaryDirectory() as directory:
@@ -86,6 +105,19 @@ class TestCLI(unittest.TestCase):
                 cli.main()
         self.assertEqual(exit.exception.code, 1)
         self.assertIn("Error: Invalid task", output.getvalue())
+
+    def test_invalid_scores_are_reported_without_traceback(self):
+        with TemporaryDirectory() as directory:
+            report = Path(directory) / "invalid.json"
+            data = json.loads(Path("results/baseline.json").read_text(encoding="utf-8"))
+            for value in (None, "invalid", True, float("nan"), float("inf"), -1, 101):
+                data["tasks"][0]["scores"]["total"] = value
+                report.write_text(json.dumps(data), encoding="utf-8")
+                for format_name in ("cli", "markdown"):
+                    with self.subTest(value=value, format=format_name), redirect_stderr(io.StringIO()) as output:
+                        self.assertEqual(cli.cmd_report(Namespace(results=str(report), format=format_name)), 1)
+                        self.assertIn("Error: Invalid results file:", output.getvalue())
+                        self.assertNotIn("Traceback", output.getvalue())
 
 
 if __name__ == "__main__":

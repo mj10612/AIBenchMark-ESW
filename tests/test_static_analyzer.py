@@ -8,6 +8,37 @@ from aibenchmark_esw.sandbox.static_analyzer import StaticAnalyzer
 
 
 class TestStaticAnalyzer(unittest.TestCase):
+    def test_comments_in_literals_cannot_hide_allocation(self):
+        samples = [
+            'const char *url = "https://example.test"; void *allocate(void) { return malloc(16); }',
+            'const char *start = "/*"; void *allocate(void) { return malloc(16); } const char *end = "*/";',
+            'const char *quote = "\\\"//"; void *allocate(void) { return malloc(16); }',
+            "char slash = '/'; void *allocate(void) { return malloc(16); }",
+            'void *allocate(void) { return ma\\\nlloc(16); }',
+        ]
+        with TemporaryDirectory() as directory:
+            source = Path(directory) / "solution.c"
+            for sample in samples:
+                with self.subTest(sample=sample):
+                    source.write_text("#include <stdlib.h>\n" + sample, encoding="utf-8")
+                    metrics = StaticAnalyzer("nonexistent-review-cppcheck").analyze(source)
+                    self.assertEqual(metrics.error_count, 1)
+
+    def test_literal_and_comment_text_do_not_trigger_safety_rules(self):
+        code = '''const char *message = "malloc(16); goto end; float unsigned short";
+char quote = '\\'';
+/* free(ptr); goto invalid; double */
+// continued comment \\
+malloc(16);
+void normal(void) {}
+'''
+        with TemporaryDirectory() as directory:
+            source = Path(directory) / "solution.c"
+            source.write_text(code, encoding="utf-8")
+            metrics = StaticAnalyzer("nonexistent-review-cppcheck").analyze(source)
+        self.assertEqual(metrics.error_count, 0)
+        self.assertEqual(metrics.warning_count, 0)
+
     def test_embedded_rules_remain_active_with_cppcheck_installed(self):
         with TemporaryDirectory() as directory:
             source = Path(directory) / "solution.c"

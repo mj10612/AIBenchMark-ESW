@@ -4,6 +4,7 @@ import subprocess
 from pathlib import Path
 from typing import Optional, List
 from aibenchmark_esw.models import StaticSafetyMetrics
+from aibenchmark_esw.sandbox.c_source import mask_noncode
 
 
 class StaticAnalyzer:
@@ -72,9 +73,7 @@ class StaticAnalyzer:
         warnings = 0
         violations = []
 
-        # Remove single-line and multi-line comments before analysis
-        cleaned_code = re.sub(r"/\*.*?\*/", "", code, flags=re.DOTALL)
-        cleaned_code = re.sub(r"//.*", "", cleaned_code)
+        cleaned_code = mask_noncode(code)
 
         # 1. Dynamic Memory Allocation check (Forbidden in safety-critical embedded systems)
         if re.search(r"\b(malloc|calloc|realloc|free)\s*\(", cleaned_code):

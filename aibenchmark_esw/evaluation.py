@@ -31,7 +31,8 @@ def evaluate_task(task: TaskConfig, solution_code: str, reference_code: Optional
     size = SizeMetrics(measured=False)
     with tempfile.TemporaryDirectory(prefix="aibenchmark_eval_") as directory:
         work_dir = Path(directory)
-        comp, tests = executor.compile_and_test(task, solution_code, work_dir)
+        test_dir = work_dir / "tests"
+        comp, tests = executor.compile_and_test(task, solution_code, test_dir)
         if not comp.success:
             errors.append(comp.output or comp.error_message or "Compilation failed")
         elif not tests.passed:
@@ -41,15 +42,15 @@ def evaluate_task(task: TaskConfig, solution_code: str, reference_code: Optional
             try:
                 if not reference_code:
                     raise ValueError("Reference implementation is required for memory measurement")
-                candidate = executor.compile_object(task, solution_code, work_dir, "candidate")
-                reference = executor.compile_object(task, reference_code, work_dir, "reference")
+                candidate = executor.compile_object(task, solution_code, work_dir / "candidate", "candidate")
+                reference = executor.compile_object(task, reference_code, work_dir / "reference", "reference")
                 if not candidate.success or not reference.success:
                     raise ValueError(candidate.output + reference.output)
                 size = SizeAnalyzer().analyze(candidate.binary_path, reference.binary_path)
             except (OSError, ValueError) as error:
                 errors.append(f"Memory analysis failed: {error}")
 
-        source = work_dir / Path(task.entry_file).name
+        source = test_dir / Path(task.entry_file).name
         safety = StaticAnalyzer().analyze(source, [task.task_dir / "include"],
                                            comp.effective_standard or task.target_standard)
         scores = BenchmarkScorer.calculate_scores(task, comp, tests, size, safety)

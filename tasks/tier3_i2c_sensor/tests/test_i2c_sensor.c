@@ -107,6 +107,40 @@ void test_null_params_safety(void) {
     TEST_ASSERT_EQUAL(SENSOR_ERR_NULL_PARAM, sensor_read_temperature_celsius_x100(&dev, NULL));
 }
 
+void test_temperature_range_and_fractional_values(void) {
+    const int16_t raw_values[] = {-2048, -1600, -1, 0, 1, 1600, 2047};
+    const int16_t expected[] = {-12800, -10000, -6, 0, 6, 10000, 12793};
+    TEST_ASSERT_EQUAL(SENSOR_OK, sensor_init(&dev, &bus));
+    for (size_t i = 0; i < sizeof(raw_values) / sizeof(raw_values[0]); i++) {
+        uint16_t encoded = (uint16_t)(((uint16_t)raw_values[i] & 0x0FFFU) << 4);
+        mock_regs[SENSOR_REG_TEMP_MSB] = (uint8_t)(encoded >> 8);
+        mock_regs[SENSOR_REG_TEMP_LSB] = (uint8_t)encoded;
+        int16_t temperature = 0;
+        TEST_ASSERT_EQUAL(SENSOR_OK, sensor_read_temperature_celsius_x100(&dev, &temperature));
+        TEST_ASSERT_EQUAL_INT(expected[i], temperature);
+    }
+}
+
+void test_missing_bus_and_callbacks(void) {
+    i2c_bus_t invalid = bus;
+    invalid.read = NULL;
+    TEST_ASSERT_EQUAL(SENSOR_ERR_NULL_PARAM, sensor_init(&dev, &invalid));
+    invalid = bus;
+    invalid.write = NULL;
+    TEST_ASSERT_EQUAL(SENSOR_ERR_NULL_PARAM, sensor_init(&dev, &invalid));
+
+    int16_t temperature = 1234;
+    dev.is_initialized = true;
+    dev.bus = NULL;
+    TEST_ASSERT_EQUAL(SENSOR_ERR_NULL_PARAM, sensor_read_temperature_celsius_x100(&dev, &temperature));
+    dev.bus = &invalid;
+    TEST_ASSERT_EQUAL(SENSOR_ERR_NULL_PARAM, sensor_read_temperature_celsius_x100(&dev, &temperature));
+    invalid = bus;
+    invalid.read = NULL;
+    TEST_ASSERT_EQUAL(SENSOR_ERR_NULL_PARAM, sensor_read_temperature_celsius_x100(&dev, &temperature));
+    TEST_ASSERT_EQUAL_INT(1234, temperature);
+}
+
 int main(void) {
     UNITY_BEGIN();
     RUN_TEST(test_successful_init);
@@ -116,5 +150,7 @@ int main(void) {
     RUN_TEST(test_read_negative_temperature);
     RUN_TEST(test_read_before_init_fails);
     RUN_TEST(test_null_params_safety);
+    RUN_TEST(test_temperature_range_and_fractional_values);
+    RUN_TEST(test_missing_bus_and_callbacks);
     return UNITY_END();
 }

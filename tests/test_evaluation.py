@@ -1,4 +1,6 @@
 import unittest
+import subprocess
+from dataclasses import replace
 from pathlib import Path
 from tempfile import TemporaryDirectory
 
@@ -6,6 +8,7 @@ from aibenchmark_esw.dataset import DatasetLoader
 from aibenchmark_esw.evaluation import evaluate_task
 from aibenchmark_esw.sandbox.executor import ExecutionSandbox
 from aibenchmark_esw.sandbox.size_analyzer import SizeAnalyzer
+from compiler_tools import find_clang
 
 
 class TestEvaluation(unittest.TestCase):
@@ -47,6 +50,77 @@ class TestEvaluation(unittest.TestCase):
         self.assertFalse(result.size_metrics.measured)
         self.assertEqual(result.scores.memory_score, 0)
         self.assertIn("Memory analysis failed", result.error_log)
+
+    def test_fake_unity_summary_cannot_award_points(self):
+        candidate = '''#include "crc16.h"
+#include <stdio.h>
+#include <stdlib.h>
+uint16_t crc16_update(uint16_t crc, uint8_t byte) { return 0; }
+uint16_t crc16_ccitt(const uint8_t *data, size_t length) {
+    puts("5 Tests 0 Failures 0 Ignored");
+    exit(0);
+}
+'''
+        result = evaluate_task(self.task, candidate, self.reference, "repro", self.executor)
+        self.assertTrue(result.compiled, result.error_log)
+        self.assertFalse(result.test_result.completed)
+        self.assertFalse(result.test_result.passed)
+        self.assertEqual(result.scores.total_score, 0)
+
+    def test_candidate_cannot_complete_its_own_unity_suite_and_exit(self):
+        candidate = '''#include "crc16.h"
+#include "unity.h"
+#include <stdlib.h>
+static void fake_test(void) {}
+uint16_t crc16_update(uint16_t crc, uint8_t byte) { return 0; }
+uint16_t crc16_ccitt(const uint8_t *data, size_t length) {
+    UnityBegin("fake.c");
+    UnityDefaultTestRun(fake_test, "fake_test", 1);
+    exit(UnityEnd());
+}
+'''
+        result = evaluate_task(self.task, candidate, self.reference, "repro", self.executor)
+        self.assertTrue(result.compiled, result.error_log)
+        self.assertFalse(result.test_result.completed)
+        self.assertEqual(result.scores.total_score, 0)
+
+    def test_entry_filename_cannot_overwrite_candidate_for_safety_analysis(self):
+        candidate = self.reference + "\n#include <stdlib.h>\nvoid *allocate(void) { return malloc(16); }\n"
+        normal = evaluate_task(self.task, candidate, self.reference, "repro", self.executor)
+        self.assertEqual(normal.safety_metrics.error_count, 1)
+        for filename in ("reference.c", "candidate.c"):
+            with self.subTest(filename=filename):
+                config = replace(self.task, entry_file=f"src/{filename}")
+                result = evaluate_task(config, candidate, self.reference, "repro", self.executor)
+                self.assertTrue(result.test_result.passed, result.error_log)
+                self.assertEqual(result.safety_metrics.error_count, normal.safety_metrics.error_count)
+                self.assertEqual(result.scores.total_score, normal.scores.total_score)
+
+    def test_diagnostic_stderr_does_not_make_completed_suite_incomplete(self):
+        candidate = "#include <stdio.h>\n" + self.reference.replace(
+            "uint16_t crc16_update(uint16_t current_crc, uint8_t byte) {",
+            'uint16_t crc16_update(uint16_t current_crc, uint8_t byte) { '
+            'static int logged = 0; if (!logged) { fputs("diagnostic\\n", stderr); logged = 1; }')
+        result = evaluate_task(self.task, candidate, self.reference, "repro", self.executor)
+        self.assertTrue(result.compiled, result.error_log)
+        self.assertTrue(result.test_result.completed, result.test_result.output)
+        self.assertTrue(result.test_result.passed, result.error_log)
+
+    def test_sensor_conversion_uses_wide_arithmetic_on_avr(self):
+        compiler = find_clang()
+        if compiler is None:
+            self.skipTest("Clang is required for AVR cross-compilation validation")
+        task = self.loader.get_task("tier3_i2c_sensor")
+        with TemporaryDirectory() as directory:
+            output = Path(directory) / "sensor.ll"
+            compiled = subprocess.run([compiler, "--target=avr", "-mmcu=atmega328p", "-ffreestanding",
+                                       "-std=c99", "-S", "-emit-llvm", "-O0", "-I", str(task.task_dir / "include"),
+                                       str(task.task_dir / "reference/i2c_sensor.c"), "-o", str(output)],
+                                      capture_output=True, text=True, errors="backslashreplace", timeout=30)
+            self.assertEqual(compiled.returncode, 0, compiled.stdout + compiled.stderr)
+            ir = output.read_text(encoding="utf-8")
+        self.assertNotRegex(ir, r"mul nsw i16 [^\n]*, 25")
+        self.assertRegex(ir, r"mul nsw i32 [^\n]*, 25")
 
     def test_ring_reference_passes_rollover_cases(self):
         task = self.loader.get_task("tier1_ring_buffer")

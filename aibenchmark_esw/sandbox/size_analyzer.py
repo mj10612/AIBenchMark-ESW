@@ -119,8 +119,10 @@ class SizeAnalyzer:
         if count == 0 and offset:
             count = struct.unpack_from(fmt, data, offset)[5]
         flash = ram = 0
+        sections = []
         for index in range(count):
             section = struct.unpack_from(fmt, data, offset + index * entry_size)
+            sections.append(section)
             kind, flags, size = section[1], section[2], section[5]
             if not flags & 0x2:
                 continue
@@ -130,4 +132,32 @@ class SizeAnalyzer:
                 flash += size
                 if flags & 0x1:
                     ram += size
-        return flash, ram
+        common = {}
+        symbol_fmt = endian + ("IBBHQQ" if is_64 else "IIIBBH")
+        symbol_size = struct.calcsize(symbol_fmt)
+        for section_index, section in enumerate(sections):
+            if section[1] not in (2, 11):  # SHT_SYMTAB / SHT_DYNSYM
+                continue
+            start, size, link, stride = section[4], section[5], section[6], section[9]
+            if (stride < symbol_size or size % stride or start + size > len(data)
+                    or link >= len(sections) or sections[link][1] != 3):
+                raise ValueError("Invalid ELF symbol table")
+            strings = sections[link]
+            if strings[4] + strings[5] > len(data):
+                raise ValueError("Invalid ELF string table")
+            names = data[strings[4]:strings[4] + strings[5]]
+            for symbol_index, position in enumerate(range(start, start + size, stride)):
+                symbol = struct.unpack_from(symbol_fmt, data, position)
+                name = symbol[0]
+                index, allocated = (symbol[3], symbol[5]) if is_64 else (symbol[5], symbol[2])
+                if index != 0xFFF2:  # SHN_COMMON reserves RAM outside sections
+                    continue
+                if name >= len(names):
+                    raise ValueError("Invalid ELF common symbol name")
+                end = names.find(b"\0", name)
+                if end == -1:
+                    raise ValueError("Unterminated ELF common symbol name")
+                key = names[name:end] if name else (section_index, symbol_index)
+                # A symbol may be exposed through more than one symbol table.
+                common[key] = max(common.get(key, 0), allocated)
+        return flash, ram + sum(common.values())

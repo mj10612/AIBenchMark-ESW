@@ -8,6 +8,7 @@ from tempfile import TemporaryDirectory
 from unittest.mock import patch
 
 from aibenchmark_esw.sandbox.size_analyzer import SizeAnalyzer
+from compiler_tools import find_clang
 
 
 class TestSizeAnalyzer(unittest.TestCase):
@@ -50,6 +51,62 @@ class TestSizeAnalyzer(unittest.TestCase):
         self.assertEqual(self.analyzer._parse_coff(header + sections, 0), (132, 42))
         only_code = struct.pack("<HHIIIHH", 0x8664, 1, 0, 0, 0, 0, 0) + sections[:40]
         self.assertEqual(self.analyzer._parse_coff(only_code, 0), (100, 0))
+
+    def elf_with_common_symbol(self, is_64, endian):
+        header = bytearray(64 if is_64 else 52)
+        header[:7] = b"\x7fELF" + bytes([2 if is_64 else 1, 1 if endian == "<" else 2, 1])
+        section_fmt = endian + ("IIQQQQIIQQ" if is_64 else "IIIIIIIIII")
+        section_size = struct.calcsize(section_fmt)
+        struct.pack_into(endian + ("Q" if is_64 else "I"), header, 40 if is_64 else 32, len(header))
+        struct.pack_into(endian + "HH", header, 58 if is_64 else 46, section_size, 5)
+        symbol_fmt = endian + ("IBBHQQ" if is_64 else "IIIBBH")
+        symbol_size = struct.calcsize(symbol_fmt)
+        common = struct.pack(symbol_fmt, *( (1, 0x11, 0, 0xFFF2, 16, 2048) if is_64
+                                           else (1, 16, 2048, 0x11, 0, 0xFFF2) ))
+        symbols = bytes(symbol_size) + common
+        names = b"\0buffer\0"
+        data_start = len(header) + section_size * 5
+        names_start, symbols_start = data_start + 256, data_start + 256 + len(names)
+        sections = [
+            (0, 0, 0, 0, 0),
+            (1, 3, data_start, 256, 0),
+            (3, 0, names_start, len(names), 0),
+            (2, 0, symbols_start, len(symbols), symbol_size),
+            (11, 0, symbols_start, len(symbols), symbol_size),
+        ]
+        table = b"".join(struct.pack(section_fmt, 0, kind, flags, 0, offset, size,
+                                    2 if kind in (2, 11) else 0, 0, 1, stride)
+                         for kind, flags, offset, size, stride in sections)
+        return bytes(header) + table + bytes(256) + names + symbols
+
+    def test_elf_common_symbols_count_once_across_symbol_tables(self):
+        for is_64 in (False, True):
+            for endian in ("<", ">"):
+                with self.subTest(is_64=is_64, endian=endian):
+                    self.assertEqual(self.analyzer._parse_elf(self.elf_with_common_symbol(is_64, endian)), (256, 2304))
+
+    def test_malformed_elf_symbol_table_is_rejected(self):
+        data = self.elf_with_common_symbol(True, "<")
+        with self.assertRaisesRegex(ValueError, "symbol table"):
+            self.analyzer._parse_elf(data[:-1])
+
+    def test_real_elf_common_and_bss_reserve_equal_ram(self):
+        compiler = find_clang()
+        if compiler is None:
+            self.skipTest("Clang is required for ELF common-symbol integration")
+        with TemporaryDirectory() as directory:
+            source = Path(directory) / "memory.c"
+            source.write_text("unsigned char buffer[2048];\nunsigned char data[256] = {1};\n"
+                              "int read_memory(int index) { return buffer[index & 2047] + data[index & 255]; }\n",
+                              encoding="utf-8")
+            for mode in ("-fcommon", "-fno-common"):
+                with self.subTest(mode=mode):
+                    obj = Path(directory) / f"{mode[2:]}.o"
+                    compiled = subprocess.run([compiler, "--target=x86_64-unknown-linux-gnu", "-std=c99", "-Os", mode,
+                                               "-c", str(source), "-o", str(obj)], capture_output=True, text=True,
+                                              errors="backslashreplace", timeout=30)
+                    self.assertEqual(compiled.returncode, 0, compiled.stdout + compiled.stderr)
+                    self.assertEqual(self.analyzer._measure_file(obj)[1], 2304)
 
     def _coff_with_common_symbol(self):
         # An MSVC-style static .bss plus a tentative external definition.

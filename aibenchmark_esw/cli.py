@@ -139,7 +139,8 @@ def cmd_run(args: argparse.Namespace) -> int:
                     for header in sorted((task.task_dir / "include").glob("*.h"))
                 )
                 messages = llm_client.build_prompt(task.prompt, headers_text,
-                                                    loader.get_starter_code(task.id) or "")
+                                                    loader.get_starter_code(task.id) or "",
+                                                    target_standard=task.target_standard)
                 solution_code = llm_client.generate_solution(messages)
                 if not solution_code:
                     raise ValueError("Model returned an empty implementation")
@@ -171,14 +172,13 @@ def cmd_report(args: argparse.Namespace) -> int:
     try:
         data = json.loads(report_file.read_text(encoding="utf-8"))
         results = BenchmarkReporter.from_json_dict(data)
+        model_name = data.get("model_name", "unknown")
+        rendered = (BenchmarkReporter.generate_markdown(results, model_name) if args.format == "markdown"
+                    else BenchmarkReporter.generate_cli_table(results, model_name))
     except (OSError, ValueError, TypeError, KeyError) as error:
         print(f"Error: Invalid results file: {error}", file=sys.stderr)
         return 1
-    model_name = data.get("model_name", "unknown")
-    if args.format == "markdown":
-        print(BenchmarkReporter.generate_markdown(results, model_name))
-    else:
-        print(BenchmarkReporter.generate_cli_table(results, model_name))
+    print(rendered)
     return 0
 
 

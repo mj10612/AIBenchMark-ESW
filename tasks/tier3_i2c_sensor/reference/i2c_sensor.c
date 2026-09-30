@@ -29,8 +29,11 @@ sensor_status_t sensor_read_temperature_celsius_x100(sensor_device_t* dev, int16
         return SENSOR_ERR_NULL_PARAM;
     }
 
-    if (!dev->is_initialized || dev->bus == NULL || dev->bus->read == NULL) {
+    if (!dev->is_initialized) {
         return SENSOR_ERR_COMM_FAIL;
+    }
+    if (dev->bus == NULL || dev->bus->read == NULL || dev->bus->write == NULL) {
+        return SENSOR_ERR_NULL_PARAM;
     }
 
     uint8_t raw_data[2] = {0, 0};
@@ -40,9 +43,9 @@ sensor_status_t sensor_read_temperature_celsius_x100(sensor_device_t* dev, int16
 
     int16_t raw12 = (int16_t)((((uint16_t)raw_data[0] << 8) | (uint16_t)raw_data[1]) >> 4);
     if ((raw12 & 0x0800) != 0) {
-        raw12 |= (int16_t)0xF000;
+        raw12 -= 4096;
     }
 
-    *temp_celsius_x100 = (int16_t)((raw12 * 25) / 4);
+    *temp_celsius_x100 = (int16_t)(((int32_t)raw12 * 25) / 4);
     return SENSOR_OK;
 }

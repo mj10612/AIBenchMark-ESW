@@ -68,7 +68,7 @@ python -m unittest discover -s tests -v
 
 *Prerequisites*: A C compiler in your PATH (`gcc`, `clang`, `tcc`, or `cl`). Candidate and reference code use the same compiler and settings. GCC/Clang use `-Os`; TCC uses its native code generation; MSVC uses `/O1`. MSVC cannot select strict C99, so C99 tasks fail by default with that compiler. Add `--allow-standard-fallback` to `eval` or `run` to explicitly permit C11 instead. Results and reports record both the requested and effective standard.
 
-Regular wheel installations also include all tasks, headers, reference implementations, and the Unity harness. Editable installations use the checkout's `tasks/` and `third_party/` directories.
+Regular wheel installations also include all tasks, headers, reference implementations, and the Unity harness. Direct wheels and wheels built from source distributions exclude local build products and caches. Editable installations use the checkout's `tasks/` and `third_party/` directories. Optional Clang integration tests check ELF common symbols and sensor arithmetic on an AVR target.
 
 ---
 
@@ -128,12 +128,14 @@ $$S_{\text{func}} = \frac{\text{Passed Test Cases}}{\text{Total Test Cases}} \ti
 
 Every selected task is included in the results, including model API failures and missing references. `eval` and `run` return a nonzero exit status if any task fails or an evaluation error occurs; `run --output` still saves the results.
 
+Completion requires the trusted test runner to return, emit its per-run completion marker, and produce consistent per-test records and a single Unity summary. Printing a summary and exiting early receives zero points. Candidate C executes in the same native process as the test harness; this completion check is not an operating-system security sandbox. Model prompts use each task's requested C standard.
+
 The percentages above are the default weights. Each task can specify its own nonnegative weights summing to 1; results preserve these weights and reports display them. Reports with mixed weights identify them as varying by task. Older result files without weights display them as unknown.
 
 Dataset loading rejects missing roots, malformed task metadata, invalid limits or weights, and duplicate task IDs instead of silently excluding tasks. An optional `reference_file` in `task.json` selects a reference path relative to the task directory; older tasks retain the `reference/<entry_file basename>` convention.
 
 ### 2. Memory Footprint Efficiency ($S_{\text{mem}}$, 20%)
-Measures a separately compiled implementation object, excluding Unity, test code, and the host executable runtime. Candidate and reference objects are compiled with the same settings. Allocated code and read-only sections count toward Flash; initialized writable data counts toward both Flash and RAM; zero-initialized data and COFF common symbols count toward RAM. Debug and symbol table bytes are excluded. This is a host object footprint, not an MCU-linked image or a stack usage measurement.
+Measures a separately compiled implementation object, excluding Unity, test code, and the host executable runtime. Candidate and reference objects are compiled with the same settings. Allocated code and read-only sections count toward Flash; initialized writable data counts toward both Flash and RAM; zero-initialized data and COFF/ELF common symbols count toward RAM. Debug and symbol table bytes are excluded. This is a host object footprint, not an MCU-linked image or a stack usage measurement.
 
 The combined size ($\text{Flash} + \text{RAM}$) is compared to the measured reference ($M_{\text{ref}}$) and combined maximum budget ($M_{\text{max}}$). Each individual Flash and RAM limit must also be respected:
 * If $M_{\text{actual}} \le M_{\text{ref}}$: $S_{\text{mem}} = 100$
@@ -142,7 +144,7 @@ The combined size ($\text{Flash} + \text{RAM}$) is compared to the measured refe
 * If either individual resource limit is exceeded: $S_{\text{mem}} = 0$
 * Missing or unreadable measurements are reported as unavailable and receive no memory points.
 
-Reference implementations must pass all functional tests and fit the budgets with the compiler used for comparisons. The refreshed TCC baseline scores 100/100 and passes all 31 tests. The ring buffer's Flash budget is now 2048 bytes, accommodating its measured 1474-byte TCC object footprint. Its RAM footprint is legitimately zero because it uses caller-owned storage. Other compilers may produce different footprints; resource limits remain enforced for both candidates and references.
+Reference implementations must pass all functional tests and fit the budgets with the compiler used for comparisons. The refreshed TCC baseline scores 100/100 and passes all 33 tests. The ring buffer's Flash budget is 2048 bytes, accommodating its measured 1474-byte TCC object footprint. Its RAM footprint is legitimately zero because it uses caller-owned storage. Other compilers may produce different footprints; resource limits remain enforced for both candidates and references.
 
 ### 3. Static Code Safety ($S_{\text{safety}}$, 20%)
 Checks selected embedded safety rules using built-in heuristics and, when installed, `cppcheck`. These checks are not full MISRA-C certification. Penalizes:

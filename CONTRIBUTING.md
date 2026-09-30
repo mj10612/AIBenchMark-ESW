@@ -62,7 +62,7 @@ Create `task.json` with the following schema:
    - Non-blocking state machines and ISR-safe algorithms.
    - Zero dynamic allocation (`malloc`/`free`).
 2. **Deterministic Mocking**: If hardware interaction is required, provide clean mock interfaces (function pointers or mock register arrays) in `include/mock_<peripheral>.h`.
-3. **Comprehensive Tests**: Include boundary conditions, null pointer checks, and wrap-around logic in `tests/test_<module>.c`.
+3. **Comprehensive Tests**: Include boundary conditions, null pointer checks, and wrap-around logic in `tests/test_<module>.c`. Define one runner `main(void)` or `main(int argc, char **argv)` and return `UNITY_END()` after the tests. Helpers may include headers from the task's `tests/` directory. Include integer-width boundaries for code intended to run on 16-bit-int targets.
 4. **Golden Reference**: Ensure the declared reference passes all test cases and its measured Flash/RAM fit the budgets with the compiler used for comparisons. Calibrate host object budgets using that compiler and record it when sharing results; a reference exceeding a budget does not receive full memory points:
    ```bash
    aibenchmark-esw eval --task <task_id> --reference
@@ -81,6 +81,7 @@ Create `task.json` with the following schema:
    python -m unittest discover tests
    ```
    Install `pip install -e ".[dev]"` to include the sdist/wheel packaging integration test. It builds a wheel from the sdist and executes the bundled baseline outside the checkout.
+   Task distributions include JSON metadata, Markdown prompts, C sources/headers, and CMakeLists.txt. Generated build directories, binaries, object files, and caches are excluded.
 3. Commit your changes with clear messages:
    ```bash
    git commit -m "feat(tasks): add tier2 modbus parser task"

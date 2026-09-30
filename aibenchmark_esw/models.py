@@ -27,7 +27,7 @@ class TaskWeights:
     def __post_init__(self):
         values = (self.functional, self.memory, self.safety)
         if any(isinstance(value, bool) or not isinstance(value, (int, float))
-               or not math.isfinite(value) or value < 0 for value in values):
+               or not 0 <= value <= 1 or not math.isfinite(value) for value in values):
             raise ValueError("Task weights must be finite nonnegative numbers")
         if not math.isclose(sum(values), 1.0, abs_tol=1e-9):
             raise ValueError("Task weights must sum to 1")
@@ -153,6 +153,13 @@ class DimensionScores:
     memory_score: float = 0.0      # 0.0 - 100.0
     safety_score: float = 0.0      # 0.0 - 100.0
     total_score: float = 0.0       # 0.0 - 100.0
+
+    def __post_init__(self):
+        for name in ("functional_score", "memory_score", "safety_score", "total_score"):
+            value = getattr(self, name)
+            if (isinstance(value, bool) or not isinstance(value, (int, float))
+                    or not 0 <= value <= 100 or not math.isfinite(value)):
+                raise ValueError(f"{name} must be a finite number between 0 and 100")
 
 
 @dataclass

@@ -8,11 +8,14 @@ class LLMClient:
         self.api_key = api_key
         self.temperature = temperature
 
-    def build_prompt(self, task_prompt: str, header_code: str, starter_code: str) -> List[Dict[str, str]]:
+    def build_prompt(self, task_prompt: str, header_code: str, starter_code: str,
+                     target_standard: str = "c99") -> List[Dict[str, str]]:
+        if target_standard not in ("c99", "c11", "c17"):
+            raise ValueError("target_standard must be c99, c11, or c17")
         system_instruction = (
             "You are an expert embedded software engineer specializing in safety-critical firmware.\n"
             "Rules:\n"
-            "1. Write clean, portable C99 code.\n"
+            f"1. Write clean, portable {target_standard.upper()} code.\n"
             "2. Do NOT use dynamic memory allocation (no malloc/calloc/free).\n"
             "3. Always check pointers for NULL.\n"
             "4. Follow MISRA-C principles: use fixed-width integers (<stdint.h>).\n"
