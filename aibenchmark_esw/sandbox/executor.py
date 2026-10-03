@@ -30,7 +30,7 @@ def _timeout_output(error: subprocess.TimeoutExpired) -> str:
 
 class ExecutionSandbox:
     def __init__(self, compiler_path: Optional[str] = None, allow_standard_fallback: bool = False):
-        self.compiler_path = compiler_path or self._find_c_compiler()
+        self.compiler_path = compiler_path or os.environ.get("AIBENCHMARK_ESW_COMPILER") or self._find_c_compiler()
         self.unity_dir = data_root() / "third_party" / "unity"
         self.allow_standard_fallback = allow_standard_fallback
 

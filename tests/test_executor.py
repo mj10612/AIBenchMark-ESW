@@ -175,6 +175,11 @@ int main(void) {
         self.assertFalse(comp.success)
         self.assertFalse(result.completed)
 
+    def test_environment_selects_compiler_and_explicit_argument_takes_precedence(self):
+        with patch.dict("os.environ", {"AIBENCHMARK_ESW_COMPILER": "clang"}):
+            self.assertEqual(ExecutionSandbox().compiler_path, "clang")
+            self.assertEqual(ExecutionSandbox("tcc").compiler_path, "tcc")
+
     def test_compiler_timeout_preserves_both_diagnostic_streams(self):
         task = self.loader.get_task("tier1_crc16")
         for stdout, stderr in ((b"compiler output\n", b"compiler error\xff\n"),
