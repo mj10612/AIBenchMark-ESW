@@ -39,13 +39,27 @@ void test_priority_overwrite_no_corruption(void) {
 }
 
 void test_multiple_irq_priorities_independent(void) {
+    /* Setting a low IRQ must preserve upper priorities and every reserved bit. */
+    ctrl.priority_reg = UINT32_C(0xE8888888);
     TEST_ASSERT_TRUE(irq_set_priority(&ctrl, 0, 5));
+    TEST_ASSERT_EQUAL_HEX32(UINT32_C(0xE888888D), ctrl.priority_reg);
     TEST_ASSERT_TRUE(irq_set_priority(&ctrl, 1, 3));
     TEST_ASSERT_TRUE(irq_set_priority(&ctrl, 7, 6));
 
     TEST_ASSERT_EQUAL_UINT(5, irq_get_priority(&ctrl, 0));
     TEST_ASSERT_EQUAL_UINT(3, irq_get_priority(&ctrl, 1));
     TEST_ASSERT_EQUAL_UINT(6, irq_get_priority(&ctrl, 7));
+
+    /* Exercise all shifts, including IRQs 4-7 (16-28 bits). */
+    for (uint8_t irq = 0; irq < MAX_IRQS; irq++) {
+        uint32_t before = ctrl.priority_reg;
+        uint32_t mask = (uint32_t)PRIORITY_MASK << ((uint32_t)irq * 4U);
+        TEST_ASSERT_TRUE(irq_set_priority(&ctrl, irq, 7));
+        TEST_ASSERT_EQUAL_UINT(7, irq_get_priority(&ctrl, irq));
+        TEST_ASSERT_EQUAL_HEX32(before & ~mask, ctrl.priority_reg & ~mask);
+        TEST_ASSERT_TRUE(irq_set_priority(&ctrl, irq, 0));
+        TEST_ASSERT_EQUAL_HEX32(before & ~mask, ctrl.priority_reg);
+    }
 }
 
 void test_out_of_bounds_handling(void) {

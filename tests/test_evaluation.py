@@ -122,6 +122,24 @@ uint16_t crc16_ccitt(const uint8_t *data, size_t length) {
         self.assertNotRegex(ir, r"mul nsw i16 [^\n]*, 25")
         self.assertRegex(ir, r"mul nsw i32 [^\n]*, 25")
 
+    def test_irq_priority_mask_uses_32_bit_arithmetic_on_avr(self):
+        compiler = find_clang()
+        if compiler is None:
+            self.skipTest("Clang is required for AVR cross-compilation validation")
+        task = self.loader.get_task("tier4_bitmask_fix")
+        with TemporaryDirectory() as directory:
+            output = Path(directory) / "irq.ll"
+            compiled = subprocess.run([
+                compiler, "--target=avr", "-mmcu=atmega328p", "-ffreestanding",
+                "-std=c99", "-S", "-emit-llvm", "-O0", "-I", str(task.task_dir / "include"),
+                str(task.task_dir / "reference/irq_manager.c"), "-o", str(output),
+            ], capture_output=True, text=True, errors="backslashreplace", timeout=30)
+            self.assertEqual(compiled.returncode, 0, compiled.stdout + compiled.stderr)
+            ir = output.read_text(encoding="utf-8")
+        self.assertNotRegex(ir, r"shl i16 7,")
+        self.assertRegex(ir, r"shl i32 7,")
+        self.assertRegex(ir, r"xor i32 [^\n]*, -1")
+
     def test_ring_reference_passes_rollover_cases(self):
         task = self.loader.get_task("tier1_ring_buffer")
         ref = self.loader.get_reference_solution(task.id)

@@ -22,8 +22,9 @@ bool irq_set_priority(irq_controller_t* ctrl, uint8_t irq_num, uint8_t priority)
         return false;
     }
     uint32_t shift = (uint32_t)irq_num * 4U;
+    uint32_t mask = (uint32_t)PRIORITY_MASK << shift;
     /* Clear old priority bits first */
-    ctrl->priority_reg &= ~(PRIORITY_MASK << shift);
+    ctrl->priority_reg &= ~mask;
     /* Set new priority bits */
     ctrl->priority_reg |= ((uint32_t)priority << shift);
     return true;
