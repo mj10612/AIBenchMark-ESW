@@ -24,6 +24,27 @@ class TestReporter(unittest.TestCase):
         self.assertIn("| **Memory Efficiency** | 100.00 / 100 | 10% |", markdown)
         self.assertIn("70%/10%/20%", BenchmarkReporter.generate_cli_table(results, "test"))
 
+    def test_malformed_metadata_is_rejected_and_absent_metadata_can_render(self):
+        malformed = [
+            lambda data: data.update(metadata=[]),
+            lambda data: data.update(metadata={"compiler": []}),
+            lambda data: data.update(metadata={"platform": "Windows"}),
+            lambda data: data.update(metadata={"generation_settings": []}),
+            lambda data: data["tasks"].__setitem__(0, None),
+            lambda data: data["tasks"][0].update(generation=[]),
+            lambda data: data["tasks"][0].update(provenance="hash"),
+            lambda data: data["tasks"][0].update(generation={"usage": []}),
+        ]
+        for mutate in malformed:
+            with self.subTest(mutation=mutate):
+                data = BenchmarkReporter.to_json_dict([self.result("one", TaskWeights())], "test")
+                mutate(data)
+                with self.assertRaises(ValueError):
+                    BenchmarkReporter.from_json_dict(data)
+        results = [self.result("one", TaskWeights())]
+        markdown = BenchmarkReporter.generate_markdown(results, "test", {"compiler": None})
+        self.assertIn("**Compiler**: Unknown", markdown)
+
     def test_provenance_round_trip_and_markdown(self):
         result = self.result("one", TaskWeights())
         result.provenance = {"task_sha256": "task-digest", "candidate_sha256": "candidate-digest"}

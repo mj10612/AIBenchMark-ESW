@@ -71,6 +71,10 @@ def collect_run_metadata(tasks, executor, generation_settings=None):
         "run_id": uuid.uuid4().hex,
         "created_at_utc": datetime.now(timezone.utc).isoformat(),
         "benchmark_version": __version__,
+        "evaluator_sha256": _digest_records([
+            (path.relative_to(Path(__file__).parent).as_posix(), path.read_bytes())
+            for path in Path(__file__).parent.rglob("*.py") if "_data" not in path.parts
+        ]),
         "python_version": platform.python_version(),
         "platform": {"system": platform.system(), "release": platform.release(), "machine": platform.machine()},
         "compiler": {"name": compiler, "version": version.splitlines()[0] if version else None,

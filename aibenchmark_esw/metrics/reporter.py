@@ -40,8 +40,20 @@ class BenchmarkReporter:
             raise ValueError("Results must be an object containing a tasks array")
         if data.get("metadata") is not None and not isinstance(data["metadata"], dict):
             raise ValueError("Run metadata must be an object")
+        for key in ("compiler", "platform", "generation_settings"):
+            value = (data.get("metadata") or {}).get(key)
+            if value is not None and not isinstance(value, dict):
+                raise ValueError(f"Metadata {key} must be an object")
         results = []
         for item in data["tasks"]:
+            if not isinstance(item, dict):
+                raise ValueError("Each task result must be an object")
+            for key in ("generation", "provenance"):
+                if item.get(key) is not None and not isinstance(item[key], dict):
+                    raise ValueError(f"Task {key} must be an object")
+            usage = (item.get("generation") or {}).get("usage")
+            if usage is not None and not isinstance(usage, dict):
+                raise ValueError("Generation usage must be an object")
             tests = item["test_result"]
             size = item["size_metrics"]
             safety = item["safety_metrics"]
@@ -92,12 +104,13 @@ class BenchmarkReporter:
         md.append(f"- **Overall AIBenchMark-ESW Score**: **{avg_total:.2f} / 100.0**\n")
 
         if metadata:
-            compiler = metadata.get("compiler", {})
+            compiler = metadata.get("compiler") or {}
             md.append("### Reproducibility")
             md.append(f"- **Run (UTC)**: {metadata.get('created_at_utc', 'Unknown')}")
             md.append(f"- **Benchmark / Python**: {metadata.get('benchmark_version', 'Unknown')} / {metadata.get('python_version', 'Unknown')}")
             md.append(f"- **Compiler**: {compiler.get('name', 'Unknown')} / {compiler.get('version') or 'Unknown'} ({compiler.get('optimization', 'Unknown')})")
             md.append(f"- **Dataset SHA-256**: `{metadata.get('dataset_sha256', 'Unknown')}`")
+            md.append(f"- **Evaluator SHA-256**: `{metadata.get('evaluator_sha256', 'Unknown')}`")
             md.append(f"- **Source revision**: `{metadata.get('source_revision') or 'Unavailable in installed distribution'}`")
             md.append(f"- **Source had local changes**: {metadata.get('source_dirty', 'Unknown')}\n")
 

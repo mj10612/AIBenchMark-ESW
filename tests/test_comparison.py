@@ -19,8 +19,9 @@ class TestComparison(unittest.TestCase):
             task["model_name"] = name
         data["metadata"] = {
             "dataset_sha256": "same-dataset", "compiler": {"name": "tcc", "version": "0.9.27"},
+            "evaluator_sha256": "same-evaluator",
             "platform": {"system": "Windows", "machine": "AMD64"},
-            "generation_settings": {"temperature": None, "max_tokens": 4096},
+            "generation_settings": {"temperature": None, "max_tokens": 4096, "request_timeout_seconds": 60},
         }
         return data
 
@@ -41,9 +42,11 @@ class TestComparison(unittest.TestCase):
             lambda data: data["tasks"].pop(),
             lambda data: data["tasks"].append(copy.deepcopy(data["tasks"][0])),
             lambda data: data["metadata"].update(dataset_sha256="other-dataset"),
+            lambda data: data["metadata"].update(evaluator_sha256="other-evaluator"),
             lambda data: data["metadata"]["compiler"].update(version="other-version"),
             lambda data: data["metadata"]["platform"].update(machine="other-architecture"),
             lambda data: data["metadata"]["generation_settings"].update(max_tokens=1),
+            lambda data: data["metadata"]["generation_settings"].update(request_timeout_seconds=1),
             lambda data: data["tasks"][0].update(weights={"functional": 0.8, "memory": 0.1, "safety": 0.1}),
             lambda data: data["tasks"][0].update(effective_standard="c11"),
         ]

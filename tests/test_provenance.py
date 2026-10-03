@@ -57,6 +57,7 @@ class TestProvenance(unittest.TestCase):
         self.assertNotIn("private-claude-key", encoded)
         self.assertEqual(metadata["compiler"]["name"], Path(self.executor.compiler_path).stem.lower())
         self.assertEqual(len(metadata["dataset_sha256"]), 64)
+        self.assertEqual(len(metadata["evaluator_sha256"]), 64)
         self.assertEqual(metadata["selected_tasks"], ["tier1_crc16"])
 
     def test_candidate_hash_normalizes_newlines(self):

@@ -27,9 +27,12 @@ def compare_runs(reports):
             raise ValueError("Task model names must match the run model")
         metadata = report.get("metadata") or {}
         compiler = metadata.get("compiler") or {}
-        complete_provenance = bool(metadata.get("dataset_sha256") and compiler.get("name") and compiler.get("version"))
+        host = metadata.get("platform") or {}
+        complete_provenance = bool(metadata.get("dataset_sha256") and metadata.get("evaluator_sha256")
+                                   and compiler.get("name") and compiler.get("version")
+                                   and host.get("system") and host.get("machine"))
         if not complete_provenance:
-            warnings.append(f"{model}: missing dataset/toolchain provenance; compatibility cannot be fully checked.")
+            warnings.append(f"{model}: missing evaluator/dataset/toolchain provenance; compatibility cannot be fully checked.")
         runs.append((report, results, tasks, metadata, complete_provenance))
 
     expected = set(runs[0][2])
@@ -50,7 +53,7 @@ def compare_runs(reports):
         if len(fingerprints) > 1:
             raise ValueError(f"Incompatible task fingerprints for {task_id}")
 
-    for key in ("dataset_sha256", "compiler"):
+    for key in ("dataset_sha256", "evaluator_sha256", "benchmark_version", "compiler"):
         available = [metadata[key] for _, _, _, metadata, _ in runs if metadata.get(key)]
         if any(value != available[0] for value in available[1:]):
             raise ValueError(f"Incompatible {key} across reports")
@@ -58,10 +61,11 @@ def compare_runs(reports):
              for _, _, _, metadata, _ in runs if metadata.get("platform")]
     if any(value != hosts[0] for value in hosts[1:]):
         raise ValueError("Incompatible host platform/architecture across reports")
-    settings = [(metadata["generation_settings"].get("temperature"), metadata["generation_settings"].get("max_tokens"))
+    settings = [tuple(metadata["generation_settings"].get(key)
+                      for key in ("temperature", "max_tokens", "request_timeout_seconds"))
                 for _, _, _, metadata, _ in runs if metadata.get("generation_settings") is not None]
     if any(value != settings[0] for value in settings[1:]):
-        raise ValueError("Incompatible temperature or generation token limits across reports")
+        raise ValueError("Incompatible temperature, token limits or request timeouts across reports")
 
     rows = []
     for report, results, _, _, provenance in runs:
