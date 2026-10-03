@@ -12,6 +12,7 @@ from aibenchmark_esw.metrics.reporter import BenchmarkReporter
 from aibenchmark_esw.llm.client import LLMClient
 from aibenchmark_esw.evaluation import evaluate_task, failed_evaluation
 from aibenchmark_esw.provenance import collect_run_metadata, text_sha256
+from aibenchmark_esw.metrics.comparison import compare_runs, render_comparison
 
 
 def _positive_int(value: str) -> int:
@@ -76,6 +77,11 @@ def build_parser() -> argparse.ArgumentParser:
     report_p = subparsers.add_parser("report", help="Generate report from evaluation JSON")
     report_p.add_argument("--results", type=str, required=True, help="Path to results JSON file")
     report_p.add_argument("--format", choices=["cli", "markdown"], default="cli", help="Output format")
+
+    compare_p = subparsers.add_parser("compare", help="Compare saved model runs without API calls")
+    compare_p.add_argument("--results", nargs="+", type=Path, required=True, help="Two or more saved JSON reports")
+    compare_p.add_argument("--format", choices=["cli", "markdown", "csv"], default="markdown")
+    compare_p.add_argument("--output", type=Path, help="Save the comparison to a file")
 
     return parser
 
@@ -235,6 +241,26 @@ def cmd_report(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_compare(args: argparse.Namespace) -> int:
+    try:
+        reports = [json.loads(Path(path).read_text(encoding="utf-8")) for path in args.results]
+        comparison = compare_runs(reports)
+        rendered = render_comparison(comparison, args.format)
+        if args.output:
+            path = Path(args.output)
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text(rendered, encoding="utf-8")
+    except (OSError, ValueError, TypeError, KeyError, AttributeError) as error:
+        print(f"Error: Cannot compare reports: {error}", file=sys.stderr)
+        return 1
+    # CSV exports keep a regular schema; provenance warnings still go to stderr.
+    if args.format == "csv":
+        for warning in comparison["warnings"]:
+            print(f"Warning: {warning}", file=sys.stderr)
+    print(rendered)
+    return 0
+
+
 def main() -> None:
     parser = build_parser()
     args = parser.parse_args()
@@ -248,6 +274,7 @@ def main() -> None:
         "eval": cmd_eval,
         "run": cmd_run,
         "report": cmd_report,
+        "compare": cmd_compare,
     }
 
     try:
