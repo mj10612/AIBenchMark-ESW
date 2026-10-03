@@ -5,7 +5,7 @@ from argparse import Namespace
 from contextlib import redirect_stdout, redirect_stderr
 from pathlib import Path
 from tempfile import TemporaryDirectory
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 from dataclasses import replace
 
 from aibenchmark_esw import cli
@@ -14,6 +14,21 @@ from aibenchmark_esw.metrics.reporter import BenchmarkReporter
 
 
 class TestCLI(unittest.TestCase):
+    def test_model_notes_before_c_implementation_still_score_full_points(self):
+        loader = DatasetLoader()
+        reference = loader.get_reference_solution("tier1_crc16")
+        response = f"Analysis:\n```\nCCITT-FALSE 0x1021 implementation plan\n```\n```c\n{reference}\n```"
+        litellm = MagicMock()
+        litellm.completion.return_value = Namespace(choices=[Namespace(message=Namespace(content=response))])
+        with TemporaryDirectory() as directory:
+            report = Path(directory) / "results.json"
+            args = Namespace(tier=None, tasks="tier1_crc16", model="mock", compiler=None, output=str(report))
+            with patch.dict("sys.modules", {"litellm": litellm}), redirect_stdout(io.StringIO()):
+                self.assertEqual(cli.cmd_run(args), 0)
+            data = json.loads(report.read_text(encoding="utf-8"))
+        self.assertEqual(data["pass_at_1_pct"], 100)
+        self.assertEqual(data["overall_score"], 100)
+
     def test_task_standard_is_used_for_model_prompt(self):
         for standard in ("c99", "c11", "c17"):
             with self.subTest(standard=standard):

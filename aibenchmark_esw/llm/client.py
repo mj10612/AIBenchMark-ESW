@@ -59,18 +59,20 @@ class LLMClient:
         return self.extract_c_code(raw_text)
 
     @staticmethod
-    def extract_c_code(response_text: str) -> str:
-        """
-        Extracts code from ```c ... ``` or ``` ... ``` blocks.
-        If no markdown blocks found, returns the stripped text.
-        """
-        code_match = re.search(r"```(?:c|C)?\s*\n(.*?)\n```", response_text, flags=re.DOTALL)
-        if code_match:
-            return code_match.group(1).strip()
+    def extract_c_code(response_text: Optional[str]) -> str:
+        """Prefer the largest C/C++ fence, then a generic fence or raw source."""
+        if not response_text:
+            return ""
 
-        # Fallback: check any backtick block
-        block_match = re.search(r"```(.*?)```", response_text, flags=re.DOTALL)
-        if block_match:
-            return block_match.group(1).strip()
-
+        # Parse all fences together so a generic block's closing delimiter
+        # cannot be mistaken for a C block's opening delimiter.
+        blocks = re.findall(r"```([^\r\n`]*)\r?\n(.*?)```", response_text, flags=re.DOTALL)
+        c_blocks = [code.strip() for language, code in blocks
+                    if language.strip().split() and language.strip().split()[0].lower() in {"c", "cpp", "c++"}]
+        candidates = c_blocks or [code.strip() for _, code in blocks]
+        if not candidates:
+            candidates = [code.strip() for code in re.findall(r"```(.*?)```", response_text, flags=re.DOTALL)]
+        if candidates:
+            # Later blocks win ties, favoring a final revised implementation.
+            return max(reversed(candidates), key=len)
         return response_text.strip()
