@@ -33,7 +33,9 @@ class BenchmarkScorer:
 
         if (not size_metrics.measured or ref_size <= 0
                 or size_metrics.flash_bytes > task.limits.max_flash_bytes
-                or size_metrics.ram_bytes > task.limits.max_ram_bytes):
+                or size_metrics.ram_bytes > task.limits.max_ram_bytes
+                or size_metrics.ref_flash_bytes > task.limits.max_flash_bytes
+                or size_metrics.ref_ram_bytes > task.limits.max_ram_bytes):
             mem_score = 0.0
         elif actual_size <= ref_size:
             mem_score = 100.0

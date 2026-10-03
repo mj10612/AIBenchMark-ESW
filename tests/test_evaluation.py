@@ -51,6 +51,48 @@ class TestEvaluation(unittest.TestCase):
         self.assertEqual(result.scores.memory_score, 0)
         self.assertIn("Memory analysis failed", result.error_log)
 
+    def test_failing_reference_cannot_normalize_a_passing_candidate(self):
+        reference = self.loader.get_starter_code(self.task.id)
+        result = evaluate_task(self.task, self.reference, reference, "local", self.executor)
+        self.assertTrue(result.test_result.passed)
+        self.assertFalse(result.size_metrics.measured)
+        self.assertEqual(result.scores.memory_score, 0)
+        self.assertIn("Reference validation failed", result.error_log)
+
+    def test_incomplete_reference_cannot_normalize_a_passing_candidate(self):
+        reference = self.reference.replace("return crc;", "for (;;) {}")
+        task = replace(self.task, limits=replace(self.task.limits, timeout_seconds=1))
+        result = evaluate_task(task, self.reference, reference, "local", self.executor)
+        self.assertTrue(result.test_result.passed)
+        self.assertFalse(result.size_metrics.measured)
+        self.assertEqual(result.scores.memory_score, 0)
+        self.assertIn("Reference validation failed", result.error_log)
+
+    def test_reference_resource_limits_are_enforced_independently(self):
+        for resource in ("Flash", "RAM"):
+            with self.subTest(resource=resource):
+                if resource == "Flash":
+                    limits = replace(self.task.limits, max_ram_bytes=16384)
+                    padding = "const unsigned char reference_padding[4096] = {1};"
+                else:
+                    limits = replace(self.task.limits, max_flash_bytes=16384)
+                    padding = "unsigned char reference_padding[4096];"
+                task = replace(self.task, limits=limits)
+                result = evaluate_task(task, self.reference, self.reference + "\n" + padding,
+                                       "local", self.executor)
+                self.assertTrue(result.test_result.passed)
+                self.assertFalse(result.size_metrics.measured)
+                self.assertEqual(result.scores.memory_score, 0)
+                self.assertIn("Reference validation failed", result.error_log)
+                self.assertIn(resource, result.error_log)
+
+    def test_uncompilable_reference_reports_validation_error(self):
+        result = evaluate_task(self.task, self.reference, "invalid C", "local", self.executor)
+        self.assertTrue(result.test_result.passed)
+        self.assertFalse(result.size_metrics.measured)
+        self.assertEqual(result.scores.memory_score, 0)
+        self.assertIn("Reference validation failed", result.error_log)
+
     def test_fake_unity_summary_cannot_award_points(self):
         candidate = '''#include "crc16.h"
 #include <stdio.h>

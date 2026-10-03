@@ -143,6 +143,7 @@ The combined size ($\text{Flash} + \text{RAM}$) is compared to the measured refe
 * If $M_{\text{actual}} > M_{\text{max}}$: $S_{\text{mem}} = 0$
 * If either individual resource limit is exceeded: $S_{\text{mem}} = 0$
 * Missing or unreadable measurements are reported as unavailable and receive no memory points.
+* References that fail to compile, do not complete and pass every test, or exceed either resource budget produce an explicit reference-validation error and receive no memory points.
 
 Reference implementations must pass all functional tests and fit the budgets with the compiler used for comparisons. The refreshed TCC baseline scores 100/100 and passes all 33 tests. The ring buffer's Flash budget is 2048 bytes, accommodating its measured 1474-byte TCC object footprint. Its RAM footprint is legitimately zero because it uses caller-owned storage. Other compilers may produce different footprints; resource limits remain enforced for both candidates and references.
 

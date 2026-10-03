@@ -44,10 +44,29 @@ def evaluate_task(task: TaskConfig, solution_code: str, reference_code: Optional
                     raise ValueError("Reference implementation is required for memory measurement")
                 candidate = executor.compile_object(task, solution_code, work_dir / "candidate", "candidate")
                 reference = executor.compile_object(task, reference_code, work_dir / "reference", "reference")
-                if not candidate.success or not reference.success:
-                    raise ValueError(candidate.output + reference.output)
+                if not candidate.success:
+                    raise ValueError(candidate.output or "Candidate object compilation failed")
+                if not reference.success:
+                    raise ValueError(f"Reference validation failed: {reference.output or 'object compilation failed'}")
                 size = SizeAnalyzer().analyze(candidate.binary_path, reference.binary_path)
+                # Reuse an identical candidate's trusted test result; otherwise
+                # validate the reference in its own workspace with the same settings.
+                if reference_code == solution_code:
+                    ref_comp, ref_tests = comp, tests
+                else:
+                    ref_comp, ref_tests = executor.compile_and_test(
+                        task, reference_code, work_dir / "reference_tests")
+                if not ref_comp.success or not ref_tests.completed or not ref_tests.passed:
+                    detail = ref_comp.output if not ref_comp.success else ref_tests.output
+                    raise ValueError(f"Reference validation failed: reference must complete and pass all tests\n{detail}")
+                if size.ref_flash_bytes > task.limits.max_flash_bytes:
+                    raise ValueError("Reference validation failed: Flash footprint "
+                                     f"{size.ref_flash_bytes} exceeds budget {task.limits.max_flash_bytes}")
+                if size.ref_ram_bytes > task.limits.max_ram_bytes:
+                    raise ValueError("Reference validation failed: RAM footprint "
+                                     f"{size.ref_ram_bytes} exceeds budget {task.limits.max_ram_bytes}")
             except (OSError, ValueError) as error:
+                size.measured = False
                 errors.append(f"Memory analysis failed: {error}")
 
         source = test_dir / Path(task.entry_file).name

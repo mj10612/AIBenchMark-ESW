@@ -99,6 +99,15 @@ class TestBenchmarkScorer(unittest.TestCase):
             SizeMetrics(400, 201, 500, 100), StaticSafetyMetrics())
         self.assertEqual(scores.memory_score, 0)
 
+    def test_reference_resource_limits_cannot_inflate_memory_score(self):
+        for size in (SizeMetrics(500, 100, 1001, 0), SizeMetrics(500, 100, 500, 201)):
+            with self.subTest(size=size):
+                scores = BenchmarkScorer.calculate_scores(
+                    self.task, CompilationResult(True, ""),
+                    TestResult(total_tests=1, passed_tests=1, passed=True, completed=True),
+                    size, StaticSafetyMetrics())
+                self.assertEqual(scores.memory_score, 0)
+
     def test_result_without_explicit_completion_cannot_score(self):
         result = TestResult(total_tests=10, passed_tests=10, passed=True)
         self.assertFalse(result.completed)
