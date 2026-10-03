@@ -16,11 +16,19 @@ void test_initial_state(void) {
 void test_glitch_rejection_on_press(void) {
     /* 1 or 2 high pulses when threshold is 3 must not cause state to reach PRESSED */
     TEST_ASSERT_EQUAL(BUTTON_EVENT_NONE, debounce_fsm_update(&btn, 1));
-    TEST_ASSERT_EQUAL(BUTTON_STATE_DEBOUNCE_PRESS, debounce_fsm_get_state(&btn));
-    
+    TEST_ASSERT_TRUE(debounce_fsm_get_state(&btn) != BUTTON_STATE_PRESSED);
+
     /* Glitch drops to 0 */
     TEST_ASSERT_EQUAL(BUTTON_EVENT_NONE, debounce_fsm_update(&btn, 0));
-    TEST_ASSERT_EQUAL(BUTTON_STATE_RELEASED, debounce_fsm_get_state(&btn));
+    TEST_ASSERT_TRUE(debounce_fsm_get_state(&btn) != BUTTON_STATE_PRESSED);
+
+    /* The threshold must be accumulated from scratch after the glitch. */
+    for (uint8_t tick = 0; tick < 2; tick++) {
+        TEST_ASSERT_EQUAL(BUTTON_EVENT_NONE, debounce_fsm_update(&btn, 1));
+        TEST_ASSERT_TRUE(debounce_fsm_get_state(&btn) != BUTTON_STATE_PRESSED);
+    }
+    TEST_ASSERT_EQUAL(BUTTON_EVENT_NONE, debounce_fsm_update(&btn, 1));
+    TEST_ASSERT_EQUAL(BUTTON_STATE_PRESSED, debounce_fsm_get_state(&btn));
 }
 
 void test_clean_click_event(void) {
@@ -34,9 +42,17 @@ void test_clean_click_event(void) {
     TEST_ASSERT_EQUAL(BUTTON_EVENT_NONE, debounce_fsm_update(&btn, 1));
     TEST_ASSERT_EQUAL(BUTTON_EVENT_NONE, debounce_fsm_update(&btn, 1));
 
-    /* Release with 3 consecutive 0s */
+    /* A release glitch must not emit an event or confirm RELEASED. */
     TEST_ASSERT_EQUAL(BUTTON_EVENT_NONE, debounce_fsm_update(&btn, 0));
+    TEST_ASSERT_TRUE(debounce_fsm_get_state(&btn) != BUTTON_STATE_RELEASED);
+    TEST_ASSERT_EQUAL(BUTTON_EVENT_NONE, debounce_fsm_update(&btn, 1));
+    TEST_ASSERT_TRUE(debounce_fsm_get_state(&btn) != BUTTON_STATE_RELEASED);
+
+    /* Release still requires 3 consecutive 0s after the glitch. */
     TEST_ASSERT_EQUAL(BUTTON_EVENT_NONE, debounce_fsm_update(&btn, 0));
+    TEST_ASSERT_TRUE(debounce_fsm_get_state(&btn) != BUTTON_STATE_RELEASED);
+    TEST_ASSERT_EQUAL(BUTTON_EVENT_NONE, debounce_fsm_update(&btn, 0));
+    TEST_ASSERT_TRUE(debounce_fsm_get_state(&btn) != BUTTON_STATE_RELEASED);
     button_event_t evt = debounce_fsm_update(&btn, 0);
     
     TEST_ASSERT_EQUAL(BUTTON_EVENT_CLICK, evt);

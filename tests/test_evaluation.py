@@ -222,6 +222,30 @@ uint16_t crc16_ccitt(const uint8_t *data, size_t length) {
         self.assertTrue(result.passed, result.output)
         self.assertEqual(result.total_tests, 9)
 
+    def test_debounce_with_only_confirmed_states_satisfies_the_contract(self):
+        task = self.loader.get_task("tier2_debounce_fsm")
+        candidate = (Path(__file__).parent / "fixtures/debounce_confirmed_states.c").read_text(encoding="utf-8")
+        result = evaluate_task(task, candidate, self.loader.get_reference_solution(task.id),
+                               "confirmed-states", self.executor)
+        self.assertTrue(result.test_result.passed, result.error_log)
+        self.assertEqual(result.test_result.total_tests, 5)
+        self.assertEqual(result.scores.total_score, 100)
+        self.assertIsNone(result.error_log)
+
+    def test_debounce_tests_reject_counters_that_accumulate_across_glitches(self):
+        task = self.loader.get_task("tier2_debounce_fsm")
+        candidate = (Path(__file__).parent / "fixtures/debounce_confirmed_states.c").read_text(encoding="utf-8")
+        for reset in ("            fsm->debounce_counter = 0;", "        fsm->debounce_counter = 0;"):
+            with self.subTest(reset=reset):
+                # Each mutation omits one reset required for consecutive samples.
+                faulty = candidate.replace("\n" + reset + "\n", "\n", 1)
+                self.assertNotEqual(faulty, candidate)
+                compiled, result = self.executor.compile_and_test(task, faulty)
+                self.addCleanup(compiled.cleanup)
+                self.assertTrue(compiled.success, compiled.output)
+                self.assertTrue(result.completed, result.output)
+                self.assertFalse(result.passed)
+
     def test_all_reference_implementations_fit_current_compiler_budgets(self):
         for task in self.loader.list_tasks():
             with self.subTest(task=task.id):

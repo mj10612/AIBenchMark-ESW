@@ -16,6 +16,7 @@ Mechanical buttons experience contact bouncing (noise) when pressed or released.
 - Transition to pressed state requires `debounce_threshold` consecutive ticks of active level.
 - Transition to released state requires `debounce_threshold` consecutive ticks of inactive level.
 - If raw level flips before reaching `debounce_threshold`, counter resets (glitch rejection).
+- Intermediate `BUTTON_STATE_DEBOUNCE_PRESS` and `BUTTON_STATE_DEBOUNCE_RELEASE` states are optional. `debounce_fsm_get_state` may report the last confirmed state until the new level reaches the threshold; events and confirmed transitions must obey the rules above.
 
 ## Functions to implement in `src/debounce_fsm.c`:
 1. `void debounce_fsm_init(button_fsm_t* fsm, uint16_t debounce_threshold, uint16_t hold_threshold);`
