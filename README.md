@@ -8,7 +8,7 @@
 
 > A host-based benchmark for evaluating AI-generated embedded C using functional tests, resource budgets, and selected static safety rules.
 
-The project is in early development: five tasks and 33 C test cases provide a reproducible reference baseline. The published 100-point baseline measures the bundled golden implementations; it is not an OpenAI or Claude model score. See [reproducibility](docs/REPRODUCIBILITY.md), the [roadmap](docs/ROADMAP.md), and [contributor guidance](CONTRIBUTING.md).
+The project is in early development: five tasks and 33 C test cases provide a reproducible reference baseline. The published [100-point baseline](results/baseline.md) measures the bundled golden implementations; it is not an OpenAI or Claude model score. See [reproducibility](docs/REPRODUCIBILITY.md), the [roadmap](docs/ROADMAP.md), and [contributor guidance](CONTRIBUTING.md).
 
 ---
 

@@ -10,7 +10,7 @@ implementation, and compare saved provider runs with recorded inputs.
 
 Evidence is available in [CI runs](https://github.com/sentimentalmija-lgtm/AIBenchMark-ESW/actions),
 [resolved issues](https://github.com/sentimentalmija-lgtm/AIBenchMark-ESW/issues?q=is%3Aissue%20is%3Aclosed),
-the [reference baseline](../results/baseline.json), and
+the [reference baseline](../results/baseline.md) ([JSON](../results/baseline.json)), and
 [reproducibility instructions](REPRODUCIBILITY.md). Reference scores are not
 claims about any provider model. Mocked integration tests do not establish
 live API compatibility or model quality.
