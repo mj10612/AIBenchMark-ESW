@@ -1,6 +1,7 @@
 import sys
 import json
 import argparse
+import math
 from pathlib import Path
 from typing import List
 
@@ -10,6 +11,27 @@ from aibenchmark_esw.sandbox.executor import ExecutionSandbox
 from aibenchmark_esw.metrics.reporter import BenchmarkReporter
 from aibenchmark_esw.llm.client import LLMClient
 from aibenchmark_esw.evaluation import evaluate_task, failed_evaluation
+
+
+def _positive_int(value: str) -> int:
+    number = int(value)
+    if number <= 0:
+        raise argparse.ArgumentTypeError("must be a positive integer")
+    return number
+
+
+def _positive_float(value: str) -> float:
+    number = float(value)
+    if not math.isfinite(number) or number <= 0:
+        raise argparse.ArgumentTypeError("must be a finite positive number")
+    return number
+
+
+def _temperature(value: str) -> float:
+    number = float(value)
+    if not math.isfinite(number) or not 0 <= number <= 2:
+        raise argparse.ArgumentTypeError("must be a finite number between 0 and 2")
+    return number
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -39,6 +61,13 @@ def build_parser() -> argparse.ArgumentParser:
     run_p.add_argument("--tasks", type=str, help="Comma-separated task IDs to evaluate")
     run_p.add_argument("--output", type=str, help="Path to save output JSON report")
     run_p.add_argument("--compiler", type=str, help="Custom C compiler executable path")
+    run_p.add_argument("--temperature", type=_temperature,
+                       help="Optional provider-supported temperature; omitted by default")
+    run_p.add_argument("--max-tokens", type=_positive_int, help="Maximum generation tokens per task")
+    run_p.add_argument("--request-timeout", type=_positive_float, default=60.0,
+                       help="Provider request timeout in seconds (default: 60)")
+    run_p.add_argument("--save-solutions", type=Path,
+                       help="Directory for extracted candidate C files, for local replay")
     run_p.add_argument("--allow-standard-fallback", action="store_true",
                        help="Allow MSVC to evaluate C99 tasks as C11; recorded in results")
 
@@ -123,10 +152,15 @@ def cmd_run(args: argparse.Namespace) -> int:
     print(f"Starting AIBenchMark-ESW run on {len(tasks)} tasks using model '{args.model}'...")
     executor = ExecutionSandbox(compiler_path=args.compiler,
                                 allow_standard_fallback=getattr(args, "allow_standard_fallback", False))
-    llm_client = LLMClient(model_name=args.model) if args.model != "baseline" else None
+    llm_client = LLMClient(model_name=args.model,
+                           temperature=getattr(args, "temperature", None),
+                           max_tokens=getattr(args, "max_tokens", None),
+                           request_timeout=getattr(args, "request_timeout", 60.0)) if args.model != "baseline" else None
     results: List[TaskEvaluationResult] = []
     for task in tasks:
         print(f" -> Running [{task.id}] (Tier {task.tier})...", end="", flush=True)
+        if llm_client is not None:
+            llm_client.last_generation = None
         try:
             reference_code = loader.get_reference_solution(task.id)
             if args.model == "baseline":
@@ -144,9 +178,16 @@ def cmd_run(args: argparse.Namespace) -> int:
                 solution_code = llm_client.generate_solution(messages)
                 if not solution_code:
                     raise ValueError("Model returned an empty implementation")
+            solution_directory = getattr(args, "save_solutions", None)
+            if solution_directory is not None:
+                solution_directory = Path(solution_directory)
+                solution_directory.mkdir(parents=True, exist_ok=True)
+                (solution_directory / f"{task.id}.c").write_text(solution_code, encoding="utf-8")
             result = evaluate_task(task, solution_code, reference_code, args.model, executor)
         except Exception as error:
             result = failed_evaluation(task, args.model, str(error))
+        if llm_client is not None:
+            result.generation = llm_client.last_generation
         results.append(result)
         status = "PASS" if result.test_result.passed and not result.error_log else "FAIL"
         print(f" [{status} - Score: {result.scores.total_score:.1f}]")

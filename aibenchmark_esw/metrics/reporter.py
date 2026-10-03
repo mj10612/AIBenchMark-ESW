@@ -60,6 +60,7 @@ class BenchmarkReporter:
                 weights=TaskWeights(**item["weights"]) if item.get("weights") is not None else None,
                 target_standard=item.get("target_standard"),
                 effective_standard=item.get("effective_standard"),
+                generation=item.get("generation"),
             ))
         return results
 

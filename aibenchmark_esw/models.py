@@ -177,6 +177,7 @@ class TaskEvaluationResult:
     weights: Optional[TaskWeights] = None
     target_standard: Optional[str] = None
     effective_standard: Optional[str] = None
+    generation: Optional[Dict[str, Any]] = None
 
     def to_dict(self) -> Dict[str, Any]:
         return {
@@ -216,4 +217,5 @@ class TaskEvaluationResult:
             "weights": asdict(self.weights) if self.weights is not None else None,
             "target_standard": self.target_standard,
             "effective_standard": self.effective_standard,
+            "generation": self.generation,
         }

@@ -1,9 +1,65 @@
 import unittest
+from argparse import Namespace
+from unittest.mock import MagicMock, patch
 
 from aibenchmark_esw.llm.client import LLMClient
 
 
 class TestLLMClient(unittest.TestCase):
+    def response(self, finish_reason="stop"):
+        return Namespace(model="resolved-model-snapshot", usage=Namespace(
+            prompt_tokens=12, completion_tokens=8, total_tokens=20), choices=[Namespace(
+                finish_reason=finish_reason, message=Namespace(content="```c\nint x;\n```"))])
+
+    def test_default_generation_omits_temperature_and_records_usage(self):
+        provider = MagicMock()
+        provider.completion.return_value = self.response()
+        client = LLMClient("openai/test-model", api_key="private-key")
+        with patch.dict("sys.modules", {"litellm": provider}):
+            self.assertEqual(client.generate_solution([]), "int x;")
+        kwargs = provider.completion.call_args.kwargs
+        self.assertNotIn("temperature", kwargs)
+        self.assertNotIn("max_tokens", kwargs)
+        self.assertEqual(kwargs["timeout"], 60)
+        self.assertEqual(client.last_generation["usage"]["total_tokens"], 20)
+        self.assertEqual(client.last_generation["resolved_model"], "resolved-model-snapshot")
+        self.assertNotIn("private-key", str(client.last_generation))
+        self.assertGreaterEqual(client.last_generation["latency_seconds"], 0)
+
+    def test_explicit_generation_controls_are_forwarded(self):
+        provider = MagicMock()
+        provider.completion.return_value = self.response()
+        client = LLMClient("anthropic/test-model", temperature=0, max_tokens=1024, request_timeout=5)
+        with patch.dict("sys.modules", {"litellm": provider}):
+            client.generate_solution([])
+        kwargs = provider.completion.call_args.kwargs
+        self.assertEqual((kwargs["temperature"], kwargs["max_tokens"], kwargs["timeout"]), (0, 1024, 5))
+
+    def test_truncation_keeps_usage_but_is_reported_as_generation_failure(self):
+        provider = MagicMock()
+        provider.completion.return_value = self.response("length")
+        client = LLMClient("test-model")
+        with patch.dict("sys.modules", {"litellm": provider}), self.assertRaisesRegex(ValueError, "truncated"):
+            client.generate_solution([])
+        self.assertEqual(client.last_generation["finish_reason"], "length")
+        self.assertEqual(client.last_generation["usage"]["total_tokens"], 20)
+
+    def test_api_failure_retains_duration_without_inventing_usage(self):
+        provider = MagicMock()
+        provider.completion.side_effect = RuntimeError("provider timeout")
+        client = LLMClient("test-model")
+        with patch.dict("sys.modules", {"litellm": provider}), self.assertRaises(RuntimeError):
+            client.generate_solution([])
+        self.assertGreaterEqual(client.last_generation["latency_seconds"], 0)
+        self.assertIsNone(client.last_generation["usage"])
+
+    def test_invalid_generation_controls_are_rejected(self):
+        for settings in ({"temperature": float("nan")}, {"temperature": -1}, {"temperature": True},
+                         {"max_tokens": 0}, {"max_tokens": 1.5}, {"max_tokens": True},
+                         {"request_timeout": 0}, {"request_timeout": float("inf")}):
+            with self.subTest(settings=settings), self.assertRaises(ValueError):
+                LLMClient("test-model", **settings)
+
     def test_c_block_takes_precedence_over_introductory_blocks(self):
         code = "#include <stdint.h>"
         for tag in ("", "text", "markdown", "python"):

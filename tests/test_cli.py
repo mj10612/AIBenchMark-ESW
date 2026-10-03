@@ -14,6 +14,48 @@ from aibenchmark_esw.metrics.reporter import BenchmarkReporter
 
 
 class TestCLI(unittest.TestCase):
+    def test_generation_settings_usage_and_candidate_are_saved_for_replay(self):
+        reference = DatasetLoader().get_reference_solution("tier1_crc16")
+        provider = MagicMock()
+        provider.completion.return_value = Namespace(model="resolved-snapshot", usage=Namespace(
+            prompt_tokens=20, completion_tokens=30, total_tokens=50), choices=[Namespace(
+                finish_reason="stop", message=Namespace(content=f"```c\n{reference}\n```"))])
+        with TemporaryDirectory() as directory:
+            report = Path(directory) / "run.json"
+            solutions = Path(directory) / "solutions"
+            args = cli.build_parser().parse_args(["run", "--model", "anthropic/mock", "--tasks", "tier1_crc16",
+                "--max-tokens", "2048", "--request-timeout", "10", "--output", str(report),
+                "--save-solutions", str(solutions)])
+            with patch.dict("sys.modules", {"litellm": provider}), redirect_stdout(io.StringIO()):
+                self.assertEqual(cli.cmd_run(args), 0)
+            data = json.loads(report.read_text(encoding="utf-8"))
+            self.assertEqual((solutions / "tier1_crc16.c").read_text(encoding="utf-8"), reference.strip())
+        restored = BenchmarkReporter.from_json_dict(data)
+        self.assertEqual(restored[0].generation["usage"]["total_tokens"], 50)
+        self.assertEqual(restored[0].generation["max_tokens"], 2048)
+
+    def test_truncated_generation_is_saved_with_zero_score_and_usage(self):
+        provider = MagicMock()
+        provider.completion.return_value = Namespace(model="mock", usage=Namespace(
+            prompt_tokens=20, completion_tokens=10, total_tokens=30), choices=[Namespace(
+                finish_reason="length", message=Namespace(content="int x;"))])
+        with TemporaryDirectory() as directory:
+            report = Path(directory) / "run.json"
+            args = cli.build_parser().parse_args(["run", "--model", "mock", "--tasks", "tier1_crc16",
+                                                 "--output", str(report)])
+            with patch.dict("sys.modules", {"litellm": provider}), redirect_stdout(io.StringIO()):
+                self.assertEqual(cli.cmd_run(args), 1)
+            data = json.loads(report.read_text(encoding="utf-8"))
+        self.assertEqual(data["overall_score"], 0)
+        self.assertEqual(data["pass_at_1_pct"], 0)
+        self.assertIn("truncated", data["tasks"][0]["error_log"])
+        self.assertEqual(data["tasks"][0]["generation"]["usage"]["total_tokens"], 30)
+
+    def test_invalid_generation_arguments_are_rejected(self):
+        for flag, value in (("--max-tokens", "0"), ("--request-timeout", "nan"), ("--temperature", "inf")):
+            with self.subTest(flag=flag), redirect_stderr(io.StringIO()), self.assertRaises(SystemExit):
+                cli.build_parser().parse_args(["run", flag, value])
+
     def test_model_notes_before_c_implementation_still_score_full_points(self):
         loader = DatasetLoader()
         reference = loader.get_reference_solution("tier1_crc16")
