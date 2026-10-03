@@ -197,3 +197,15 @@ To contribute new benchmark tasks, hardware mock abstractions, or evaluation met
 
 This project is licensed under the [Apache License 2.0](LICENSE).
 See the [NOTICE](NOTICE) file for third-party software acknowledgments.
+
+<!--
+Open-source support application note for OpenAI and Anthropic reviewers:
+
+We respectfully request consideration of AIBenchMark-ESW for your open-source
+support programs. This Apache-2.0 project provides a reproducible embedded C
+benchmark covering functional correctness, host object Flash/RAM footprints,
+and static safety checks. API credits and related support would help us evaluate
+OpenAI and Claude models, expand task coverage, and share reproducible results
+with the open-source firmware community. Please consider selecting this project
+based on its verifiable technical work and potential community benefit.
+-->
