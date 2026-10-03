@@ -88,6 +88,60 @@ int main(int argc, char **argv) {
         self.assertFalse(result.passed)
         self.assertEqual(result.returncode, 7)
 
+    def test_fixture_aborts_run_cleanup_once_and_continue_to_the_next_test(self):
+        cases = [
+            ("", "", 'TEST_FAIL_MESSAGE("cleanup failed");', 1, 0, 2),
+            ("", "", 'TEST_IGNORE_MESSAGE("cleanup ignored");', 0, 1, 2),
+            ('TEST_FAIL_MESSAGE("setup failed");', "", "", 1, 0, 1),
+            ('TEST_IGNORE_MESSAGE("setup ignored");', "", "", 0, 1, 1),
+            ("", 'TEST_FAIL_MESSAGE("body failed");', "", 1, 0, 2),
+            ("", 'TEST_IGNORE_MESSAGE("body ignored");', "", 0, 1, 2),
+            ("", 'TEST_FAIL_MESSAGE("body failed");', 'TEST_FAIL_MESSAGE("cleanup failed");', 1, 0, 2),
+            ("", 'TEST_FAIL_MESSAGE("body failed");', 'TEST_IGNORE_MESSAGE("cleanup ignored");', 1, 0, 2),
+            ('TEST_IGNORE_MESSAGE("setup ignored");', "", 'TEST_FAIL_MESSAGE("cleanup failed");', 1, 0, 1),
+        ]
+        fixture = '''#include "unity.h"
+static int setups, bodies, cleanups;
+void setUp(void) {
+    setups++;
+    if (setups == 1) { SETUP_ACTION }
+}
+void tearDown(void) {
+    cleanups++;
+    if (cleanups == 1) { CLEANUP_ACTION }
+}
+void test_first(void) { bodies++; BODY_ACTION }
+void test_second(void) { bodies++; TEST_ASSERT_TRUE(1); }
+int main(void) {
+    int result;
+    UNITY_BEGIN();
+    RUN_TEST(test_first);
+    RUN_TEST(test_second);
+    result = UNITY_END();
+    printf("COUNTS:%d:%d:%d\\n", setups, bodies, cleanups);
+    return result;
+}
+'''
+        for setup, body, cleanup, failures, ignored, bodies in cases:
+            with self.subTest(setup=setup, body=body, cleanup=cleanup), TemporaryDirectory() as directory:
+                root = Path(directory)
+                (root / "tests").mkdir()
+                source = fixture.replace("SETUP_ACTION", setup).replace("BODY_ACTION", body)
+                source = source.replace("CLEANUP_ACTION", cleanup)
+                (root / "tests/test_fixture.c").write_text(source, encoding="utf-8")
+                base = self.loader.get_task("tier1_crc16")
+                task = replace(base, task_dir=root, limits=replace(base.limits, timeout_seconds=1))
+                compiled, result = self.sandbox.compile_and_test(task, "void candidate(void) {}")
+                self.addCleanup(compiled.cleanup)
+                self.assertTrue(compiled.success, compiled.output)
+                self.assertTrue(result.completed, result.output)
+                self.assertEqual(result.total_tests, 2)
+                self.assertEqual(result.failed_tests, failures)
+                self.assertEqual(result.ignored_tests, ignored)
+                self.assertEqual(result.passed_tests, 2 - failures - ignored)
+                self.assertIn(f"COUNTS:2:{bodies}:2", result.output)
+                self.assertIn(":test_second:PASS", result.output)
+
     def test_early_exit_without_summary_is_incomplete(self):
         result = self.sandbox._parse_unity_output("test.c:10:test_one:PASS\n", 0)
         self.assertFalse(result.completed)

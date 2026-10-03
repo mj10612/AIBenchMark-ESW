@@ -52,15 +52,22 @@ void UnityDefaultTestRun(void (*func)(void), const char* name, int line_num)
         setUp();
         func();
     }
-    tearDown();
-
-    if (Unity.CurrentTestIgnored)
+    /* Cleanup needs its own abort frame so an assertion cannot retry it. */
+    if (setjmp(Unity.AbortFrame) == 0)
     {
-        printf("%s:%d:%s:IGNORE\n", Unity.TestFile, line_num, name);
+        tearDown();
     }
-    else if (Unity.CurrentTestFailed)
+
+    /* Count each test once, even if both the body and cleanup abort. */
+    if (Unity.CurrentTestFailed)
     {
+        Unity.TestFailures++;
         printf("%s:%d:%s:FAIL\n", Unity.TestFile, line_num, name);
+    }
+    else if (Unity.CurrentTestIgnored)
+    {
+        Unity.TestIgnores++;
+        printf("%s:%d:%s:IGNORE\n", Unity.TestFile, line_num, name);
     }
     else
     {
@@ -70,7 +77,6 @@ void UnityDefaultTestRun(void (*func)(void), const char* name, int line_num)
 
 void UnityFail(const char* message, uint32_t line)
 {
-    Unity.TestFailures++;
     Unity.CurrentTestFailed = 1;
     printf("%s:%u:FAIL: %s\n", Unity.TestFile, line, message ? message : "Assertion Failed");
     longjmp(Unity.AbortFrame, 1);
@@ -78,7 +84,6 @@ void UnityFail(const char* message, uint32_t line)
 
 void UnityIgnore(const char* message, uint32_t line)
 {
-    Unity.TestIgnores++;
     Unity.CurrentTestIgnored = 1;
     printf("%s:%u:IGNORE: %s\n", Unity.TestFile, line, message ? message : "Test Ignored");
     longjmp(Unity.AbortFrame, 1);
