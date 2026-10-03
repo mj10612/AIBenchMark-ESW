@@ -1,6 +1,6 @@
 # Contributing to AIBenchMark-ESW
 
-Thank you for your interest in contributing to **AIBenchMark-ESW**! We aim to make this benchmark the industry standard for evaluating AI coding assistants in embedded systems and firmware development.
+Thank you for your interest in contributing to **AIBenchMark-ESW**. The project is an early-stage embedded C benchmark. Contributions that improve test validity, reproducibility, and coverage are particularly useful; see the [roadmap](docs/ROADMAP.md).
 
 ---
 
@@ -87,3 +87,11 @@ Create `task.json` with the following schema:
    git commit -m "feat(tasks): add tier2 modbus parser task"
    ```
 4. Push to your branch and open a Pull Request.
+
+## Reproducibility and AI-assisted contributions
+
+Record the compiler and use the same task selection, generation limits, and standards for model comparisons. See [REPRODUCIBILITY.md](docs/REPRODUCIBILITY.md) for the reporting and replay workflow. `AIBENCHMARK_ESW_COMPILER` selects the compiler used by the test suite; CI validates GCC, Clang, and TCC.
+
+AI-assisted patches are welcome. Review every generated change, describe the concrete problem, and include relevant regression evidence. Do not submit fabricated results or describe mocked provider tests as live model measurements. Avoid committing API keys, account identifiers, or private response content. Use the issue and pull-request templates to provide a reproducible example and validation details.
+
+For vulnerabilities, follow [SECURITY.md](SECURITY.md).

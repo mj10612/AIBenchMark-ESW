@@ -1,0 +1,17 @@
+name: Feature or benchmark task
+description: Propose a concrete improvement with a validation plan
+body:
+  - type: textarea
+    id: need
+    attributes:
+      label: Problem and intended users
+      description: Explain the embedded or benchmark use case.
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed behavior and validation
+      description: Include the API contract, boundary cases, and how success can be checked.
+    validations:
+      required: true

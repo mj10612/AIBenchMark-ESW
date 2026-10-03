@@ -22,6 +22,12 @@ classifiers = [
 ]
 dependencies = []
 
+[project.urls]
+Homepage = "https://github.com/sentimentalmija-lgtm/AIBenchMark-ESW"
+Repository = "https://github.com/sentimentalmija-lgtm/AIBenchMark-ESW"
+Issues = "https://github.com/sentimentalmija-lgtm/AIBenchMark-ESW/issues"
+Documentation = "https://github.com/sentimentalmija-lgtm/AIBenchMark-ESW/blob/main/README.md"
+
 [project.optional-dependencies]
 dev = ["build>=1.0.0", "setuptools>=77.0", "wheel"]
 llm = ["litellm>=1.0.0"]

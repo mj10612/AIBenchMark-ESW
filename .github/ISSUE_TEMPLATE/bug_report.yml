@@ -1,0 +1,24 @@
+name: Reproducible bug
+description: Report an evaluator, scoring, packaging, or task-contract defect
+body:
+  - type: textarea
+    id: behavior
+    attributes:
+      label: Expected and observed behavior
+      description: Explain the concrete difference. Do not include secrets or private responses.
+    validations:
+      required: true
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: Minimal reproduction
+      description: Include task ID, commands, and a minimal candidate when appropriate.
+    validations:
+      required: true
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment and report provenance
+      description: Include revision, Python/OS, compiler/version, and available report fingerprints.
+    validations:
+      required: true

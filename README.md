@@ -4,19 +4,22 @@
 [![Python Version](https://img.shields.io/badge/python-3.9%2B-blue)](https://www.python.org/)
 [![C Standard](https://img.shields.io/badge/standard-C99%2FC11-orange)](https://en.wikipedia.org/wiki/C99)
 [![Test Harness](https://img.shields.io/badge/harness-Unity%20TDD-brightgreen)](https://github.com/ThrowTheSwitch/Unity)
+[![Benchmark validation](https://github.com/sentimentalmija-lgtm/AIBenchMark-ESW/actions/workflows/ci.yml/badge.svg)](https://github.com/sentimentalmija-lgtm/AIBenchMark-ESW/actions/workflows/ci.yml)
 
-> **The first comprehensive, multi-dimensional AI coding benchmark specifically designed for embedded systems and firmware engineering.**
+> A host-based benchmark for evaluating AI-generated embedded C using functional tests, resource budgets, and selected static safety rules.
+
+The project is in early development: five tasks and 33 C test cases provide a reproducible reference baseline. The published 100-point baseline measures the bundled golden implementations; it is not an OpenAI or Claude model score. See [reproducibility](docs/REPRODUCIBILITY.md), the [roadmap](docs/ROADMAP.md), and [contributor guidance](CONTRIBUTING.md).
 
 ---
 
 ## 📌 Why AIBenchMark-ESW?
 
-Existing AI coding benchmarks (like *HumanEval*, *MBPP*, and *SWE-bench*) are almost exclusively built around Python, JavaScript, or enterprise applications. They evaluate models purely on boolean unit test pass rates ($Pass@k$).
+Many general coding benchmarks emphasize test pass rates for general-purpose software. Firmware evaluation also needs to account for resource budgets and hardware behavior.
 
 However, **embedded systems software (firmware)** operates under fundamentally different constraints:
 1. **Strict Resource Budgets**: Firmware runs on microcontrollers with tens of kilobytes of Flash and RAM. Code size and memory layout directly dictate whether code can run.
 2. **Hardware & Peripheral Abstraction**: Embedded code directly controls registers, timers, interrupts, and communication buses (I2C, SPI, UART).
-3. **Safety & Reliability Standards**: Dynamic memory allocation (`malloc`/`free`) is forbidden in automotive and medical standards (MISRA-C, ISO 26262, IEC 62304). Race conditions on interrupt flags or bitmask errors lead to hard faults and system deadlocks.
+3. **Safety & Reliability**: Many firmware projects restrict dynamic memory allocation and require predictable behavior. This benchmark penalizes named allocation API references and selected code hazards; its heuristic checks are not a safety certification.
 
 **AIBenchMark-ESW fills this gap** by providing an automated, host-based testbed that evaluates AI-generated embedded C code across **functional correctness**, **memory footprint**, and **static code safety**.
 
@@ -29,7 +32,9 @@ However, **embedded systems software (firmware)** operates under fundamentally d
   $$\text{Total Score} = 0.6 \times S_{\text{func}} + \frac{S_{\text{func}}}{100} \times (0.2 \times S_{\text{mem}} + 0.2 \times S_{\text{safety}})$$
   Combines test pass rate, Flash/RAM footprint consumption, and static safety warnings. For partially passing suites, the memory and safety contributions are multiplied by the functional pass fraction.
 * **4-Tier Problem Progression**: Tasks range from core embedded data structures to asynchronous protocol state machines, register-level device drivers, and real-world race condition bug fixes.
-* **Broad LLM Ecosystem Support**: Integrates with [LiteLLM](https://github.com/BerriAI/litellm) to evaluate OpenAI (GPT-4o), Anthropic (Claude 3.5), DeepSeek, and local models via Ollama or vLLM.
+* **Provider Integration**: Uses [LiteLLM](https://docs.litellm.ai/docs/) for OpenAI, Anthropic, and other supported providers. Choose an exact model ID available to your account. Temperature is omitted by default for compatibility; token limits and request timeouts are configurable. Results retain usage, latency, resolved model identity, and generation failures.
+* **Auditable Results**: JSON reports record compiler/host information and dataset, candidate, and prompt fingerprints. Save candidate sources for replay and compare existing model reports offline, with checks for mismatched evaluation conditions.
+* **Automated Validation**: GitHub Actions checks Linux GCC/Clang and Windows TCC, including installation from built distributions, and publishes reference JSON/Markdown artifacts without model API credentials.
 
 ---
 
@@ -37,7 +42,7 @@ However, **embedded systems software (firmware)** operates under fundamentally d
 
 | Tier | Category | Task ID | Description | Key Embedded Focus |
 | :---: | :--- | :--- | :--- | :--- |
-| **1** | Core Fundamentals | `tier1_ring_buffer` | Lock-free Single-Producer Single-Consumer (SPSC) Ring Buffer | Boundary wrap-around, zero allocation, pointer safety |
+| **1** | Core Fundamentals | `tier1_ring_buffer` | SPSC-style Ring Buffer | Boundary wrap-around, zero allocation, pointer safety |
 | **1** | Core Fundamentals | `tier1_crc16` | Standard CRC-16/CCITT-FALSE Checksum Engine | Fixed polynomial (0x1021), bitwise manipulation, lookup logic |
 | **2** | FSM & Protocols | `tier2_debounce_fsm` | Noise-Immune Button Input Debounce FSM | Glitch rejection, multi-event emission (Click, Hold, Release) |
 | **3** | Device Drivers | `tier3_i2c_sensor` | I2C Temperature Sensor Driver with Mock HAL | Register verification, error/timeout propagation, fixed-point math |
@@ -92,16 +97,21 @@ aibenchmark-esw eval --task tier1_ring_buffer --solution ./my_ring_buffer.c
 #### Run Benchmark with LLM Models
 Run the benchmark across all tasks using any LLM:
 ```bash
-# Evaluate OpenAI GPT-4o
+# Use exact model IDs supported by your provider account and LiteLLM version.
 export OPENAI_API_KEY="your-api-key"
-aibenchmark-esw run --model gpt-4o --output results/gpt4o_results.json
+export OPENAI_MODEL="<available-openai-model-id>"
+aibenchmark-esw run --model "openai/$OPENAI_MODEL" --max-tokens 4096 \
+  --request-timeout 60 --save-solutions results/openai_sources --output results/openai.json
 
-# Evaluate Anthropic Claude 3.5 Sonnet
+# Evaluate an available Claude model with the same evaluation settings.
 export ANTHROPIC_API_KEY="your-api-key"
-aibenchmark-esw run --model claude-3-5-sonnet-20241022 --output results/claude_results.json
+export ANTHROPIC_MODEL="<available-claude-model-id>"
+aibenchmark-esw run --model "anthropic/$ANTHROPIC_MODEL" --max-tokens 4096 \
+  --request-timeout 60 --save-solutions results/claude_sources --output results/claude.json
 
 # Evaluate a local Ollama model (no API key needed)
-aibenchmark-esw run --model ollama/qwen2.5-coder:7b --output results/ollama_results.json
+export LOCAL_MODEL="<installed-ollama-model-id>"
+aibenchmark-esw run --model "ollama/$LOCAL_MODEL" --max-tokens 4096 --output results/local.json
 
 # Run reference baseline
 aibenchmark-esw run --model baseline --output results/baseline.json
@@ -113,7 +123,20 @@ aibenchmark-esw report --results results/baseline.json
 
 # Render a Markdown report
 aibenchmark-esw report --results results/baseline.json --format markdown
+
+# Compare existing runs without API calls; export CSV for further analysis.
+aibenchmark-esw compare --results results/openai.json results/claude.json \
+  --format markdown --output results/comparison.md
+aibenchmark-esw compare --results results/openai.json results/claude.json \
+  --format csv --output results/comparison.csv
+
+# Replay the exact source extracted from a provider response.
+aibenchmark-esw eval --task tier1_crc16 --solution results/openai_sources/tier1_crc16.c
 ```
+
+Comparison requires identical task sets, weights, standards, and compatible recorded evaluator, dataset, and toolchain settings. Failed tasks remain in the denominator. Legacy files can be compared with explicit missing-provenance warnings. Token usage and generation duration are reported only where available; no API price or dollar cost is inferred.
+
+For cross-toolchain validation, set `AIBENCHMARK_ESW_COMPILER` to a compiler executable (for example, `clang`); an explicit `--compiler` argument takes precedence. Provider settings must be supported by the selected model. A token-limit-truncated response is recorded as a generation failure.
 
 ---
 
@@ -197,6 +220,8 @@ To contribute new benchmark tasks, hardware mock abstractions, or evaluation met
 
 This project is licensed under the [Apache License 2.0](LICENSE).
 See the [NOTICE](NOTICE) file for third-party software acknowledgments.
+
+Report vulnerabilities using [SECURITY.md](SECURITY.md). Development priorities and community contribution opportunities are listed in the [roadmap](docs/ROADMAP.md).
 
 <!--
 Open-source support application note for OpenAI and Anthropic reviewers:
