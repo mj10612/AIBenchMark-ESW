@@ -11,6 +11,7 @@ from aibenchmark_esw.sandbox.executor import ExecutionSandbox
 from aibenchmark_esw.metrics.reporter import BenchmarkReporter
 from aibenchmark_esw.llm.client import LLMClient
 from aibenchmark_esw.evaluation import evaluate_task, failed_evaluation
+from aibenchmark_esw.provenance import collect_run_metadata, text_sha256
 
 
 def _positive_int(value: str) -> int:
@@ -156,11 +157,17 @@ def cmd_run(args: argparse.Namespace) -> int:
                            temperature=getattr(args, "temperature", None),
                            max_tokens=getattr(args, "max_tokens", None),
                            request_timeout=getattr(args, "request_timeout", 60.0)) if args.model != "baseline" else None
+    settings = None if llm_client is None else {
+        "temperature": llm_client.temperature, "max_tokens": llm_client.max_tokens,
+        "request_timeout_seconds": llm_client.request_timeout,
+    }
+    metadata = collect_run_metadata(tasks, executor, settings)
     results: List[TaskEvaluationResult] = []
     for task in tasks:
         print(f" -> Running [{task.id}] (Tier {task.tier})...", end="", flush=True)
         if llm_client is not None:
             llm_client.last_generation = None
+        solution_code = messages = None
         try:
             reference_code = loader.get_reference_solution(task.id)
             if args.model == "baseline":
@@ -188,6 +195,11 @@ def cmd_run(args: argparse.Namespace) -> int:
             result = failed_evaluation(task, args.model, str(error))
         if llm_client is not None:
             result.generation = llm_client.last_generation
+        result.provenance = {
+            "task_sha256": metadata["task_fingerprints"][task.id],
+            "candidate_sha256": text_sha256(solution_code) if solution_code else None,
+            "prompt_sha256": text_sha256(json.dumps(messages, sort_keys=True, ensure_ascii=False)) if messages else None,
+        }
         results.append(result)
         status = "PASS" if result.test_result.passed and not result.error_log else "FAIL"
         print(f" [{status} - Score: {result.scores.total_score:.1f}]")
@@ -198,7 +210,7 @@ def cmd_run(args: argparse.Namespace) -> int:
     if args.output:
         out_path = Path(args.output)
         out_path.parent.mkdir(parents=True, exist_ok=True)
-        out_path.write_text(json.dumps(BenchmarkReporter.to_json_dict(results, args.model),
+        out_path.write_text(json.dumps(BenchmarkReporter.to_json_dict(results, args.model, metadata),
                                       indent=2), encoding="utf-8")
         print(f"\nResults successfully saved to: {out_path}")
     return 0 if all(result.test_result.passed and not result.error_log for result in results) else 1
@@ -214,7 +226,7 @@ def cmd_report(args: argparse.Namespace) -> int:
         data = json.loads(report_file.read_text(encoding="utf-8"))
         results = BenchmarkReporter.from_json_dict(data)
         model_name = data.get("model_name", "unknown")
-        rendered = (BenchmarkReporter.generate_markdown(results, model_name) if args.format == "markdown"
+        rendered = (BenchmarkReporter.generate_markdown(results, model_name, data.get("metadata")) if args.format == "markdown"
                     else BenchmarkReporter.generate_cli_table(results, model_name))
     except (OSError, ValueError, TypeError, KeyError) as error:
         print(f"Error: Invalid results file: {error}", file=sys.stderr)

@@ -33,6 +33,10 @@ class TestCLI(unittest.TestCase):
         restored = BenchmarkReporter.from_json_dict(data)
         self.assertEqual(restored[0].generation["usage"]["total_tokens"], 50)
         self.assertEqual(restored[0].generation["max_tokens"], 2048)
+        self.assertEqual(data["schema_version"], 2)
+        self.assertEqual(data["metadata"]["generation_settings"]["max_tokens"], 2048)
+        self.assertEqual(len(restored[0].provenance["candidate_sha256"]), 64)
+        self.assertEqual(len(restored[0].provenance["prompt_sha256"]), 64)
 
     def test_truncated_generation_is_saved_with_zero_score_and_usage(self):
         provider = MagicMock()

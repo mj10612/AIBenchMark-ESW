@@ -24,6 +24,18 @@ class TestReporter(unittest.TestCase):
         self.assertIn("| **Memory Efficiency** | 100.00 / 100 | 10% |", markdown)
         self.assertIn("70%/10%/20%", BenchmarkReporter.generate_cli_table(results, "test"))
 
+    def test_provenance_round_trip_and_markdown(self):
+        result = self.result("one", TaskWeights())
+        result.provenance = {"task_sha256": "task-digest", "candidate_sha256": "candidate-digest"}
+        metadata = {"compiler": {"name": "tcc", "version": "tcc 0.9.27", "optimization": "native"},
+                    "dataset_sha256": "dataset-digest", "source_revision": "source-commit"}
+        data = BenchmarkReporter.to_json_dict([result], "test", metadata)
+        self.assertEqual(data["metadata"], metadata)
+        self.assertEqual(BenchmarkReporter.from_json_dict(data)[0].provenance, result.provenance)
+        markdown = BenchmarkReporter.generate_markdown([result], "test", metadata)
+        self.assertIn("dataset-digest", markdown)
+        self.assertIn("tcc 0.9.27", markdown)
+
     def test_mixed_weights_round_trip_and_display_per_task(self):
         results = [self.result("one", TaskWeights()),
                    self.result("two", TaskWeights(0.8, 0.1, 0.1))]

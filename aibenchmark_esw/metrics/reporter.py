@@ -1,4 +1,5 @@
 from typing import List, Dict, Any
+from typing import Optional
 from aibenchmark_esw.models import (
     TaskEvaluationResult, TestResult, SizeMetrics, StaticSafetyMetrics, DimensionScores, TaskWeights,
 )
@@ -37,6 +38,8 @@ class BenchmarkReporter:
     def from_json_dict(data: Dict[str, Any]) -> List[TaskEvaluationResult]:
         if not isinstance(data, dict) or not isinstance(data.get("tasks"), list):
             raise ValueError("Results must be an object containing a tasks array")
+        if data.get("metadata") is not None and not isinstance(data["metadata"], dict):
+            raise ValueError("Run metadata must be an object")
         results = []
         for item in data["tasks"]:
             tests = item["test_result"]
@@ -61,11 +64,13 @@ class BenchmarkReporter:
                 target_standard=item.get("target_standard"),
                 effective_standard=item.get("effective_standard"),
                 generation=item.get("generation"),
+                provenance=item.get("provenance"),
             ))
         return results
 
     @staticmethod
-    def generate_markdown(results: List[TaskEvaluationResult], model_name: str) -> str:
+    def generate_markdown(results: List[TaskEvaluationResult], model_name: str,
+                          metadata: Optional[Dict[str, Any]] = None) -> str:
         if not results:
             return "No benchmark results available."
 
@@ -85,6 +90,16 @@ class BenchmarkReporter:
         md.append(f"- **Compilation Rate**: {compiled_tasks}/{total_tasks} ({compiled_tasks/total_tasks*100:.1f}%)")
         md.append(f"- **Pass@1 (All Tests Passed)**: {all_passed_tasks}/{total_tasks} ({all_passed_tasks/total_tasks*100:.1f}%)")
         md.append(f"- **Overall AIBenchMark-ESW Score**: **{avg_total:.2f} / 100.0**\n")
+
+        if metadata:
+            compiler = metadata.get("compiler", {})
+            md.append("### Reproducibility")
+            md.append(f"- **Run (UTC)**: {metadata.get('created_at_utc', 'Unknown')}")
+            md.append(f"- **Benchmark / Python**: {metadata.get('benchmark_version', 'Unknown')} / {metadata.get('python_version', 'Unknown')}")
+            md.append(f"- **Compiler**: {compiler.get('name', 'Unknown')} / {compiler.get('version') or 'Unknown'} ({compiler.get('optimization', 'Unknown')})")
+            md.append(f"- **Dataset SHA-256**: `{metadata.get('dataset_sha256', 'Unknown')}`")
+            md.append(f"- **Source revision**: `{metadata.get('source_revision') or 'Unavailable in installed distribution'}`")
+            md.append(f"- **Source had local changes**: {metadata.get('source_dirty', 'Unknown')}\n")
 
         md.append("### Dimensional Scores")
         md.append("| Dimension | Average Score | Weight |")
@@ -142,8 +157,11 @@ class BenchmarkReporter:
         return "\n".join(lines)
 
     @staticmethod
-    def to_json_dict(results: List[TaskEvaluationResult], model_name: str) -> Dict[str, Any]:
+    def to_json_dict(results: List[TaskEvaluationResult], model_name: str,
+                     metadata: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
         return {
+            "schema_version": 2,
+            "metadata": metadata,
             "model_name": model_name,
             "overall_score": round(sum(r.scores.total_score for r in results) / max(1, len(results)), 2),
             "pass_at_1_pct": round(sum(1 for r in results if BenchmarkReporter._all_tests_passed(r)) / max(1, len(results)) * 100.0, 2),
