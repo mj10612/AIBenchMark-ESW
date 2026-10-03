@@ -154,6 +154,8 @@ Checks selected embedded safety rules using built-in heuristics and, when instal
 * Non-fixed-width standard types (MISRA Rule 4.6)
 * Buffer overflows and uninitialized variables
 
+The built-in allocation rule conservatively rejects named references to `malloc`, `calloc`, `realloc`, and `free`, including macro aliases and function-pointer bindings. Comments and literals are excluded. This lexical rule does not implement a full C preprocessor.
+
 ---
 
 ## 📁 Repository Layout

@@ -75,10 +75,13 @@ class StaticAnalyzer:
 
         cleaned_code = mask_noncode(code)
 
-        # 1. Dynamic Memory Allocation check (Forbidden in safety-critical embedded systems)
-        if re.search(r"\b(malloc|calloc|realloc|free)\s*\(", cleaned_code):
+        # Reject named allocation API references as well as direct calls.
+        # Object macros and function-pointer bindings need no '(' after the
+        # allocator name; scanning identifier tokens also catches those aliases.
+        identifiers = set(re.findall(r"[a-zA-Z_]\w*", cleaned_code))
+        if identifiers.intersection({"malloc", "calloc", "realloc", "free"}):
             errors += 1
-            violations.append("MISRA-C Violation: Dynamic memory allocation (malloc/free) detected.")
+            violations.append("MISRA-C Violation: Dynamic memory allocation API reference (malloc/calloc/realloc/free) detected.")
 
         # 2. Uncontrolled Goto (MISRA Rule 15.1)
         if re.search(r"\bgoto\s+[a-zA-Z_]", cleaned_code):

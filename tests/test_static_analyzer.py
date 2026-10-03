@@ -8,6 +8,42 @@ from aibenchmark_esw.sandbox.static_analyzer import StaticAnalyzer
 
 
 class TestStaticAnalyzer(unittest.TestCase):
+    def test_allocation_aliases_are_detected_without_cppcheck(self):
+        samples = [
+            '#define ALLOC malloc\n#define DEALLOC free\nvoid fn(void) { void *p = ALLOC(1); DEALLOC(p); }',
+            '#define ALLOC malloc\n#define NEXT ALLOC\nvoid fn(void) { void *p = NEXT(1); }',
+            '#define ALLOC(n) malloc(n)\nvoid fn(void) { void *p = ALLOC(1); }',
+            '#define ALLOC (malloc)\nvoid fn(void) { void *p = ALLOC(1); }',
+            'void fn(void) { void *(*allocate)(size_t) = malloc; void *p = allocate(1); }',
+            'void fn(void) { void (*deallocate)(void *) = &free; deallocate(0); }',
+            '#define ALLOC ca\\\nlloc\nvoid fn(void) { void *p = ALLOC(1, 1); }',
+            '#define RESIZE realloc\nvoid fn(void) { void *p = RESIZE(0, 1); }',
+        ]
+        with TemporaryDirectory() as directory:
+            source = Path(directory) / "solution.c"
+            for sample in samples:
+                with self.subTest(sample=sample):
+                    source.write_text("#include <stdlib.h>\n" + sample, encoding="utf-8")
+                    with patch("aibenchmark_esw.sandbox.static_analyzer.shutil.which", return_value=None):
+                        metrics = StaticAnalyzer().analyze(source)
+                    self.assertEqual(metrics.error_count, 1)
+
+    def test_allocation_aliases_are_detected_when_cppcheck_fails(self):
+        with TemporaryDirectory() as directory:
+            source = Path(directory) / "solution.c"
+            source.write_text("#define ALLOC malloc\nvoid fn(void) { ALLOC(1); }", encoding="utf-8")
+            with patch("aibenchmark_esw.sandbox.static_analyzer.subprocess.run",
+                       return_value=subprocess.CompletedProcess([], 1, "", "invalid option")):
+                metrics = StaticAnalyzer("cppcheck").analyze(source)
+        self.assertEqual(metrics.error_count, 1)
+
+    def test_allocation_identifier_substrings_and_header_includes_are_allowed(self):
+        with TemporaryDirectory() as directory:
+            source = Path(directory) / "solution.c"
+            source.write_text("#include <stdlib.h>\nint malloc_count, free_slots, reallocations;", encoding="utf-8")
+            metrics = StaticAnalyzer("nonexistent-review-cppcheck").analyze(source)
+        self.assertEqual(metrics.error_count, 0)
+
     def test_comments_in_literals_cannot_hide_allocation(self):
         samples = [
             'const char *url = "https://example.test"; void *allocate(void) { return malloc(16); }',

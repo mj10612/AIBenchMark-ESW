@@ -3,6 +3,7 @@ import subprocess
 from dataclasses import replace
 from pathlib import Path
 from tempfile import TemporaryDirectory
+from unittest.mock import patch
 
 from aibenchmark_esw.dataset import DatasetLoader
 from aibenchmark_esw.evaluation import evaluate_task
@@ -137,6 +138,19 @@ uint16_t crc16_ccitt(const uint8_t *data, size_t length) {
                 self.assertTrue(result.test_result.passed, result.error_log)
                 self.assertEqual(result.safety_metrics.error_count, normal.safety_metrics.error_count)
                 self.assertEqual(result.scores.total_score, normal.scores.total_score)
+
+    def test_macro_allocation_loses_safety_credit_without_cppcheck(self):
+        candidate = "#include <stdlib.h>\n#define ALLOC malloc\n#define DEALLOC free\n" + self.reference
+        candidate = candidate.replace(
+            "uint16_t crc16_ccitt(const uint8_t* data, size_t length) {",
+            "uint16_t crc16_ccitt(const uint8_t* data, size_t length) { "
+            "void *temporary = ALLOC(1); if (temporary != NULL) DEALLOC(temporary);")
+        self.assertIn("temporary = ALLOC(1)", candidate)
+        with patch("aibenchmark_esw.sandbox.static_analyzer.shutil.which", return_value=None):
+            result = evaluate_task(self.task, candidate, self.reference, "macro", self.executor)
+        self.assertTrue(result.test_result.passed, result.error_log)
+        self.assertEqual(result.safety_metrics.error_count, 1)
+        self.assertEqual(result.scores.safety_score, 85)
 
     def test_diagnostic_stderr_does_not_make_completed_suite_incomplete(self):
         candidate = "#include <stdio.h>\n" + self.reference.replace(
