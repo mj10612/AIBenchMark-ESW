@@ -5,12 +5,27 @@ import tempfile
 import subprocess
 import uuid
 import json
+import locale
 from pathlib import Path
 from typing import Optional, Tuple
 
 from aibenchmark_esw.models import TaskConfig, CompilationResult, TestResult
 from aibenchmark_esw.resources import data_root
 from aibenchmark_esw.sandbox.c_source import mask_noncode
+
+
+def _timeout_output(error: subprocess.TimeoutExpired) -> str:
+    """TimeoutExpired can contain bytes even when subprocess uses text mode."""
+    streams = []
+    for stream in (error.stdout, error.stderr):
+        if isinstance(stream, bytes):
+            stream = stream.decode(locale.getpreferredencoding(False), errors="backslashreplace")
+        if stream:
+            streams.append(stream)
+    partial = "".join(streams)
+    if not partial:
+        return str(error)
+    return partial + ("" if partial.endswith("\n") else "\n") + str(error)
 
 
 class ExecutionSandbox:
@@ -71,7 +86,10 @@ class ExecutionSandbox:
                 return CompilationResult(False, log, error_message="Compilation failed",
                                          effective_standard=standard)
             return CompilationResult(True, log, binary_path=output, effective_standard=standard)
-        except (OSError, subprocess.TimeoutExpired) as error:
+        except subprocess.TimeoutExpired as error:
+            return CompilationResult(False, _timeout_output(error), error_message="Compilation timed out",
+                                     effective_standard=standard)
+        except OSError as error:
             return CompilationResult(False, str(error), error_message="Compiler unavailable or timed out",
                                      effective_standard=standard)
 
@@ -148,7 +166,11 @@ class ExecutionSandbox:
                                       text=True, errors="backslashreplace",
                                       timeout=task.limits.timeout_seconds, cwd=str(work_dir))
                 test_result = self._parse_unity_output(proc.stdout, proc.returncode, completion_token)
-            except (OSError, subprocess.TimeoutExpired) as error:
+            except subprocess.TimeoutExpired as error:
+                # Partial records are diagnostics only; a timeout never completes
+                # a suite, even if its buffered output resembles a valid summary.
+                test_result = TestResult(output=_timeout_output(error), completed=False)
+            except OSError as error:
                 test_result = TestResult(output=str(error), completed=False)
             return comp_result, test_result
         finally:

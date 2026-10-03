@@ -175,6 +175,48 @@ int main(void) {
         self.assertFalse(comp.success)
         self.assertFalse(result.completed)
 
+    def test_compiler_timeout_preserves_both_diagnostic_streams(self):
+        task = self.loader.get_task("tier1_crc16")
+        for stdout, stderr in ((b"compiler output\n", b"compiler error\xff\n"),
+                               ("compiler output\n", "compiler error\n"), (None, None)):
+            with self.subTest(stdout=stdout), TemporaryDirectory() as directory:
+                error = subprocess.TimeoutExpired("compiler", 30, output=stdout, stderr=stderr)
+                with patch("aibenchmark_esw.sandbox.executor.subprocess.run", side_effect=error):
+                    result = self.sandbox.compile_object(task, self.loader.get_reference_solution(task.id),
+                                                         Path(directory))
+                self.assertFalse(result.success)
+                self.assertIn("timed out", result.output)
+                self.assertEqual(result.effective_standard, "c99")
+                if stdout:
+                    self.assertIn("compiler output", result.output)
+                    self.assertIn("compiler error", result.output)
+
+    def test_test_timeout_preserves_records_without_parsing_them_as_completed(self):
+        task = self.loader.get_task("tier1_crc16")
+        real_run = subprocess.run
+        for as_bytes in (False, True):
+            def timeout_after_compile(command, **kwargs):
+                if "-o" in command:
+                    return real_run(command, **kwargs)
+                token = Path(command[0]).parent.glob("aibenchmark_tests_*.c")
+                wrapper = next(token).read_text(encoding="utf-8")
+                marker = wrapper.split("AIBenchMark-ESW:")[1].split(":END")[0]
+                partial = self.unity_output(["PASS"] * 5).replace("fixture", marker)
+                if as_bytes:
+                    partial = partial.encode("utf-8")
+                raise subprocess.TimeoutExpired(command, 1, output=partial)
+            with self.subTest(as_bytes=as_bytes), patch(
+                    "aibenchmark_esw.sandbox.executor.subprocess.run", side_effect=timeout_after_compile):
+                compiled, result = self.sandbox.compile_and_test(task, self.loader.get_reference_solution(task.id))
+            self.addCleanup(compiled.cleanup)
+            self.assertTrue(compiled.success, compiled.output)
+            self.assertIn(":test_0:PASS", result.output)
+            self.assertIn("5 Tests 0 Failures 0 Ignored", result.output)
+            self.assertIn("timed out", result.output)
+            self.assertFalse(result.completed)
+            self.assertFalse(result.passed)
+            self.assertEqual(result.passed_tests, 0)
+
     def test_msvc_rejects_c99_without_explicit_opt_in(self):
         task = self.loader.get_task("tier1_crc16")
         with TemporaryDirectory() as directory:

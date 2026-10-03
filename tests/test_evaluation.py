@@ -45,6 +45,24 @@ class TestEvaluation(unittest.TestCase):
         self.assertEqual(result.scores.total_score, 0)
         self.assertIsNotNone(result.error_log)
 
+    def test_hanging_candidate_preserves_partial_output_and_scores_zero(self):
+        code = "#include <stdio.h>\n" + self.reference.replace(
+            "uint16_t crc16_ccitt(const uint8_t* data, size_t length) {",
+            "uint16_t crc16_ccitt(const uint8_t* data, size_t length) { "
+            "static int calls; if (++calls == 3) { puts(\"about to hang\"); fflush(stdout); for (;;) {} }")
+        self.assertIn("about to hang", code)
+        task = replace(self.task, limits=replace(self.task.limits, timeout_seconds=1))
+        result = evaluate_task(task, code, self.reference, "hang", self.executor)
+        self.assertTrue(result.compiled, result.error_log)
+        self.assertFalse(result.test_result.completed)
+        self.assertEqual(result.scores.total_score, 0)
+        self.assertIn(":test_standard_test_vector:PASS", result.test_result.output)
+        self.assertIn(":test_empty_buffer:PASS", result.test_result.output)
+        self.assertIn("about to hang", result.test_result.output)
+        self.assertIn("about to hang", result.error_log)
+        self.assertIn("timed out", result.error_log)
+        self.assertIn("about to hang", result.to_dict()["error_log"])
+
     def test_missing_reference_does_not_award_memory_points(self):
         result = evaluate_task(self.task, self.reference, None, "local", self.executor)
         self.assertTrue(result.test_result.passed)
