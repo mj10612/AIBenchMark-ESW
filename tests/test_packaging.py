@@ -17,6 +17,8 @@ from tempfile import TemporaryDirectory
 class TestPackaging(unittest.TestCase):
     def test_wheel_from_sdist_contains_usable_dataset_and_harness(self):
         root = Path(__file__).resolve().parent.parent
+        expected_ids = {json.loads(path.read_text(encoding="utf-8"))["id"]
+                        for path in (root / "tasks").glob("*/task.json")}
         with TemporaryDirectory(prefix="aibenchmark_package_test_") as directory:
             work = Path(directory)
             source = work / "project"
@@ -39,7 +41,8 @@ class TestPackaging(unittest.TestCase):
             wheel = next((source / "dist").glob("*.whl"))
             with zipfile.ZipFile(wheel) as archive:
                 names = archive.namelist()
-                self.assertEqual(len([name for name in names if name.endswith("task.json")]), 5)
+                self.assertEqual({json.loads(archive.read(name))["id"]
+                                  for name in names if name.endswith("task.json")}, expected_ids)
                 self.assertIn("aibenchmark_esw/_data/third_party/unity/unity.c", names)
                 self.assertFalse(any("/tests/build/" in name for name in names))
                 self.assertTrue(any(name.endswith("tier1_crc16/tests/CMakeLists.txt") for name in names))
@@ -76,7 +79,7 @@ class TestPackaging(unittest.TestCase):
             self.assertEqual(smoke.returncode, 0, smoke.stdout + smoke.stderr)
             self.assertIn("Pass@1: 100.0%", smoke.stdout)
             data = json.loads(results.read_text(encoding="utf-8"))
-            self.assertEqual(len(data["tasks"]), 5)
+            self.assertEqual({task["task_id"] for task in data["tasks"]}, expected_ids)
             for task in data["tasks"]:
                 self.assertTrue(task["size_metrics"]["measured"])
                 self.assertGreater(task["size_metrics"]["flash_bytes"], 0)

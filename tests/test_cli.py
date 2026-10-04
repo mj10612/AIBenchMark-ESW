@@ -117,7 +117,7 @@ class TestCLI(unittest.TestCase):
             with patch.object(cli.LLMClient, "generate_solution", side_effect=RuntimeError("API failed")), redirect_stdout(io.StringIO()):
                 self.assertEqual(cli.cmd_run(args), 1)
             data = json.loads(report.read_text(encoding="utf-8"))
-        self.assertEqual(len(data["tasks"]), 2)
+        self.assertEqual(len(data["tasks"]), len(DatasetLoader().list_tasks(tier=1)))
         self.assertEqual(data["pass_at_1_pct"], 0)
         self.assertEqual(data["overall_score"], 0)
 
@@ -156,7 +156,7 @@ class TestCLI(unittest.TestCase):
                     self.assertIn(expected, output.getvalue())
                     output.getvalue().encode("cp949")
         restored = BenchmarkReporter.from_json_dict(data)
-        self.assertEqual(len(restored), 5)
+        self.assertEqual(len(restored), len(data["tasks"]))
 
     def test_invalid_dataset_exits_cleanly(self):
         with patch("sys.argv", ["aibenchmark-esw", "list"]), \

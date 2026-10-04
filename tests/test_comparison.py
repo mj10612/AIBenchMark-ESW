@@ -35,9 +35,11 @@ class TestComparison(unittest.TestCase):
         second["overall_score"] = 100  # Ignore stale or misleading stored summaries.
         comparison = compare_runs([first, second])
         self.assertEqual(comparison["models"][0]["model"], "openai/mock")
-        self.assertEqual(comparison["models"][1]["score"], 80)
-        self.assertEqual(comparison["models"][1]["pass_at_1_pct"], 80)
-        self.assertEqual(len(comparison["task_ids"]), 5)
+        count = len(first["tasks"])
+        expected = round((count - 1) / count * 100, 2)
+        self.assertEqual(comparison["models"][1]["score"], expected)
+        self.assertEqual(comparison["models"][1]["pass_at_1_pct"], expected)
+        self.assertEqual(len(comparison["task_ids"]), count)
 
     def test_incompatible_inputs_are_rejected(self):
         mutations = [
@@ -77,8 +79,8 @@ class TestComparison(unittest.TestCase):
         comparison = compare_runs([first, second])
         markdown = render_comparison(comparison)
         self.assertIn("compatibility cannot be fully checked", markdown)
-        self.assertIn("50 (1/5 tasks)", markdown)
-        self.assertIn("1.25 (1/5 tasks)", markdown)
+        self.assertIn(f"50 (1/{len(first['tasks'])} tasks)", markdown)
+        self.assertIn(f"1.25 (1/{len(first['tasks'])} tasks)", markdown)
         self.assertIn("Unknown", markdown)
 
     def test_csv_round_trip_and_cli_output(self):

@@ -11,10 +11,11 @@ class TestDatasetLoader(unittest.TestCase):
 
     def test_list_all_tasks(self):
         tasks = self.loader.list_tasks()
-        self.assertGreaterEqual(len(tasks), 5)
+        self.assertGreaterEqual(len(tasks), 6)
         task_ids = [t.id for t in tasks]
         self.assertIn("tier1_ring_buffer", task_ids)
         self.assertIn("tier1_crc16", task_ids)
+        self.assertIn("tier1_q15_math", task_ids)
         self.assertIn("tier2_debounce_fsm", task_ids)
         self.assertIn("tier3_i2c_sensor", task_ids)
         self.assertIn("tier4_bitmask_fix", task_ids)
