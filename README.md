@@ -144,6 +144,8 @@ For cross-toolchain validation, set `AIBENCHMARK_ESW_COMPILER` to a compiler exe
 
 With `--output`, runs save a complete JSON checkpoint before generation and after each task. Ctrl+C preserves completed work and usage, marks pending tasks explicitly, and exits with code 130. Pending tasks remain in the denominator at zero points; reports show the unfinished status and `compare` rejects unfinished runs. Each invocation starts a new run; choose a new output filename to retain earlier runs. Local `eval --output` also exports provenance and failed evaluations. `--reference` and `--solution` are mutually exclusive.
 
+Output paths are checked before evaluation or provider calls. Reports and saved candidate files must not overwrite source inputs, task data, the evaluator, or the Unity harness. Comparison exports cannot replace their input JSON files. Existing output reports can still be replaced intentionally.
+
 Reports record the static-analysis backend and cppcheck version. When cppcheck fails, its diagnostic is saved and reports warn that safety scoring used only the built-in rules. Comparisons reject known mismatches in analyzer configuration and flag missing legacy analyzer information.
 
 Set `AIBENCHMARK_ESW_CPPCHECK=off` for reproducible built-in-only analysis, or set it to a working cppcheck executable. Leaving it unset enables PATH discovery. Compiler CI jobs select built-in analysis explicitly; a separate CI job validates an installed cppcheck against real C fixtures.

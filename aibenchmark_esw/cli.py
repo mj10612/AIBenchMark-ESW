@@ -15,6 +15,8 @@ from aibenchmark_esw.evaluation import evaluate_task, failed_evaluation
 from aibenchmark_esw.provenance import collect_run_metadata, text_sha256
 from aibenchmark_esw.metrics.comparison import compare_runs, render_comparison
 from aibenchmark_esw.report_io import atomic_write_json
+from aibenchmark_esw.output_paths import validate_output_paths
+from aibenchmark_esw.resources import data_root
 
 
 def _positive_int(value: str) -> int:
@@ -111,6 +113,9 @@ def cmd_eval(args: argparse.Namespace) -> int:
         print(f"Error: Task '{args.task}' not found.", file=sys.stderr)
         return 1
 
+    output = getattr(args, "output", None)
+    validate_output_paths([output], protected_files=[args.solution] if args.solution else [],
+                          protected_roots=_input_roots(loader))
     solution_code = None
     model_name = "local_solution"
     if args.reference:
@@ -138,7 +143,6 @@ def cmd_eval(args: argparse.Namespace) -> int:
     executor = ExecutionSandbox(compiler_path=args.compiler,
                                 allow_standard_fallback=getattr(args, "allow_standard_fallback", False))
     analyzer = StaticAnalyzer()
-    output = getattr(args, "output", None)
     metadata = collect_run_metadata([task], executor, static_analyzer=analyzer) if output else None
     if metadata is not None:
         metadata.update(run_status="running", pending_tasks=[task.id])
@@ -181,6 +185,10 @@ def _save_checkpoint(output, results, model_name, metadata):
         atomic_write_json(output, BenchmarkReporter.to_json_dict(results, model_name, metadata))
 
 
+def _input_roots(loader):
+    return [loader.tasks_root, data_root() / "third_party" / "unity", Path(__file__).resolve().parent]
+
+
 def cmd_run(args: argparse.Namespace) -> int:
     loader = DatasetLoader()
     tasks = loader.list_tasks(tier=args.tier)
@@ -194,6 +202,13 @@ def cmd_run(args: argparse.Namespace) -> int:
     if not tasks:
         print("No matching tasks found.", file=sys.stderr)
         return 1
+
+    solution_directory = getattr(args, "save_solutions", None)
+    solution_paths = [] if solution_directory is None else [
+        Path(solution_directory) / f"{task.id}.c" for task in tasks]
+    validate_output_paths([args.output, *solution_paths], protected_roots=_input_roots(loader))
+    if solution_directory is not None:
+        Path(solution_directory).mkdir(parents=True, exist_ok=True)
 
     print(f"Starting AIBenchMark-ESW run on {len(tasks)} tasks using model '{args.model}'...")
     executor = ExecutionSandbox(compiler_path=args.compiler,
@@ -238,11 +253,8 @@ def cmd_run(args: argparse.Namespace) -> int:
                 solution_code = llm_client.generate_solution(messages)
                 if not solution_code:
                     raise ValueError("Model returned an empty implementation")
-            solution_directory = getattr(args, "save_solutions", None)
             if solution_directory is not None:
-                solution_directory = Path(solution_directory)
-                solution_directory.mkdir(parents=True, exist_ok=True)
-                (solution_directory / f"{task.id}.c").write_text(solution_code, encoding="utf-8")
+                solution_paths[index].write_text(solution_code, encoding="utf-8")
             result = evaluate_task(task, solution_code, reference_code, args.model, executor, analyzer)
         except KeyboardInterrupt:
             result = failed_evaluation(task, args.model, "Evaluation interrupted by user")
@@ -290,6 +302,7 @@ def cmd_report(args: argparse.Namespace) -> int:
 
 def cmd_compare(args: argparse.Namespace) -> int:
     try:
+        validate_output_paths([args.output], protected_files=args.results)
         reports = [json.loads(Path(path).read_text(encoding="utf-8")) for path in args.results]
         comparison = compare_runs(reports)
         rendered = render_comparison(comparison, args.format)
