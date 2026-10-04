@@ -14,7 +14,7 @@ class DatasetLoader:
         if tasks_root is None:
             self.tasks_root = data_root() / "tasks"
         else:
-            self.tasks_root = Path(tasks_root)
+            self.tasks_root = Path(tasks_root).resolve()
         if not self.tasks_root.exists():
             raise FileNotFoundError(f"Benchmark task data not found: {self.tasks_root}")
         if not self.tasks_root.is_dir():

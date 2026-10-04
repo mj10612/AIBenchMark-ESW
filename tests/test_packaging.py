@@ -81,6 +81,21 @@ class TestPackaging(unittest.TestCase):
                 self.assertTrue(task["size_metrics"]["measured"])
                 self.assertGreater(task["size_metrics"]["flash_bytes"], 0)
 
+            external_root = work / "external_tasks"
+            external_task = external_root / "custom_crc"
+            shutil.copytree(root / "tasks/tier1_crc16", external_task)
+            config_path = external_task / "task.json"
+            config = json.loads(config_path.read_text(encoding="utf-8"))
+            config["id"] = "custom_crc"
+            config_path.write_text(json.dumps(config), encoding="utf-8")
+            external = subprocess.run([str(command), "run", "--tasks-root", str(external_root),
+                                       "--tasks", "custom_crc", "--output", str(results)], cwd=work,
+                                      capture_output=True, text=True, timeout=30)
+            self.assertEqual(external.returncode, 0, external.stdout + external.stderr)
+            data = json.loads(results.read_text(encoding="utf-8"))
+            self.assertEqual(data["metadata"]["selected_tasks"], ["custom_crc"])
+            self.assertEqual(data["overall_score"], 100)
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -1,5 +1,6 @@
 from dataclasses import asdict, dataclass, field
 import math
+import re
 from typing import Optional, List, Dict, Any
 from pathlib import Path, PureWindowsPath
 
@@ -49,8 +50,11 @@ class TaskConfig:
     reference_file: Optional[str] = None
 
     def __post_init__(self):
-        if not isinstance(self.id, str) or not self.id or any(char in self.id for char in "/\\"):
-            raise ValueError("Task id must be a nonempty name without path separators")
+        if not isinstance(self.id, str) or not re.fullmatch(r"[A-Za-z0-9_][A-Za-z0-9_-]*", self.id):
+            raise ValueError("Task id must use letters, digits, underscores or hyphens and cannot start with a hyphen")
+        reserved = {"CON", "PRN", "AUX", "NUL"} | {f"{prefix}{i}" for prefix in ("COM", "LPT") for i in range(1, 10)}
+        if self.id.upper() in reserved:
+            raise ValueError("Task id cannot be a reserved Windows file name")
         if isinstance(self.tier, bool) or not isinstance(self.tier, int) or self.tier not in (1, 2, 3, 4):
             raise ValueError("Task tier must be 1, 2, 3, or 4")
         if self.target_standard not in ("c99", "c11", "c17"):

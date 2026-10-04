@@ -89,11 +89,15 @@ def build_parser() -> argparse.ArgumentParser:
     compare_p.add_argument("--format", choices=["cli", "markdown", "csv"], default="markdown")
     compare_p.add_argument("--output", type=Path, help="Save the comparison to a file")
 
+    for command in (list_p, eval_p, run_p):
+        command.add_argument("--tasks-root", type=Path,
+                             help="Directory containing task folders (defaults to bundled tasks)")
+
     return parser
 
 
 def cmd_list(args: argparse.Namespace) -> int:
-    loader = DatasetLoader()
+    loader = DatasetLoader(getattr(args, "tasks_root", None))
     tasks = loader.list_tasks(tier=args.tier)
     print("=" * 80)
     print(f" AIBenchMark-ESW Tasks (Total: {len(tasks)})")
@@ -107,7 +111,7 @@ def cmd_list(args: argparse.Namespace) -> int:
 
 
 def cmd_eval(args: argparse.Namespace) -> int:
-    loader = DatasetLoader()
+    loader = DatasetLoader(getattr(args, "tasks_root", None))
     task = loader.get_task(args.task)
     if not task:
         print(f"Error: Task '{args.task}' not found.", file=sys.stderr)
@@ -190,13 +194,21 @@ def _input_roots(loader):
 
 
 def cmd_run(args: argparse.Namespace) -> int:
-    loader = DatasetLoader()
+    loader = DatasetLoader(getattr(args, "tasks_root", None))
     tasks = loader.list_tasks(tier=args.tier)
-    if args.tasks:
-        selected_ids = [item.strip() for item in args.tasks.split(",") if item.strip()]
+    if args.tasks is not None:
+        selected_ids = [item.strip() for item in args.tasks.split(",")]
+        if any(not item for item in selected_ids) or len(set(selected_ids)) != len(selected_ids):
+            print("Error: --tasks must contain distinct, nonempty task IDs.", file=sys.stderr)
+            return 1
         unknown = [item for item in selected_ids if loader.get_task(item) is None]
         if unknown:
             print(f"Error: Unknown task IDs: {', '.join(unknown)}", file=sys.stderr)
+            return 1
+        conflicts = [item for item in selected_ids
+                     if args.tier is not None and loader.get_task(item).tier != args.tier]
+        if conflicts:
+            print(f"Error: Requested tasks outside --tier {args.tier}: {', '.join(conflicts)}", file=sys.stderr)
             return 1
         tasks = [task for task in tasks if task.id in selected_ids]
     if not tasks:

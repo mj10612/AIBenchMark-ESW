@@ -52,7 +52,17 @@ Create `task.json` with the following schema:
 }
 ```
 
-`entry_file` and `reference_file` must be relative paths within the task directory. `reference_file` is optional for older datasets and defaults to `reference/<entry_file basename>`. Weights must be finite, nonnegative, and sum to 1. Flash and timeout limits must be positive integers; the RAM limit may be zero. Invalid metadata or duplicate IDs abort dataset loading so tasks cannot silently disappear from a benchmark.
+`entry_file` and `reference_file` must be relative paths within the task directory. `reference_file` is optional for older datasets and defaults to `reference/<entry_file basename>`. Task IDs use ASCII letters, digits, underscores or hyphens, cannot start with a hyphen, and cannot be reserved Windows names such as `CON`; these IDs become saved candidate filenames. Weights must be finite, nonnegative, and sum to 1. Flash and timeout limits must be positive integers; the RAM limit may be zero. Invalid metadata or duplicate IDs abort dataset loading so tasks cannot silently disappear from a benchmark.
+
+You can develop a dataset outside the checkout or with an installed wheel. Pass the parent directory containing your task folders to each command:
+
+```bash
+aibenchmark-esw list --tasks-root ./my_tasks
+aibenchmark-esw eval --tasks-root ./my_tasks --task tier1_my_task --reference --output results/custom.json
+aibenchmark-esw run --tasks-root ./my_tasks --model baseline --output results/custom-baseline.json
+```
+
+The external root replaces the bundled task set for that invocation; reports fingerprint the selected external task contents. Python evaluation uses the installed Unity harness. Keep output reports and saved sources outside the task root. With `--tasks` and `--tier` together, every explicit task must belong to that tier; empty, duplicate, unknown, and conflicting IDs are rejected before provider calls.
 
 ### 3. Guidelines for Task Design
 
