@@ -6,7 +6,7 @@ from pathlib import Path
 from typing import List
 
 from aibenchmark_esw.models import TaskEvaluationResult
-from aibenchmark_esw.dataset import DatasetLoader
+from aibenchmark_esw.dataset import DatasetLoader, validate_task_assets
 from aibenchmark_esw.sandbox.executor import ExecutionSandbox
 from aibenchmark_esw.sandbox.static_analyzer import StaticAnalyzer
 from aibenchmark_esw.metrics.reporter import BenchmarkReporter
@@ -51,6 +51,10 @@ def build_parser() -> argparse.ArgumentParser:
     list_p = subparsers.add_parser("list", help="List available benchmark tasks")
     list_p.add_argument("--tier", type=int, choices=[1, 2, 3, 4], help="Filter tasks by tier")
 
+    validate_p = subparsers.add_parser("validate", help="Check required task files without compilation or API calls")
+    validate_p.add_argument("--tier", type=int, choices=[1, 2, 3, 4], help="Validate tasks in this tier")
+    validate_p.add_argument("--tasks", type=str, help="Comma-separated task IDs to validate")
+
     # Command: eval (local solution evaluation)
     eval_p = subparsers.add_parser("eval", help="Evaluate a local solution or reference implementation")
     eval_p.add_argument("--task", type=str, required=True, help="Task ID (e.g. tier1_ring_buffer)")
@@ -89,7 +93,7 @@ def build_parser() -> argparse.ArgumentParser:
     compare_p.add_argument("--format", choices=["cli", "markdown", "csv"], default="markdown")
     compare_p.add_argument("--output", type=Path, help="Save the comparison to a file")
 
-    for command in (list_p, eval_p, run_p):
+    for command in (list_p, eval_p, run_p, validate_p):
         command.add_argument("--tasks-root", type=Path,
                              help="Directory containing task folders (defaults to bundled tasks)")
 
@@ -195,26 +199,50 @@ def _input_roots(loader):
             data_root() / "third_party" / "unity", Path(__file__).resolve().parent]
 
 
-def cmd_run(args: argparse.Namespace) -> int:
-    loader = DatasetLoader(getattr(args, "tasks_root", None))
+def _select_tasks(loader, args):
     tasks = loader.list_tasks(tier=args.tier)
     if args.tasks is not None:
         selected_ids = [item.strip() for item in args.tasks.split(",")]
         if any(not item for item in selected_ids) or len(set(selected_ids)) != len(selected_ids):
             print("Error: --tasks must contain distinct, nonempty task IDs.", file=sys.stderr)
-            return 1
+            return None
         unknown = [item for item in selected_ids if loader.get_task(item) is None]
         if unknown:
             print(f"Error: Unknown task IDs: {', '.join(unknown)}", file=sys.stderr)
-            return 1
+            return None
         conflicts = [item for item in selected_ids
                      if args.tier is not None and loader.get_task(item).tier != args.tier]
         if conflicts:
             print(f"Error: Requested tasks outside --tier {args.tier}: {', '.join(conflicts)}", file=sys.stderr)
-            return 1
+            return None
         tasks = [task for task in tasks if task.id in selected_ids]
     if not tasks:
         print("No matching tasks found.", file=sys.stderr)
+        return None
+    return tasks
+
+
+def cmd_validate(args: argparse.Namespace) -> int:
+    loader = DatasetLoader(getattr(args, "tasks_root", None))
+    tasks = _select_tasks(loader, args)
+    if not tasks:
+        return 1
+    failures = 0
+    for task in tasks:
+        errors = validate_task_assets(task)
+        failures += bool(errors)
+        print(f"[{'FAIL' if errors else 'PASS'}] {task.id}")
+        for error in errors:
+            print(f"  - {error}")
+    print(f"Dataset structure: {len(tasks) - failures} passed, {failures} failed.")
+    print("Use run --model baseline to check reference compilation, tests, and resource budgets.")
+    return 1 if failures else 0
+
+
+def cmd_run(args: argparse.Namespace) -> int:
+    loader = DatasetLoader(getattr(args, "tasks_root", None))
+    tasks = _select_tasks(loader, args)
+    if not tasks:
         return 1
 
     solution_directory = getattr(args, "save_solutions", None)
@@ -251,10 +279,13 @@ def cmd_run(args: argparse.Namespace) -> int:
             llm_client.last_generation = None
         solution_code = messages = None
         try:
+            asset_errors = validate_task_assets(task)
+            if asset_errors:
+                raise ValueError("Task asset validation failed: " + "; ".join(asset_errors))
             reference_code = loader.get_reference_solution(task.id)
+            if not reference_code:
+                raise ValueError("Missing reference implementation")
             if args.model == "baseline":
-                if not reference_code:
-                    raise ValueError("Missing reference implementation")
                 solution_code = reference_code
             else:
                 headers_text = "\n".join(
@@ -345,6 +376,7 @@ def main() -> None:
 
     dispatch = {
         "list": cmd_list,
+        "validate": cmd_validate,
         "eval": cmd_eval,
         "run": cmd_run,
         "report": cmd_report,

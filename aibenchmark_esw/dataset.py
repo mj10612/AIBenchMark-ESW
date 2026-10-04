@@ -9,6 +9,30 @@ from aibenchmark_esw.resources import data_root
 logger = logging.getLogger(__name__)
 
 
+def validate_task_assets(task: TaskConfig) -> List[str]:
+    """Check readable, nonempty prompt/API/source/test inputs without executing C."""
+    reference = task.reference_file or f"reference/{Path(task.entry_file).name}"
+    required = [("prompt", task.task_dir / "prompt.md"),
+                ("starter implementation", task.task_dir / task.entry_file),
+                ("reference implementation", task.task_dir / reference)]
+    errors = []
+    for folder, pattern, label in (("include", "*.h", "API header"), ("tests", "test_*.c", "test source")):
+        matches = sorted((task.task_dir / folder).glob(pattern))
+        if not matches:
+            errors.append(f"Missing {label}: expected {folder}/{pattern}")
+        required.extend((label, path) for path in matches)
+    for label, path in required:
+        if not path.is_file():
+            errors.append(f"Missing {label}: {path.relative_to(task.task_dir).as_posix()}")
+            continue
+        try:
+            if not path.read_text(encoding="utf-8").strip():
+                errors.append(f"Empty {label}: {path.relative_to(task.task_dir).as_posix()}")
+        except (OSError, UnicodeError) as error:
+            errors.append(f"Unreadable {label}: {path.relative_to(task.task_dir).as_posix()} ({error})")
+    return errors
+
+
 class DatasetLoader:
     def __init__(self, tasks_root: Optional[Path] = None):
         if tasks_root is None:

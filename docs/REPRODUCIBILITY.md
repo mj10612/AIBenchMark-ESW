@@ -1,9 +1,10 @@
 # Reproducing and comparing benchmark results
 
 Install `pip install -e ".[dev,llm]"` and make a C compiler available. Run the
-reference baseline before spending provider credits:
+dataset asset check and reference baseline before spending provider credits:
 
 ```bash
+aibenchmark-esw validate
 aibenchmark-esw run --model baseline --output results/baseline.json
 python -m unittest discover -s tests -v
 ```
@@ -26,6 +27,11 @@ configuration, task text/sources/tests, and the Unity harness; candidate and
 prompt hashes identify the generated implementation and submitted messages.
 An evaluator hash identifies the Python implementation used for grading.
 Checkout paths and CRLF/LF differences do not alter these hashes.
+
+`validate` checks required files without compilation or API access. During a
+run, missing, empty, or unreadable task assets fail that task before generation;
+the failure stays in the report and denominator while other valid tasks continue.
+Passing this file check does not establish reference correctness or budget fit.
 
 Reports also record the selected static-analysis backend and cppcheck version.
 Per-task safety results distinguish disabled, completed, failed, and unrun

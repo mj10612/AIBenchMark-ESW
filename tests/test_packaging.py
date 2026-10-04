@@ -73,6 +73,10 @@ class TestPackaging(unittest.TestCase):
                                      capture_output=True, text=True, timeout=30)
             self.assertEqual(install.returncode, 0, install.stdout + install.stderr)
             command = scripts / ("aibenchmark-esw.exe" if os.name == "nt" else "aibenchmark-esw")
+            validated = subprocess.run([str(command), "validate"], cwd=work,
+                                       capture_output=True, text=True, timeout=30)
+            self.assertEqual(validated.returncode, 0, validated.stdout + validated.stderr)
+            self.assertIn(f"{len(expected_ids)} passed, 0 failed", validated.stdout)
             results = work / "baseline.json"
             smoke = subprocess.run([str(command), "run", "--model", "baseline", "--output", str(results)], cwd=work,
                                    capture_output=True, text=True, timeout=30)

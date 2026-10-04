@@ -85,6 +85,15 @@ Regular wheel installations also include all tasks, headers, reference implement
 aibenchmark-esw list
 ```
 
+Check required task files without a compiler or API access:
+
+```bash
+aibenchmark-esw validate
+aibenchmark-esw validate --tasks-root ./my_tasks --tier 1
+```
+
+`run` checks these assets before each task's generation. Missing, empty, or unreadable inputs produce a failed result without a provider request; valid tasks continue. Use the reference baseline to check compilation, functional correctness, and resource budgets.
+
 #### Evaluate Local Solution or Reference
 Test a specific task against the built-in golden reference:
 ```bash

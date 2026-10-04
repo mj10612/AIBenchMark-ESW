@@ -58,11 +58,14 @@ You can develop a dataset outside the checkout or with an installed wheel. Pass 
 
 ```bash
 aibenchmark-esw list --tasks-root ./my_tasks
+aibenchmark-esw validate --tasks-root ./my_tasks
 aibenchmark-esw eval --tasks-root ./my_tasks --task tier1_my_task --reference --output results/custom.json
 aibenchmark-esw run --tasks-root ./my_tasks --model baseline --output results/custom-baseline.json
 ```
 
 The external root replaces the bundled task set for that invocation; reports fingerprint the selected external task contents. Python evaluation uses the installed Unity harness. Keep output reports and saved sources outside the task root. With `--tasks` and `--tier` together, every explicit task must belong to that tier; empty, duplicate, unknown, and conflicting IDs are rejected before provider calls.
+
+`validate` checks that the prompt, declared starter/reference, at least one public header, and at least one `tests/test_*.c` are readable, nonempty UTF-8 files. It needs neither a compiler nor provider access and accepts `--tasks` and `--tier`. It checks file structure only; run the reference baseline to verify C correctness and resource budgets. `run` also performs the asset check for each task before generation: invalid tasks retain an explicit zero-score result without spending a provider request, while valid tasks continue.
 
 ### 3. Guidelines for Task Design
 
