@@ -1,7 +1,7 @@
 # Roadmap and project status
 
 AIBenchMark-ESW is an early-stage, Apache-2.0 embedded C benchmark. The current
-dataset contains six tasks and 49 C test cases. Public baseline results are
+dataset contains seven tasks and 65 C test cases. Public baseline results are
 golden-reference validation; no live OpenAI or Claude measurements have been
 published in this repository yet.
 
@@ -14,13 +14,15 @@ published in this repository yet.
 - Static-analysis backend/coverage records and validated report inputs.
 - Atomic progress checkpoints, interruption handling, and local evaluation JSON exports.
 - Input/output collision checks and external dataset CLI workflows.
+- Offline task-asset validation and pre-generation checks that retain invalid tasks as failures.
 - Q1.15 saturation and truncation tests, faulty-implementation checks, and AVR arithmetic-width validation.
+- Rollover-safe tick timers with periodic phase retention, missed-expiration counts, and boundary/mutation tests.
 - CI across GCC/Clang/TCC, distribution installation checks, and baseline artifacts.
 
 ## Next community priorities
 
-1. Add reviewed tasks for packet framing, DMA ownership,
-   and timer rollover, with boundary tests and resource budgets calibrated per toolchain.
+1. Add reviewed tasks for packet framing and DMA ownership,
+   with boundary tests and resource budgets calibrated per toolchain.
 2. Publish authorized, reproducible provider runs using exact model IDs and
    matching evaluation settings. Keep failed generations and missing usage visible.
 3. Add repeated-sampling statistics before making model-ranking claims.
