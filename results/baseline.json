@@ -1,10 +1,10 @@
 {
   "schema_version": 2,
   "metadata": {
-    "run_id": "112f9272a7574c8bb3a3a2b89d7c2998",
-    "created_at_utc": "2026-10-04T02:48:19.047384+00:00",
+    "run_id": "086e7194bf214b64b6edbd552bc1d8e1",
+    "created_at_utc": "2026-10-04T08:38:41.726037+00:00",
     "benchmark_version": "0.1.0",
-    "evaluator_sha256": "9a163926050a8c63228ea9e75fc5e88ad280b58c907517bdd5b179327769206b",
+    "evaluator_sha256": "91c721177e04b18a63af1856555187b9917f57d78122f21863248b6fa8c1217d",
     "python_version": "3.11.15",
     "platform": {
       "system": "Windows",
@@ -21,10 +21,11 @@
       "engine": "builtin",
       "cppcheck_version": null
     },
-    "source_revision": "48ea262992e4f06e525c97ec9162b211c6da4f9f",
+    "source_revision": "2d5c67cdc5848bf2eb22b7ec2788b9376878b133",
     "source_dirty": false,
     "selected_tasks": [
       "tier1_crc16",
+      "tier1_q15_math",
       "tier1_ring_buffer",
       "tier2_debounce_fsm",
       "tier3_i2c_sensor",
@@ -32,12 +33,13 @@
     ],
     "task_fingerprints": {
       "tier1_crc16": "ab381f814643ae15193bd2f38b49dd6b14cf90118a326dae26bbb4eba10d203a",
+      "tier1_q15_math": "4a17ca0c6371fedb615d2db66920569c2374dc1702852a7d1fba7c4910ee8487",
       "tier1_ring_buffer": "af6fccefe14a9a05a45ae344ce583b024f53d5e2297715b04619115601c3dc7c",
       "tier2_debounce_fsm": "f508440bf636078db5dd59342eb571ccc6811e8e8e73df744ed739004b168fa0",
       "tier3_i2c_sensor": "4607eab661515cd735fc43a15e699ebc71c9110dc80d0d77736cf94813ea8ffb",
       "tier4_bitmask_fix": "43a97ee78b86a62bef6f9ed9cd7b78559ad96b558b877bf0a31fd9e47fbe0296"
     },
-    "dataset_sha256": "23604719d8a64f99729efa8f68db46f031d2ce26636f3e9437769eaa978bb88e",
+    "dataset_sha256": "e67c6c170f8c8e3ff65324db04344c94e31da1a2b809a87a85bca1b9e0345e6c",
     "generation_settings": null,
     "run_status": "completed",
     "pending_tasks": []
@@ -80,7 +82,7 @@
         "safety": 100.0,
         "total": 100.0
       },
-      "execution_time_sec": 0.359,
+      "execution_time_sec": 0.247,
       "error_log": null,
       "weights": {
         "functional": 0.6,
@@ -93,6 +95,56 @@
       "provenance": {
         "task_sha256": "ab381f814643ae15193bd2f38b49dd6b14cf90118a326dae26bbb4eba10d203a",
         "candidate_sha256": "dc86b51824ee6720d2e976308cb11acd0e436490b0c8b44d99615029c334e667",
+        "prompt_sha256": null
+      }
+    },
+    {
+      "task_id": "tier1_q15_math",
+      "tier": 1,
+      "model_name": "baseline",
+      "compiled": true,
+      "test_result": {
+        "total": 16,
+        "passed": 16,
+        "failed": 0,
+        "ignored": 0,
+        "all_passed": true,
+        "completed": true,
+        "returncode": 0
+      },
+      "size_metrics": {
+        "flash_bytes": 270,
+        "ram_bytes": 0,
+        "ref_flash_bytes": 270,
+        "ref_ram_bytes": 0,
+        "measured": true
+      },
+      "safety_metrics": {
+        "error_count": 0,
+        "warning_count": 0,
+        "violations": [],
+        "cppcheck_status": "disabled",
+        "cppcheck_diagnostic": null
+      },
+      "scores": {
+        "functional": 100.0,
+        "memory": 100.0,
+        "safety": 100.0,
+        "total": 100.0
+      },
+      "execution_time_sec": 0.274,
+      "error_log": null,
+      "weights": {
+        "functional": 0.6,
+        "memory": 0.2,
+        "safety": 0.2
+      },
+      "target_standard": "c99",
+      "effective_standard": "c99",
+      "generation": null,
+      "provenance": {
+        "task_sha256": "4a17ca0c6371fedb615d2db66920569c2374dc1702852a7d1fba7c4910ee8487",
+        "candidate_sha256": "7031ddca96f3d8cd496fdb3f8829115c402d2c8acb6afb3012fe072f4a5971f6",
         "prompt_sha256": null
       }
     },
@@ -130,7 +182,7 @@
         "safety": 100.0,
         "total": 100.0
       },
-      "execution_time_sec": 0.334,
+      "execution_time_sec": 0.295,
       "error_log": null,
       "weights": {
         "functional": 0.6,
@@ -180,7 +232,7 @@
         "safety": 100.0,
         "total": 100.0
       },
-      "execution_time_sec": 0.263,
+      "execution_time_sec": 0.253,
       "error_log": null,
       "weights": {
         "functional": 0.6,
@@ -230,7 +282,7 @@
         "safety": 100.0,
         "total": 100.0
       },
-      "execution_time_sec": 0.297,
+      "execution_time_sec": 0.262,
       "error_log": null,
       "weights": {
         "functional": 0.6,
@@ -280,7 +332,7 @@
         "safety": 100.0,
         "total": 100.0
       },
-      "execution_time_sec": 0.285,
+      "execution_time_sec": 0.252,
       "error_log": null,
       "weights": {
         "functional": 0.6,
