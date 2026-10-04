@@ -28,11 +28,17 @@ def compare_runs(reports):
         metadata = report.get("metadata") or {}
         compiler = metadata.get("compiler") or {}
         host = metadata.get("platform") or {}
+        analysis = metadata.get("static_analysis") or {}
+        known_analysis = (analysis.get("engine") == "builtin" or
+                          (analysis.get("engine") == "builtin+cppcheck" and bool(analysis.get("cppcheck_version"))))
         complete_provenance = bool(metadata.get("dataset_sha256") and metadata.get("evaluator_sha256")
                                    and compiler.get("name") and compiler.get("version")
-                                   and host.get("system") and host.get("machine"))
+                                   and host.get("system") and host.get("machine") and known_analysis)
         if not complete_provenance:
             warnings.append(f"{model}: missing evaluator/dataset/toolchain provenance; compatibility cannot be fully checked.")
+        if not known_analysis:
+            warnings.append(f"{model}: static-analysis configuration/version is unknown.")
+        warnings.extend(f"{model}: {warning}" for warning in BenchmarkReporter.analysis_warnings(results))
         runs.append((report, results, tasks, metadata, complete_provenance))
 
     expected = set(runs[0][2])
@@ -53,7 +59,7 @@ def compare_runs(reports):
         if len(fingerprints) > 1:
             raise ValueError(f"Incompatible task fingerprints for {task_id}")
 
-    for key in ("dataset_sha256", "evaluator_sha256", "benchmark_version", "compiler"):
+    for key in ("dataset_sha256", "evaluator_sha256", "benchmark_version", "compiler", "static_analysis"):
         available = [metadata[key] for _, _, _, metadata, _ in runs if metadata.get(key)]
         if any(value != available[0] for value in available[1:]):
             raise ValueError(f"Incompatible {key} across reports")
@@ -93,6 +99,8 @@ def compare_runs(reports):
             "total_tokens": sum(tokens) if tokens else None, "usage_tasks": len(tokens),
             "generation_seconds": round(sum(durations), 3) if durations else None,
             "duration_tasks": len(durations), "provenance": "Recorded" if provenance else "Unknown",
+            "cppcheck_completed_tasks": sum(r.safety_metrics.cppcheck_status == "completed" for r in results),
+            "cppcheck_failed_tasks": sum(r.safety_metrics.cppcheck_status == "failed" for r in results),
         })
     return {"task_ids": sorted(expected), "warnings": warnings,
             "models": sorted(rows, key=lambda row: (-row["score"], row["model"]))}

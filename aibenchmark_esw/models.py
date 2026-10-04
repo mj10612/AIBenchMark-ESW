@@ -145,6 +145,8 @@ class StaticSafetyMetrics:
     error_count: int = 0
     warning_count: int = 0
     violations: List[str] = field(default_factory=list)
+    cppcheck_status: Optional[str] = None
+    cppcheck_diagnostic: Optional[str] = None
 
 
 @dataclass
@@ -206,6 +208,8 @@ class TaskEvaluationResult:
                 "error_count": self.safety_metrics.error_count,
                 "warning_count": self.safety_metrics.warning_count,
                 "violations": self.safety_metrics.violations,
+                "cppcheck_status": self.safety_metrics.cppcheck_status,
+                "cppcheck_diagnostic": self.safety_metrics.cppcheck_diagnostic,
             },
             "scores": {
                 "functional": round(self.scores.functional_score, 2),

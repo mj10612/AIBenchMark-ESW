@@ -57,6 +57,16 @@ class TestReporter(unittest.TestCase):
         self.assertIn("dataset-digest", markdown)
         self.assertIn("tcc 0.9.27", markdown)
 
+    def test_static_analyzer_fallback_survives_round_trip_and_is_visible(self):
+        result = self.result("one", TaskWeights())
+        result.safety_metrics.cppcheck_status = "failed"
+        result.safety_metrics.cppcheck_diagnostic = "tool unavailable"
+        data = BenchmarkReporter.to_json_dict([result], "test")
+        restored = BenchmarkReporter.from_json_dict(data)
+        self.assertEqual(restored[0].safety_metrics.cppcheck_diagnostic, "tool unavailable")
+        self.assertIn("cppcheck failed", BenchmarkReporter.generate_markdown(restored, "test"))
+        self.assertIn("cppcheck failed", BenchmarkReporter.generate_cli_table(restored, "test"))
+
     def test_mixed_weights_round_trip_and_display_per_task(self):
         results = [self.result("one", TaskWeights()),
                    self.result("two", TaskWeights(0.8, 0.1, 0.1))]

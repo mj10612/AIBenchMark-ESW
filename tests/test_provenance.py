@@ -9,6 +9,7 @@ from unittest.mock import patch
 from aibenchmark_esw.dataset import DatasetLoader
 from aibenchmark_esw.provenance import collect_run_metadata, task_sha256, text_sha256
 from aibenchmark_esw.sandbox.executor import ExecutionSandbox
+from aibenchmark_esw.sandbox.static_analyzer import StaticAnalyzer
 
 
 class TestProvenance(unittest.TestCase):
@@ -62,3 +63,15 @@ class TestProvenance(unittest.TestCase):
 
     def test_candidate_hash_normalizes_newlines(self):
         self.assertEqual(text_sha256("int x;\r\n"), text_sha256("int x;\n"))
+
+    def test_metadata_records_selected_static_analyzer_and_version(self):
+        analyzer = StaticAnalyzer("fixture-cppcheck")
+        def output(command):
+            return "Cppcheck 2.fixture" if command[0] == "fixture-cppcheck" else None
+        with patch("aibenchmark_esw.provenance._command_output", side_effect=output):
+            metadata = collect_run_metadata([self.task], self.executor, static_analyzer=analyzer)
+        self.assertEqual(metadata["static_analysis"],
+                         {"engine": "builtin+cppcheck", "cppcheck_version": "Cppcheck 2.fixture"})
+        with patch("aibenchmark_esw.sandbox.static_analyzer.shutil.which", return_value=None):
+            metadata = collect_run_metadata([self.task], self.executor, static_analyzer=StaticAnalyzer())
+        self.assertEqual(metadata["static_analysis"], {"engine": "builtin", "cppcheck_version": None})

@@ -36,6 +36,8 @@ class TestStaticAnalyzer(unittest.TestCase):
                        return_value=subprocess.CompletedProcess([], 1, "", "invalid option")):
                 metrics = StaticAnalyzer("cppcheck").analyze(source)
         self.assertEqual(metrics.error_count, 1)
+        self.assertEqual(metrics.cppcheck_status, "failed")
+        self.assertIn("invalid option", metrics.cppcheck_diagnostic)
 
     def test_allocation_identifier_substrings_and_header_includes_are_allowed(self):
         with TemporaryDirectory() as directory:
@@ -104,6 +106,36 @@ void normal(void) {}
             with patch("aibenchmark_esw.sandbox.static_analyzer.subprocess.run",
                        return_value=subprocess.CompletedProcess([], 1, "", "invalid option")):
                 self.assertEqual(StaticAnalyzer("cppcheck").analyze(source).warning_count, 1)
+
+    def test_backend_status_distinguishes_disabled_completed_and_failed_runs(self):
+        with TemporaryDirectory() as directory:
+            source = Path(directory) / "solution.c"
+            source.write_text("void fn(void) {}", encoding="utf-8")
+            with patch("aibenchmark_esw.sandbox.static_analyzer.shutil.which", return_value=None):
+                self.assertEqual(StaticAnalyzer().analyze(source).cppcheck_status, "disabled")
+            analyzer = StaticAnalyzer("fixture-cppcheck")
+            with patch("aibenchmark_esw.sandbox.static_analyzer.subprocess.run", side_effect=OSError("tool missing")):
+                failed = analyzer.analyze(source)
+            self.assertEqual(failed.cppcheck_status, "failed")
+            self.assertIn("tool missing", failed.cppcheck_diagnostic)
+            with patch("aibenchmark_esw.sandbox.static_analyzer.subprocess.run",
+                       return_value=subprocess.CompletedProcess([], 0, "", "warning:fixture:diagnostic\n")):
+                completed = analyzer.analyze(source)
+            self.assertEqual(completed.cppcheck_status, "completed")
+            self.assertEqual(completed.warning_count, 1)
+            self.assertIsNone(completed.cppcheck_diagnostic)
+            self.assertEqual(analyzer.analyze(Path(directory) / "missing.c").cppcheck_status, "not_run")
+
+    def test_cppcheck_timeout_is_reported_with_heuristic_fallback(self):
+        with TemporaryDirectory() as directory:
+            source = Path(directory) / "solution.c"
+            source.write_text("void fn(void) { goto done; done:; }", encoding="utf-8")
+            with patch("aibenchmark_esw.sandbox.static_analyzer.subprocess.run",
+                       side_effect=subprocess.TimeoutExpired("cppcheck", 10)):
+                metrics = StaticAnalyzer("cppcheck").analyze(source)
+            self.assertEqual(metrics.cppcheck_status, "failed")
+            self.assertEqual(metrics.warning_count, 1)
+            self.assertIn("timed out", metrics.cppcheck_diagnostic)
 
 
 if __name__ == "__main__":

@@ -10,6 +10,7 @@ from aibenchmark_esw.sandbox.c_source import mask_noncode
 class StaticAnalyzer:
     def __init__(self, cppcheck_cmd: Optional[str] = None):
         self.cppcheck_cmd = cppcheck_cmd or shutil.which("cppcheck")
+        self.last_cppcheck_error = None
 
     def analyze(self, source_path: Path, include_dirs: Optional[List[Path]] = None,
                 standard: str = "c99") -> StaticSafetyMetrics:
@@ -17,12 +18,18 @@ class StaticAnalyzer:
         Always check embedded rules; add cppcheck diagnostics when available.
         """
         metrics = self._heuristic_check(source_path)
+        metrics.cppcheck_status = "disabled" if not self.cppcheck_cmd else "not_run"
         if self.cppcheck_cmd and source_path.exists():
+            self.last_cppcheck_error = None
             cppcheck_metrics = self._run_cppcheck(source_path, include_dirs, standard)
             if cppcheck_metrics is not None:
+                metrics.cppcheck_status = "completed"
                 metrics.error_count += cppcheck_metrics.error_count
                 metrics.warning_count += cppcheck_metrics.warning_count
                 metrics.violations.extend(cppcheck_metrics.violations)
+            else:
+                metrics.cppcheck_status = "failed"
+                metrics.cppcheck_diagnostic = self.last_cppcheck_error or "cppcheck did not complete"
         return metrics
 
     def _run_cppcheck(self, source_path: Path, include_dirs: Optional[List[Path]] = None,
@@ -39,8 +46,9 @@ class StaticAnalyzer:
             for directory in include_dirs or []:
                 cmd += ["-I", str(directory)]
             cmd.append(str(source_path))
-            proc = subprocess.run(cmd, capture_output=True, text=True, timeout=10)
+            proc = subprocess.run(cmd, capture_output=True, text=True, errors="backslashreplace", timeout=10)
             if proc.returncode != 0:
+                self.last_cppcheck_error = f"cppcheck exited with {proc.returncode}: {(proc.stdout + proc.stderr).strip()}"
                 return None
             errors = 0
             warnings = 0
@@ -59,7 +67,8 @@ class StaticAnalyzer:
                 warning_count=warnings,
                 violations=violations,
             )
-        except Exception:
+        except (OSError, subprocess.TimeoutExpired, UnicodeError) as error:
+            self.last_cppcheck_error = str(error)
             return None
 
     def _heuristic_check(self, source_path: Path) -> StaticSafetyMetrics:

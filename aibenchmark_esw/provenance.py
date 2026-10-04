@@ -10,6 +10,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from aibenchmark_esw import __version__
+from aibenchmark_esw.sandbox.static_analyzer import StaticAnalyzer
 
 
 def text_sha256(text):
@@ -56,11 +57,13 @@ def _command_output(command):
     return None
 
 
-def collect_run_metadata(tasks, executor, generation_settings=None):
+def collect_run_metadata(tasks, executor, generation_settings=None, static_analyzer=None):
     compiler = Path(executor.compiler_path).stem.lower()
     version = _command_output([executor.compiler_path, "/?" if compiler == "cl" else
                                "-v" if compiler == "tcc" else "--version"])
     fingerprints = {task.id: task_sha256(task, executor.unity_dir) for task in tasks}
+    analyzer = static_analyzer or StaticAnalyzer()
+    cppcheck_version = _command_output([analyzer.cppcheck_cmd, "--version"]) if analyzer.cppcheck_cmd else None
     checkout = Path(__file__).resolve().parent.parent
     revision = dirty = None
     if (checkout / ".git").exists():
@@ -80,6 +83,8 @@ def collect_run_metadata(tasks, executor, generation_settings=None):
         "compiler": {"name": compiler, "version": version.splitlines()[0] if version else None,
                      "optimization": "/O1" if compiler == "cl" else "native" if compiler == "tcc" else "-Os",
                      "allow_standard_fallback": executor.allow_standard_fallback},
+        "static_analysis": {"engine": "builtin+cppcheck" if analyzer.cppcheck_cmd else "builtin",
+                            "cppcheck_version": cppcheck_version},
         "source_revision": revision, "source_dirty": dirty,
         "selected_tasks": [task.id for task in tasks],
         "task_fingerprints": fingerprints,

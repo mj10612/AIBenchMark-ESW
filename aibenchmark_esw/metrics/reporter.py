@@ -47,7 +47,7 @@ class BenchmarkReporter:
             raise ValueError(f"Unsupported report schema version: {version}")
         if data.get("metadata") is not None and not isinstance(data["metadata"], dict):
             raise ValueError("Run metadata must be an object")
-        for key in ("compiler", "platform", "generation_settings"):
+        for key in ("compiler", "platform", "generation_settings", "static_analysis"):
             value = (data.get("metadata") or {}).get(key)
             if value is not None and not isinstance(value, dict):
                 raise ValueError(f"Metadata {key} must be an object")
@@ -120,6 +120,8 @@ class BenchmarkReporter:
             md.append(f"- **Run (UTC)**: {metadata.get('created_at_utc', 'Unknown')}")
             md.append(f"- **Benchmark / Python**: {metadata.get('benchmark_version', 'Unknown')} / {metadata.get('python_version', 'Unknown')}")
             md.append(f"- **Compiler**: {compiler.get('name', 'Unknown')} / {compiler.get('version') or 'Unknown'} ({compiler.get('optimization', 'Unknown')})")
+            analysis = metadata.get("static_analysis") or {}
+            md.append(f"- **Static analysis**: {analysis.get('engine', 'Unknown')} / {analysis.get('cppcheck_version') or 'No cppcheck version recorded'}")
             md.append(f"- **Dataset SHA-256**: `{metadata.get('dataset_sha256', 'Unknown')}`")
             md.append(f"- **Evaluator SHA-256**: `{metadata.get('evaluator_sha256', 'Unknown')}`")
             md.append(f"- **Source revision**: `{metadata.get('source_revision') or 'Unavailable in installed distribution'}`")
@@ -150,6 +152,11 @@ class BenchmarkReporter:
             time_str = f"{r.execution_time_sec:.2f}s"
             md.append(f"| {r.tier} | `{r.task_id}` | {BenchmarkReporter._standard(r)} | {BenchmarkReporter._task_weights(r)} | {status_comp} | {test_str} | {mem_str} | {safe_str} | {score_str} | {time_str} |")
 
+        warnings = BenchmarkReporter.analysis_warnings(results)
+        if warnings:
+            md += ["", "### Static-analysis coverage", ""]
+            md += [f"- {warning}" for warning in warnings]
+
         return "\n".join(md)
 
     @staticmethod
@@ -178,7 +185,19 @@ class BenchmarkReporter:
         pass_at_1 = sum(1 for r in results if BenchmarkReporter._all_tests_passed(r)) / max(1, len(results)) * 100.0
         lines.append(f"Final Score: {avg_total:.2f}/100.0 | Pass@1: {pass_at_1:.1f}%")
         lines.append("=" * 110)
+        lines += [f"Warning: {warning}" for warning in BenchmarkReporter.analysis_warnings(results)]
         return "\n".join(lines)
+
+    @staticmethod
+    def analysis_warnings(results: List[TaskEvaluationResult]) -> List[str]:
+        warnings = []
+        for result in results:
+            status = result.safety_metrics.cppcheck_status
+            if status == "failed":
+                warnings.append(f"{result.task_id}: cppcheck failed; safety score uses built-in rules only.")
+            elif result.compiled and result.test_result.completed and status in (None, "not_run"):
+                warnings.append(f"{result.task_id}: static-analysis coverage was not recorded or did not run.")
+        return warnings
 
     @staticmethod
     def to_json_dict(results: List[TaskEvaluationResult], model_name: str,

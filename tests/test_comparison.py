@@ -17,9 +17,11 @@ class TestComparison(unittest.TestCase):
         data["model_name"] = name
         for task in data["tasks"]:
             task["model_name"] = name
+            task["safety_metrics"]["cppcheck_status"] = "disabled"
         data["metadata"] = {
             "dataset_sha256": "same-dataset", "compiler": {"name": "tcc", "version": "0.9.27"},
             "evaluator_sha256": "same-evaluator",
+            "static_analysis": {"engine": "builtin", "cppcheck_version": None},
             "platform": {"system": "Windows", "machine": "AMD64"},
             "generation_settings": {"temperature": None, "max_tokens": 4096, "request_timeout_seconds": 60},
         }
@@ -100,3 +102,24 @@ class TestComparison(unittest.TestCase):
             with redirect_stderr(io.StringIO()) as errors:
                 self.assertEqual(cli.cmd_compare(args), 1)
             self.assertIn("Cannot compare reports", errors.getvalue())
+
+    def test_static_analysis_configuration_must_match_and_fallback_is_visible(self):
+        first, second = self.report("one"), self.report("two")
+        second["metadata"]["static_analysis"] = {"engine": "builtin+cppcheck", "cppcheck_version": "2.fixture"}
+        with self.assertRaisesRegex(ValueError, "static_analysis"):
+            compare_runs([first, second])
+        first["metadata"]["static_analysis"] = dict(second["metadata"]["static_analysis"])
+        second["metadata"]["static_analysis"]["cppcheck_version"] = "other-version"
+        with self.assertRaisesRegex(ValueError, "static_analysis"):
+            compare_runs([first, second])
+        second["metadata"]["static_analysis"] = dict(first["metadata"]["static_analysis"])
+        for report in (first, second):
+            for task in report["tasks"]:
+                task["safety_metrics"]["cppcheck_status"] = "completed"
+        second["tasks"][0]["safety_metrics"].update(cppcheck_status="failed", cppcheck_diagnostic="tool timed out")
+        comparison = compare_runs([first, second])
+        self.assertIn("cppcheck failed", render_comparison(comparison))
+        row = next(row for row in comparison["models"] if row["model"] == "two")
+        self.assertEqual(row["cppcheck_failed_tasks"], 1)
+        second["metadata"].pop("static_analysis")
+        self.assertIn("static-analysis configuration/version is unknown", render_comparison(compare_runs([first, second])))

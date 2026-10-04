@@ -8,6 +8,7 @@ from typing import List
 from aibenchmark_esw.models import TaskEvaluationResult
 from aibenchmark_esw.dataset import DatasetLoader
 from aibenchmark_esw.sandbox.executor import ExecutionSandbox
+from aibenchmark_esw.sandbox.static_analyzer import StaticAnalyzer
 from aibenchmark_esw.metrics.reporter import BenchmarkReporter
 from aibenchmark_esw.llm.client import LLMClient
 from aibenchmark_esw.evaluation import evaluate_task, failed_evaluation
@@ -167,7 +168,8 @@ def cmd_run(args: argparse.Namespace) -> int:
         "temperature": llm_client.temperature, "max_tokens": llm_client.max_tokens,
         "request_timeout_seconds": llm_client.request_timeout,
     }
-    metadata = collect_run_metadata(tasks, executor, settings)
+    analyzer = StaticAnalyzer()
+    metadata = collect_run_metadata(tasks, executor, settings, analyzer)
     results: List[TaskEvaluationResult] = []
     for task in tasks:
         print(f" -> Running [{task.id}] (Tier {task.tier})...", end="", flush=True)
@@ -196,7 +198,7 @@ def cmd_run(args: argparse.Namespace) -> int:
                 solution_directory = Path(solution_directory)
                 solution_directory.mkdir(parents=True, exist_ok=True)
                 (solution_directory / f"{task.id}.c").write_text(solution_code, encoding="utf-8")
-            result = evaluate_task(task, solution_code, reference_code, args.model, executor)
+            result = evaluate_task(task, solution_code, reference_code, args.model, executor, analyzer)
         except Exception as error:
             result = failed_evaluation(task, args.model, str(error))
         if llm_client is not None:

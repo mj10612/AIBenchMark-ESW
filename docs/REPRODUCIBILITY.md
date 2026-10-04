@@ -27,6 +27,14 @@ prompt hashes identify the generated implementation and submitted messages.
 An evaluator hash identifies the Python implementation used for grading.
 Checkout paths and CRLF/LF differences do not alter these hashes.
 
+Reports also record the selected static-analysis backend and cppcheck version.
+Per-task safety results distinguish disabled, completed, failed, and unrun
+cppcheck checks. A failed invocation retains its diagnostic and uses the built-in
+rules; reports and comparisons explicitly warn about that reduced coverage.
+Comparisons reject differing recorded analyzer configurations/versions and warn
+when older reports lack analyzer information. CSV includes cppcheck completed
+and failed task counts.
+
 Per-task generation metadata includes the requested and resolved model,
 provider-reported token usage, elapsed generation time, and finish reason.
 Missing usage stays unknown. API failures and token-limit truncations stay in
