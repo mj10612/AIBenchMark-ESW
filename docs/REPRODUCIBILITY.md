@@ -56,6 +56,11 @@ host architecture, temperatures, token limits, and request timeouts must agree. 
 without provenance carry explicit warnings, rather than a claim of comparability.
 CSV includes usage/duration task counts so partial totals can be identified.
 
+Report readers validate booleans, counts, finite nonnegative measurements,
+supported schema versions, and score consistency before rendering or comparing.
+Uncompiled or incomplete tasks cannot carry positive scores. Valid legacy files
+remain readable; metadata and weights they never recorded remain unknown.
+
 Pass@1 here means one generated candidate passes all tests for a task. It is not
 a multi-sample Pass@k estimate. Memory is the host implementation object's
 allocated-section footprint, excluding stack/heap and the harness; it is not

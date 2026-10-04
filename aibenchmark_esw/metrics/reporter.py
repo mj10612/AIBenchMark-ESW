@@ -1,5 +1,6 @@
 from typing import List, Dict, Any
 from typing import Optional
+from aibenchmark_esw.metrics.validation import validate_task_result, validate_composite_score
 from aibenchmark_esw.models import (
     TaskEvaluationResult, TestResult, SizeMetrics, StaticSafetyMetrics, DimensionScores, TaskWeights,
 )
@@ -8,7 +9,10 @@ from aibenchmark_esw.models import (
 class BenchmarkReporter:
     @staticmethod
     def _all_tests_passed(result: TaskEvaluationResult) -> bool:
-        return result.compiled and result.test_result.completed and result.test_result.passed
+        tests = result.test_result
+        return (result.compiled is True and tests.completed is True and tests.passed is True
+                and tests.total_tests > 0 and tests.passed_tests == tests.total_tests
+                and tests.failed_tests == tests.ignored_tests == 0)
 
     @staticmethod
     def _weight_summary(results: List[TaskEvaluationResult], dimension: str) -> str:
@@ -38,6 +42,9 @@ class BenchmarkReporter:
     def from_json_dict(data: Dict[str, Any]) -> List[TaskEvaluationResult]:
         if not isinstance(data, dict) or not isinstance(data.get("tasks"), list):
             raise ValueError("Results must be an object containing a tasks array")
+        version = data.get("schema_version", 1)
+        if isinstance(version, bool) or not isinstance(version, int) or version not in (1, 2):
+            raise ValueError(f"Unsupported report schema version: {version}")
         if data.get("metadata") is not None and not isinstance(data["metadata"], dict):
             raise ValueError("Run metadata must be an object")
         for key in ("compiler", "platform", "generation_settings"):
@@ -48,6 +55,7 @@ class BenchmarkReporter:
         for item in data["tasks"]:
             if not isinstance(item, dict):
                 raise ValueError("Each task result must be an object")
+            validate_task_result(item, data.get("model_name", "unknown"))
             for key in ("generation", "provenance"):
                 if item.get(key) is not None and not isinstance(item[key], dict):
                     raise ValueError(f"Task {key} must be an object")
@@ -78,6 +86,9 @@ class BenchmarkReporter:
                 generation=item.get("generation"),
                 provenance=item.get("provenance"),
             ))
+            validate_composite_score(results[-1])
+        if len({result.task_id for result in results}) != len(results):
+            raise ValueError("Duplicate task IDs in a report")
         return results
 
     @staticmethod
