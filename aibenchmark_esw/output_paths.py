@@ -1,5 +1,6 @@
 """Preflight output destinations to prevent accidental destruction of inputs."""
 
+import os
 from pathlib import Path
 
 
@@ -15,6 +16,7 @@ def validate_output_paths(outputs, protected_files=(), protected_roots=()):
     filesystem changes or untrusted code executing in the benchmark process.
     """
     outputs = [Path(path) for path in outputs if path is not None]
+    lexical_roots = [Path(os.path.abspath(root)) for root in protected_roots]
     roots = [Path(root).resolve() for root in protected_roots]
     inputs = [Path(path) for path in protected_files]
     # Existing output files may be hard links to inputs outside their root.
@@ -27,7 +29,9 @@ def validate_output_paths(outputs, protected_files=(), protected_roots=()):
             if parent.exists() and not parent.is_dir():
                 raise NotADirectoryError(f"Output parent is not a directory: {parent}")
         resolved = path.resolve()
-        if any(resolved == root or root in resolved.parents for root in roots):
+        lexical = Path(os.path.abspath(path))
+        if (any(resolved == root or root in resolved.parents for root in roots)
+                or any(lexical == root or root in lexical.parents for root in lexical_roots)):
             raise ValueError(f"Output would overwrite benchmark inputs: {path}")
         if any(_same_file(path, source) for source in inputs):
             raise ValueError(f"Output would overwrite an input file: {path}")

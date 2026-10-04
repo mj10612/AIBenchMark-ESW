@@ -190,7 +190,9 @@ def _save_checkpoint(output, results, model_name, metadata):
 
 
 def _input_roots(loader):
-    return [loader.tasks_root, data_root() / "third_party" / "unity", Path(__file__).resolve().parent]
+    # A discovered task folder may itself link outside the dataset root.
+    return [loader.tasks_root, *(task.task_dir for task in loader.list_tasks()),
+            data_root() / "third_party" / "unity", Path(__file__).resolve().parent]
 
 
 def cmd_run(args: argparse.Namespace) -> int:

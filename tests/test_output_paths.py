@@ -97,3 +97,28 @@ class TestOutputPaths(unittest.TestCase):
             with redirect_stdout(io.StringIO()):
                 self.assertEqual(cli.cmd_run(args), 0)
             self.assertEqual(json.loads(output.read_text())["overall_score"], 100)
+
+    def test_symlinked_task_folders_and_dangling_input_aliases_are_protected(self):
+        with TemporaryDirectory() as directory:
+            root = Path(directory) / "tasks"
+            root.mkdir()
+            external = Path(directory) / "external"
+            external.mkdir()
+            (external / "task.json").write_text('{"id":"linked"}', encoding="utf-8")
+            source = external / "reference.c"
+            source.write_text("keep source", encoding="utf-8")
+            dangling_target = Path(directory) / "missing.c"
+            try:
+                (root / "linked").symlink_to(external, target_is_directory=True)
+                (external / "alias.c").symlink_to(dangling_target)
+            except OSError:
+                self.skipTest("Symbolic link creation requires OS support or privileges")
+            for output in (source, root / "linked/reference.c", root / "linked/alias.c"):
+                args = cli.build_parser().parse_args(["run", "--tasks-root", str(root),
+                    "--model", "mock", "--output", str(output)])
+                with self.subTest(output=output), patch.object(cli.LLMClient, "generate_solution") as generate:
+                    with self.assertRaisesRegex(ValueError, "benchmark inputs"):
+                        cli.cmd_run(args)
+                    generate.assert_not_called()
+            self.assertEqual(source.read_text(), "keep source")
+            self.assertFalse(dangling_target.exists())
