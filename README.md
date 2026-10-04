@@ -146,6 +146,8 @@ With `--output`, runs save a complete JSON checkpoint before generation and afte
 
 Reports record the static-analysis backend and cppcheck version. When cppcheck fails, its diagnostic is saved and reports warn that safety scoring used only the built-in rules. Comparisons reject known mismatches in analyzer configuration and flag missing legacy analyzer information.
 
+Set `AIBENCHMARK_ESW_CPPCHECK=off` for reproducible built-in-only analysis, or set it to a working cppcheck executable. Leaving it unset enables PATH discovery. Compiler CI jobs select built-in analysis explicitly; a separate CI job validates an installed cppcheck against real C fixtures.
+
 ---
 
 ## 📐 Scoring Methodology

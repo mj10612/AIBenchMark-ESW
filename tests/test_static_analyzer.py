@@ -8,6 +8,20 @@ from aibenchmark_esw.sandbox.static_analyzer import StaticAnalyzer
 
 
 class TestStaticAnalyzer(unittest.TestCase):
+    def test_analyzer_selection_is_explicit_and_can_disable_incidental_tools(self):
+        with patch.dict("os.environ", {"AIBENCHMARK_ESW_CPPCHECK": "configured-cppcheck"}):
+            self.assertEqual(StaticAnalyzer().cppcheck_cmd, "configured-cppcheck")
+            self.assertEqual(StaticAnalyzer("explicit-cppcheck").cppcheck_cmd, "explicit-cppcheck")
+        with TemporaryDirectory() as directory:
+            source = Path(directory) / "candidate.c"
+            source.write_text("void f(void) { malloc(1); }", encoding="utf-8")
+            with patch.dict("os.environ", {"AIBENCHMARK_ESW_CPPCHECK": "off"}), \
+                    patch("aibenchmark_esw.sandbox.static_analyzer.subprocess.run") as invoke:
+                metrics = StaticAnalyzer().analyze(source)
+                invoke.assert_not_called()
+                self.assertEqual(metrics.cppcheck_status, "disabled")
+                self.assertEqual(metrics.error_count, 1)
+
     def test_allocation_aliases_are_detected_without_cppcheck(self):
         samples = [
             '#define ALLOC malloc\n#define DEALLOC free\nvoid fn(void) { void *p = ALLOC(1); DEALLOC(p); }',

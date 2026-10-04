@@ -1,4 +1,5 @@
 import re
+import os
 import shutil
 import subprocess
 from pathlib import Path
@@ -9,7 +10,8 @@ from aibenchmark_esw.sandbox.c_source import mask_noncode
 
 class StaticAnalyzer:
     def __init__(self, cppcheck_cmd: Optional[str] = None):
-        self.cppcheck_cmd = cppcheck_cmd or shutil.which("cppcheck")
+        configured = cppcheck_cmd if cppcheck_cmd is not None else os.environ.get("AIBENCHMARK_ESW_CPPCHECK")
+        self.cppcheck_cmd = None if configured == "off" else configured or shutil.which("cppcheck")
         self.last_cppcheck_error = None
 
     def analyze(self, source_path: Path, include_dirs: Optional[List[Path]] = None,

@@ -35,6 +35,15 @@ Comparisons reject differing recorded analyzer configurations/versions and warn
 when older reports lack analyzer information. CSV includes cppcheck completed
 and failed task counts.
 
+For repeatable analyzer selection, set `AIBENCHMARK_ESW_CPPCHECK=off` to use only
+the built-in rules, or set it to a cppcheck executable path. When unset, PATH
+discovery remains the default. A programmatic `StaticAnalyzer` executable
+argument takes precedence. Compiler-matrix CI jobs explicitly use built-in
+analysis; a separate Linux job installs cppcheck and requires real analysis of
+a reference implementation and a deliberate out-of-bounds defect. To run those
+integration checks locally, set `AIBENCHMARK_ESW_TEST_CPPCHECK` to your working
+cppcheck executable and run `python -m unittest discover -s tests -p test_cppcheck_integration.py -v`.
+
 Per-task generation metadata includes the requested and resolved model,
 provider-reported token usage, elapsed generation time, and finish reason.
 Missing usage stays unknown. API failures and token-limit truncations stay in
