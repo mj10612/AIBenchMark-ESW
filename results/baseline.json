@@ -1,10 +1,10 @@
 {
   "schema_version": 2,
   "metadata": {
-    "run_id": "85dc4ff5094d4dd9875f9f5df32d8db9",
-    "created_at_utc": "2026-10-03T12:35:21.279736+00:00",
+    "run_id": "8b83868bc2c542119a137fec9b77a88e",
+    "created_at_utc": "2026-10-04T02:38:33.695026+00:00",
     "benchmark_version": "0.1.0",
-    "evaluator_sha256": "ff7a3a59e4e192d06fca3d069ea6989c3736c37546cd3df897ae2cf6a44d9c89",
+    "evaluator_sha256": "4aff1a50f81a007bc484f85bd026f232c88235372c711bc7f6363eb0db776707",
     "python_version": "3.11.15",
     "platform": {
       "system": "Windows",
@@ -17,7 +17,11 @@
       "optimization": "native",
       "allow_standard_fallback": false
     },
-    "source_revision": "6bf8fcfcc7d15e3e8a768c41b8f5f3c24e3fe7c9",
+    "static_analysis": {
+      "engine": "builtin",
+      "cppcheck_version": null
+    },
+    "source_revision": "27dfda7d00754d70819518aa4219d4ea5be0f6c4",
     "source_dirty": false,
     "selected_tasks": [
       "tier1_crc16",
@@ -34,7 +38,9 @@
       "tier4_bitmask_fix": "43a97ee78b86a62bef6f9ed9cd7b78559ad96b558b877bf0a31fd9e47fbe0296"
     },
     "dataset_sha256": "23604719d8a64f99729efa8f68db46f031d2ce26636f3e9437769eaa978bb88e",
-    "generation_settings": null
+    "generation_settings": null,
+    "run_status": "completed",
+    "pending_tasks": []
   },
   "model_name": "baseline",
   "overall_score": 100.0,
@@ -64,7 +70,9 @@
       "safety_metrics": {
         "error_count": 0,
         "warning_count": 0,
-        "violations": []
+        "violations": [],
+        "cppcheck_status": "disabled",
+        "cppcheck_diagnostic": null
       },
       "scores": {
         "functional": 100.0,
@@ -72,7 +80,7 @@
         "safety": 100.0,
         "total": 100.0
       },
-      "execution_time_sec": 0.212,
+      "execution_time_sec": 0.389,
       "error_log": null,
       "weights": {
         "functional": 0.6,
@@ -112,7 +120,9 @@
       "safety_metrics": {
         "error_count": 0,
         "warning_count": 0,
-        "violations": []
+        "violations": [],
+        "cppcheck_status": "disabled",
+        "cppcheck_diagnostic": null
       },
       "scores": {
         "functional": 100.0,
@@ -120,7 +130,7 @@
         "safety": 100.0,
         "total": 100.0
       },
-      "execution_time_sec": 0.211,
+      "execution_time_sec": 0.451,
       "error_log": null,
       "weights": {
         "functional": 0.6,
@@ -160,7 +170,9 @@
       "safety_metrics": {
         "error_count": 0,
         "warning_count": 0,
-        "violations": []
+        "violations": [],
+        "cppcheck_status": "disabled",
+        "cppcheck_diagnostic": null
       },
       "scores": {
         "functional": 100.0,
@@ -168,7 +180,7 @@
         "safety": 100.0,
         "total": 100.0
       },
-      "execution_time_sec": 0.203,
+      "execution_time_sec": 0.355,
       "error_log": null,
       "weights": {
         "functional": 0.6,
@@ -208,7 +220,9 @@
       "safety_metrics": {
         "error_count": 0,
         "warning_count": 0,
-        "violations": []
+        "violations": [],
+        "cppcheck_status": "disabled",
+        "cppcheck_diagnostic": null
       },
       "scores": {
         "functional": 100.0,
@@ -216,7 +230,7 @@
         "safety": 100.0,
         "total": 100.0
       },
-      "execution_time_sec": 0.212,
+      "execution_time_sec": 0.334,
       "error_log": null,
       "weights": {
         "functional": 0.6,
@@ -256,7 +270,9 @@
       "safety_metrics": {
         "error_count": 0,
         "warning_count": 0,
-        "violations": []
+        "violations": [],
+        "cppcheck_status": "disabled",
+        "cppcheck_diagnostic": null
       },
       "scores": {
         "functional": 100.0,
@@ -264,7 +280,7 @@
         "safety": 100.0,
         "total": 100.0
       },
-      "execution_time_sec": 0.22,
+      "execution_time_sec": 0.36,
       "error_log": null,
       "weights": {
         "functional": 0.6,
