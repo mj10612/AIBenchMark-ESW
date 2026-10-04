@@ -7,14 +7,14 @@
 - **Overall AIBenchMark-ESW Score**: **100.00 / 100.0**
 
 ### Reproducibility
-- **Run (UTC)**: 2026-10-04T02:38:33.695026+00:00
+- **Run (UTC)**: 2026-10-04T02:48:19.047384+00:00
 - **Run status**: completed
 - **Benchmark / Python**: 0.1.0 / 3.11.15
 - **Compiler**: tcc / tcc version 0.9.27 (x86_64 Windows) (native)
 - **Static analysis**: builtin / No cppcheck version recorded
 - **Dataset SHA-256**: `23604719d8a64f99729efa8f68db46f031d2ce26636f3e9437769eaa978bb88e`
-- **Evaluator SHA-256**: `4aff1a50f81a007bc484f85bd026f232c88235372c711bc7f6363eb0db776707`
-- **Source revision**: `27dfda7d00754d70819518aa4219d4ea5be0f6c4`
+- **Evaluator SHA-256**: `9a163926050a8c63228ea9e75fc5e88ad280b58c907517bdd5b179327769206b`
+- **Source revision**: `48ea262992e4f06e525c97ec9162b211c6da4f9f`
 - **Source had local changes**: False
 
 ### Dimensional Scores
@@ -30,8 +30,8 @@ Weights below are functional/memory/safety. Memory and safety contributions are 
 
 | Tier | Task ID | Standard | Weights | Compile | Tests Passed | Flash/RAM (B) | Safety | Score | Time |
 | :---: | :--- | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: |
-| 1 | `tier1_crc16` | c99 | 60%/20%/20% | PASS | 5/5 | 361 / 0 | Err:0, Warn:0 | **100.0** | 0.39s |
-| 1 | `tier1_ring_buffer` | c99 | 60%/20%/20% | PASS | 9/9 | 1474 / 0 | Err:0, Warn:0 | **100.0** | 0.45s |
-| 2 | `tier2_debounce_fsm` | c99 | 60%/20%/20% | PASS | 5/5 | 1134 / 0 | Err:0, Warn:0 | **100.0** | 0.35s |
-| 3 | `tier3_i2c_sensor` | c99 | 60%/20%/20% | PASS | 9/9 | 790 / 0 | Err:0, Warn:0 | **100.0** | 0.33s |
-| 4 | `tier4_bitmask_fix` | c99 | 60%/20%/20% | PASS | 5/5 | 462 / 0 | Err:0, Warn:0 | **100.0** | 0.36s |
+| 1 | `tier1_crc16` | c99 | 60%/20%/20% | PASS | 5/5 | 361 / 0 | Err:0, Warn:0 | **100.0** | 0.36s |
+| 1 | `tier1_ring_buffer` | c99 | 60%/20%/20% | PASS | 9/9 | 1474 / 0 | Err:0, Warn:0 | **100.0** | 0.33s |
+| 2 | `tier2_debounce_fsm` | c99 | 60%/20%/20% | PASS | 5/5 | 1134 / 0 | Err:0, Warn:0 | **100.0** | 0.26s |
+| 3 | `tier3_i2c_sensor` | c99 | 60%/20%/20% | PASS | 9/9 | 790 / 0 | Err:0, Warn:0 | **100.0** | 0.30s |
+| 4 | `tier4_bitmask_fix` | c99 | 60%/20%/20% | PASS | 5/5 | 462 / 0 | Err:0, Warn:0 | **100.0** | 0.28s |

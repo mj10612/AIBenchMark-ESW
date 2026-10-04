@@ -1,10 +1,10 @@
 {
   "schema_version": 2,
   "metadata": {
-    "run_id": "8b83868bc2c542119a137fec9b77a88e",
-    "created_at_utc": "2026-10-04T02:38:33.695026+00:00",
+    "run_id": "112f9272a7574c8bb3a3a2b89d7c2998",
+    "created_at_utc": "2026-10-04T02:48:19.047384+00:00",
     "benchmark_version": "0.1.0",
-    "evaluator_sha256": "4aff1a50f81a007bc484f85bd026f232c88235372c711bc7f6363eb0db776707",
+    "evaluator_sha256": "9a163926050a8c63228ea9e75fc5e88ad280b58c907517bdd5b179327769206b",
     "python_version": "3.11.15",
     "platform": {
       "system": "Windows",
@@ -21,7 +21,7 @@
       "engine": "builtin",
       "cppcheck_version": null
     },
-    "source_revision": "27dfda7d00754d70819518aa4219d4ea5be0f6c4",
+    "source_revision": "48ea262992e4f06e525c97ec9162b211c6da4f9f",
     "source_dirty": false,
     "selected_tasks": [
       "tier1_crc16",
@@ -80,7 +80,7 @@
         "safety": 100.0,
         "total": 100.0
       },
-      "execution_time_sec": 0.389,
+      "execution_time_sec": 0.359,
       "error_log": null,
       "weights": {
         "functional": 0.6,
@@ -130,7 +130,7 @@
         "safety": 100.0,
         "total": 100.0
       },
-      "execution_time_sec": 0.451,
+      "execution_time_sec": 0.334,
       "error_log": null,
       "weights": {
         "functional": 0.6,
@@ -180,7 +180,7 @@
         "safety": 100.0,
         "total": 100.0
       },
-      "execution_time_sec": 0.355,
+      "execution_time_sec": 0.263,
       "error_log": null,
       "weights": {
         "functional": 0.6,
@@ -230,7 +230,7 @@
         "safety": 100.0,
         "total": 100.0
       },
-      "execution_time_sec": 0.334,
+      "execution_time_sec": 0.297,
       "error_log": null,
       "weights": {
         "functional": 0.6,
@@ -280,7 +280,7 @@
         "safety": 100.0,
         "total": 100.0
       },
-      "execution_time_sec": 0.36,
+      "execution_time_sec": 0.285,
       "error_log": null,
       "weights": {
         "functional": 0.6,
