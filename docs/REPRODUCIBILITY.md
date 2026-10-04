@@ -48,6 +48,27 @@ files, then replay one with:
 aibenchmark-esw eval --task tier1_crc16 --solution results/model_sources/tier1_crc16.c
 ```
 
+To retain a local evaluation as JSON, add `--output results/local_crc16.json`.
+It includes the same toolchain, analyzer, task, and candidate fingerprints as
+`run`; local evaluations have no provider prompt or usage. Compilation and test
+failures are still saved. `--reference` and `--solution` select alternative inputs
+and cannot be combined.
+
+## Checkpoints and interruption
+
+`run --output` writes a checkpoint before any provider requests and after each
+task, replacing the destination only after a complete JSON file is flushed.
+An output-path failure therefore stops the initial run before generation. A
+later write failure preserves the previous valid checkpoint.
+
+Ctrl+C during generation/evaluation saves available completed results, usage,
+and an `interrupted` run status, then exits with code 130. Unfinished tasks stay
+in the report and denominator with zero scores and explicit diagnostics.
+`metadata.pending_tasks` identifies them. An abrupt process termination leaves
+the last checkpoint marked `running`. Report commands display unfinished state;
+comparisons require finished runs. Each new invocation starts fresh and replaces
+its requested output file, so use distinct filenames to retain prior runs.
+
 ## Fair comparisons
 
 ```bash

@@ -11,6 +11,8 @@ published in this repository yet.
 - Reference correctness/budget validation, completed-suite checks, and preserved timeout diagnostics.
 - Provider generation controls, usage records, and saved source replay.
 - Versioned environment/dataset/source provenance and offline model comparisons.
+- Static-analysis backend/coverage records and validated report inputs.
+- Atomic progress checkpoints, interruption handling, and local evaluation JSON exports.
 - CI across GCC/Clang/TCC, distribution installation checks, and baseline artifacts.
 
 ## Next community priorities

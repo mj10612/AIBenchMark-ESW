@@ -14,6 +14,7 @@ from aibenchmark_esw.llm.client import LLMClient
 from aibenchmark_esw.evaluation import evaluate_task, failed_evaluation
 from aibenchmark_esw.provenance import collect_run_metadata, text_sha256
 from aibenchmark_esw.metrics.comparison import compare_runs, render_comparison
+from aibenchmark_esw.report_io import atomic_write_json
 
 
 def _positive_int(value: str) -> int:
@@ -51,18 +52,20 @@ def build_parser() -> argparse.ArgumentParser:
     # Command: eval (local solution evaluation)
     eval_p = subparsers.add_parser("eval", help="Evaluate a local solution or reference implementation")
     eval_p.add_argument("--task", type=str, required=True, help="Task ID (e.g. tier1_ring_buffer)")
-    eval_p.add_argument("--solution", type=str, help="Path to C solution file")
-    eval_p.add_argument("--reference", action="store_true", help="Evaluate the built-in reference solution")
+    input_group = eval_p.add_mutually_exclusive_group()
+    input_group.add_argument("--solution", type=str, help="Path to C solution file")
+    input_group.add_argument("--reference", action="store_true", help="Evaluate the built-in reference solution")
+    eval_p.add_argument("--output", type=Path, help="Save evaluation JSON with reproducibility metadata")
     eval_p.add_argument("--compiler", type=str, help="Custom C compiler executable path")
     eval_p.add_argument("--allow-standard-fallback", action="store_true",
                         help="Allow MSVC to evaluate C99 tasks as C11; recorded in results")
 
     # Command: run (LLM or baseline benchmark)
     run_p = subparsers.add_parser("run", help="Run benchmark across tasks using an LLM or reference baseline")
-    run_p.add_argument("--model", type=str, default="baseline", help="Model name (e.g. gpt-4o, claude-3-5-sonnet, ollama/codellama) or 'baseline'")
+    run_p.add_argument("--model", type=str, default="baseline", help="Provider/model ID available to your account, or 'baseline'")
     run_p.add_argument("--tier", type=int, choices=[1, 2, 3, 4], help="Run only tasks in this tier")
     run_p.add_argument("--tasks", type=str, help="Comma-separated task IDs to evaluate")
-    run_p.add_argument("--output", type=str, help="Path to save output JSON report")
+    run_p.add_argument("--output", type=str, help="Save JSON progress after every task and on interruption")
     run_p.add_argument("--compiler", type=str, help="Custom C compiler executable path")
     run_p.add_argument("--temperature", type=_temperature,
                        help="Optional provider-supported temperature; omitted by default")
@@ -134,13 +137,48 @@ def cmd_eval(args: argparse.Namespace) -> int:
 
     executor = ExecutionSandbox(compiler_path=args.compiler,
                                 allow_standard_fallback=getattr(args, "allow_standard_fallback", False))
-    result = evaluate_task(task, solution_code, loader.get_reference_solution(task.id),
-                           model_name, executor)
-    print(BenchmarkReporter.generate_cli_table([result], model_name=model_name))
+    analyzer = StaticAnalyzer()
+    output = getattr(args, "output", None)
+    metadata = collect_run_metadata([task], executor, static_analyzer=analyzer) if output else None
+    if metadata is not None:
+        metadata.update(run_status="running", pending_tasks=[task.id])
+        pending = failed_evaluation(task, model_name, "Not evaluated: evaluation has not finished")
+        _attach_provenance(pending, metadata, task.id, solution_code)
+        _save_checkpoint(output, [pending], model_name, metadata)
+    interrupted = False
+    try:
+        result = evaluate_task(task, solution_code, loader.get_reference_solution(task.id),
+                               model_name, executor, analyzer)
+    except KeyboardInterrupt:
+        result = failed_evaluation(task, model_name, "Evaluation interrupted by user")
+        interrupted = True
+    except Exception as error:
+        result = failed_evaluation(task, model_name, str(error))
+    if metadata is not None:
+        metadata.update(run_status="interrupted" if interrupted else "completed",
+                        pending_tasks=[task.id] if interrupted else [])
+        _attach_provenance(result, metadata, task.id, solution_code)
+        _save_checkpoint(output, [result], model_name, metadata)
+    print(BenchmarkReporter.generate_cli_table([result], model_name=model_name, metadata=metadata))
     if result.error_log:
         print("\n[Evaluation Error Details]")
         print(result.error_log)
-    return 0 if result.test_result.passed and not result.error_log else 1
+    if output:
+        print(f"\nResults successfully saved to: {output}")
+    return 130 if interrupted else 0 if result.test_result.passed and not result.error_log else 1
+
+
+def _attach_provenance(result, metadata, task_id, solution_code=None, messages=None):
+    result.provenance = {
+        "task_sha256": metadata["task_fingerprints"][task_id],
+        "candidate_sha256": text_sha256(solution_code) if solution_code else None,
+        "prompt_sha256": text_sha256(json.dumps(messages, sort_keys=True, ensure_ascii=False)) if messages else None,
+    }
+
+
+def _save_checkpoint(output, results, model_name, metadata):
+    if output:
+        atomic_write_json(output, BenchmarkReporter.to_json_dict(results, model_name, metadata))
 
 
 def cmd_run(args: argparse.Namespace) -> int:
@@ -170,8 +208,15 @@ def cmd_run(args: argparse.Namespace) -> int:
     }
     analyzer = StaticAnalyzer()
     metadata = collect_run_metadata(tasks, executor, settings, analyzer)
-    results: List[TaskEvaluationResult] = []
-    for task in tasks:
+    metadata.update(run_status="running", pending_tasks=[task.id for task in tasks])
+    results: List[TaskEvaluationResult] = [failed_evaluation(
+        task, args.model, "Not evaluated: run has not reached this task") for task in tasks]
+    for task, result in zip(tasks, results):
+        _attach_provenance(result, metadata, task.id)
+    # Establish a usable checkpoint and catch output path errors before any API calls.
+    _save_checkpoint(args.output, results, args.model, metadata)
+    interrupted = False
+    for index, task in enumerate(tasks):
         print(f" -> Running [{task.id}] (Tier {task.tier})...", end="", flush=True)
         if llm_client is not None:
             llm_client.last_generation = None
@@ -199,29 +244,29 @@ def cmd_run(args: argparse.Namespace) -> int:
                 solution_directory.mkdir(parents=True, exist_ok=True)
                 (solution_directory / f"{task.id}.c").write_text(solution_code, encoding="utf-8")
             result = evaluate_task(task, solution_code, reference_code, args.model, executor, analyzer)
+        except KeyboardInterrupt:
+            result = failed_evaluation(task, args.model, "Evaluation interrupted by user")
+            interrupted = True
         except Exception as error:
             result = failed_evaluation(task, args.model, str(error))
         if llm_client is not None:
             result.generation = llm_client.last_generation
-        result.provenance = {
-            "task_sha256": metadata["task_fingerprints"][task.id],
-            "candidate_sha256": text_sha256(solution_code) if solution_code else None,
-            "prompt_sha256": text_sha256(json.dumps(messages, sort_keys=True, ensure_ascii=False)) if messages else None,
-        }
-        results.append(result)
+        _attach_provenance(result, metadata, task.id, solution_code, messages)
+        results[index] = result
+        metadata["pending_tasks"] = [pending.id for pending in tasks[index if interrupted else index + 1:]]
+        metadata["run_status"] = "interrupted" if interrupted else "running" if metadata["pending_tasks"] else "completed"
+        _save_checkpoint(args.output, results, args.model, metadata)
         status = "PASS" if result.test_result.passed and not result.error_log else "FAIL"
         print(f" [{status} - Score: {result.scores.total_score:.1f}]")
         if result.error_log:
             print(f"    {result.error_log}")
+        if interrupted:
+            break
 
-    print("\n" + BenchmarkReporter.generate_cli_table(results, model_name=args.model))
+    print("\n" + BenchmarkReporter.generate_cli_table(results, model_name=args.model, metadata=metadata))
     if args.output:
-        out_path = Path(args.output)
-        out_path.parent.mkdir(parents=True, exist_ok=True)
-        out_path.write_text(json.dumps(BenchmarkReporter.to_json_dict(results, args.model, metadata),
-                                      indent=2), encoding="utf-8")
-        print(f"\nResults successfully saved to: {out_path}")
-    return 0 if all(result.test_result.passed and not result.error_log for result in results) else 1
+        print(f"\nResults successfully saved to: {args.output}")
+    return 130 if interrupted else 0 if all(result.test_result.passed and not result.error_log for result in results) else 1
 
 
 def cmd_report(args: argparse.Namespace) -> int:
@@ -235,7 +280,7 @@ def cmd_report(args: argparse.Namespace) -> int:
         results = BenchmarkReporter.from_json_dict(data)
         model_name = data.get("model_name", "unknown")
         rendered = (BenchmarkReporter.generate_markdown(results, model_name, data.get("metadata")) if args.format == "markdown"
-                    else BenchmarkReporter.generate_cli_table(results, model_name))
+                    else BenchmarkReporter.generate_cli_table(results, model_name, data.get("metadata")))
     except (OSError, ValueError, TypeError, KeyError) as error:
         print(f"Error: Invalid results file: {error}", file=sys.stderr)
         return 1
@@ -284,6 +329,9 @@ def main() -> None:
     except (OSError, ValueError) as error:
         print(f"Error: {error}", file=sys.stderr)
         exit_code = 1
+    except KeyboardInterrupt:
+        print("Interrupted. Any completed JSON checkpoint remains available.", file=sys.stderr)
+        exit_code = 130
     sys.exit(exit_code)
 
 

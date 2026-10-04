@@ -105,3 +105,28 @@ def validate_composite_score(result):
     # Stored dimensions and the composite have already been rounded separately.
     if not math.isclose(scores.total_score, expected, abs_tol=0.02):
         raise ValueError("Composite score contradicts the dimensions and task weights")
+
+
+def validate_run_state(metadata, results):
+    task_ids = {result.task_id for result in results}
+    selected = metadata.get("selected_tasks")
+    if selected is not None:
+        if (not isinstance(selected, list) or any(not isinstance(item, str) for item in selected)
+                or len(set(selected)) != len(selected) or set(selected) != task_ids):
+            raise ValueError("selected_tasks must match the report's task IDs without duplicates")
+    status = metadata.get("run_status")
+    if status is None:
+        if metadata.get("pending_tasks"):
+            raise ValueError("Pending tasks require an explicit run_status")
+        return
+    if status not in ("running", "completed", "interrupted"):
+        raise ValueError("Unknown run_status")
+    pending = metadata.get("pending_tasks")
+    if (not isinstance(pending, list) or any(not isinstance(item, str) for item in pending)
+            or len(set(pending)) != len(pending) or not set(pending).issubset(task_ids)):
+        raise ValueError("pending_tasks must identify report tasks without duplicates")
+    if status == "completed" and pending:
+        raise ValueError("Completed runs cannot contain pending tasks")
+    if any(result.scores.total_score != 0 or result.test_result.completed
+           for result in results if result.task_id in pending):
+        raise ValueError("Pending tasks cannot contain completed evaluations or nonzero scores")

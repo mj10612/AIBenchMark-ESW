@@ -92,6 +92,10 @@ aibenchmark-esw eval --task tier1_ring_buffer --reference
 Or test your own local C solution:
 ```bash
 aibenchmark-esw eval --task tier1_ring_buffer --solution ./my_ring_buffer.c
+
+# Export a local evaluation with the same provenance as benchmark runs.
+aibenchmark-esw eval --task tier1_ring_buffer --solution ./my_ring_buffer.c \
+  --output results/local_ring_buffer.json
 ```
 
 #### Run Benchmark with LLM Models
@@ -137,6 +141,10 @@ aibenchmark-esw eval --task tier1_crc16 --solution results/openai_sources/tier1_
 Comparison requires identical task sets, weights, standards, and compatible recorded evaluator, dataset, and toolchain settings. Failed tasks remain in the denominator. Legacy files can be compared with explicit missing-provenance warnings. Token usage and generation duration are reported only where available; no API price or dollar cost is inferred.
 
 For cross-toolchain validation, set `AIBENCHMARK_ESW_COMPILER` to a compiler executable (for example, `clang`); an explicit `--compiler` argument takes precedence. Provider settings must be supported by the selected model. A token-limit-truncated response is recorded as a generation failure.
+
+With `--output`, runs save a complete JSON checkpoint before generation and after each task. Ctrl+C preserves completed work and usage, marks pending tasks explicitly, and exits with code 130. Pending tasks remain in the denominator at zero points; reports show the unfinished status and `compare` rejects unfinished runs. Each invocation starts a new run; choose a new output filename to retain earlier runs. Local `eval --output` also exports provenance and failed evaluations. `--reference` and `--solution` are mutually exclusive.
+
+Reports record the static-analysis backend and cppcheck version. When cppcheck fails, its diagnostic is saved and reports warn that safety scoring used only the built-in rules. Comparisons reject known mismatches in analyzer configuration and flag missing legacy analyzer information.
 
 ---
 

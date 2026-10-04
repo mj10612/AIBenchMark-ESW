@@ -26,6 +26,8 @@ def compare_runs(reports):
         if any(result.model_name != model for result in results):
             raise ValueError("Task model names must match the run model")
         metadata = report.get("metadata") or {}
+        if metadata.get("run_status") not in (None, "completed"):
+            raise ValueError(f"Cannot compare unfinished run: {model} ({metadata['run_status']})")
         compiler = metadata.get("compiler") or {}
         host = metadata.get("platform") or {}
         analysis = metadata.get("static_analysis") or {}

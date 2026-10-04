@@ -1,6 +1,6 @@
 from typing import List, Dict, Any
 from typing import Optional
-from aibenchmark_esw.metrics.validation import validate_task_result, validate_composite_score
+from aibenchmark_esw.metrics.validation import validate_task_result, validate_composite_score, validate_run_state
 from aibenchmark_esw.models import (
     TaskEvaluationResult, TestResult, SizeMetrics, StaticSafetyMetrics, DimensionScores, TaskWeights,
 )
@@ -89,6 +89,7 @@ class BenchmarkReporter:
             validate_composite_score(results[-1])
         if len({result.task_id for result in results}) != len(results):
             raise ValueError("Duplicate task IDs in a report")
+        validate_run_state(data.get("metadata") or {}, results)
         return results
 
     @staticmethod
@@ -108,6 +109,9 @@ class BenchmarkReporter:
 
         md = []
         md.append(f"# AIBenchMark-ESW Benchmark Report: `{model_name}`\n")
+        warning = BenchmarkReporter.run_warning(metadata)
+        if warning:
+            md.append(f"**{warning}**\n")
         md.append("### Summary Overview")
         md.append(f"- **Total Tasks**: {total_tasks}")
         md.append(f"- **Compilation Rate**: {compiled_tasks}/{total_tasks} ({compiled_tasks/total_tasks*100:.1f}%)")
@@ -118,6 +122,7 @@ class BenchmarkReporter:
             compiler = metadata.get("compiler") or {}
             md.append("### Reproducibility")
             md.append(f"- **Run (UTC)**: {metadata.get('created_at_utc', 'Unknown')}")
+            md.append(f"- **Run status**: {metadata.get('run_status', 'Unknown (legacy report)')}")
             md.append(f"- **Benchmark / Python**: {metadata.get('benchmark_version', 'Unknown')} / {metadata.get('python_version', 'Unknown')}")
             md.append(f"- **Compiler**: {compiler.get('name', 'Unknown')} / {compiler.get('version') or 'Unknown'} ({compiler.get('optimization', 'Unknown')})")
             analysis = metadata.get("static_analysis") or {}
@@ -160,7 +165,8 @@ class BenchmarkReporter:
         return "\n".join(md)
 
     @staticmethod
-    def generate_cli_table(results: List[TaskEvaluationResult], model_name: str) -> str:
+    def generate_cli_table(results: List[TaskEvaluationResult], model_name: str,
+                           metadata: Optional[Dict[str, Any]] = None) -> str:
         lines = []
         lines.append("=" * 110)
         lines.append(f" AIBenchMark-ESW Benchmark Results - Model: {model_name}")
@@ -186,7 +192,18 @@ class BenchmarkReporter:
         lines.append(f"Final Score: {avg_total:.2f}/100.0 | Pass@1: {pass_at_1:.1f}%")
         lines.append("=" * 110)
         lines += [f"Warning: {warning}" for warning in BenchmarkReporter.analysis_warnings(results)]
+        warning = BenchmarkReporter.run_warning(metadata)
+        if warning:
+            lines.append(warning)
         return "\n".join(lines)
+
+    @staticmethod
+    def run_warning(metadata):
+        metadata = metadata or {}
+        if metadata.get("run_status") in ("running", "interrupted"):
+            return (f"Run status: {metadata['run_status']}; {len(metadata.get('pending_tasks', []))} "
+                    "tasks pending (included as zero). This run is unfinished.")
+        return None
 
     @staticmethod
     def analysis_warnings(results: List[TaskEvaluationResult]) -> List[str]:
