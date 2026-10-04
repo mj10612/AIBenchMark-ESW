@@ -3,7 +3,7 @@ import json
 import os
 import shutil
 import unittest
-from contextlib import redirect_stderr, redirect_stdout
+from contextlib import contextmanager, redirect_stderr, redirect_stdout
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from unittest.mock import patch
@@ -15,9 +15,21 @@ from aibenchmark_esw.provenance import task_sha256
 from aibenchmark_esw.resources import data_root
 
 
+@contextmanager
+def working_directory(path):
+    original = Path.cwd()
+    try:
+        os.chdir(path)
+        yield
+    finally:
+        os.chdir(original)
+
+
 class TestExternalDataset(unittest.TestCase):
     def test_external_tasks_support_list_eval_run_and_content_provenance(self):
-        with TemporaryDirectory() as directory:
+        # Windows runners can place the checkout and temp files on different
+        # drives. Run from the temp parent to exercise a valid relative root.
+        with TemporaryDirectory() as directory, working_directory(directory):
             root = Path(directory) / "my_tasks"
             task_dir = root / "my_crc"
             shutil.copytree(DatasetLoader().get_task("tier1_crc16").task_dir, task_dir)

@@ -16,7 +16,6 @@ def validate_output_paths(outputs, protected_files=(), protected_roots=()):
     filesystem changes or untrusted code executing in the benchmark process.
     """
     outputs = [Path(path) for path in outputs if path is not None]
-    lexical_roots = [Path(os.path.abspath(root)) for root in protected_roots]
     roots = [Path(root).resolve() for root in protected_roots]
     inputs = [Path(path) for path in protected_files]
     # Existing output files may be hard links to inputs outside their root.
@@ -28,10 +27,11 @@ def validate_output_paths(outputs, protected_files=(), protected_roots=()):
         for parent in path.parents:
             if parent.exists() and not parent.is_dir():
                 raise NotADirectoryError(f"Output parent is not a directory: {parent}")
-        resolved = path.resolve()
         lexical = Path(os.path.abspath(path))
-        if (any(resolved == root or root in resolved.parents for root in roots)
-                or any(lexical == root or root in lexical.parents for root in lexical_roots)):
+        # Resolve ancestors as well: a leaf symlink may point out of a protected
+        # folder, and Windows may spell that folder using an 8.3 name alias.
+        locations = [path.resolve(), *(parent.resolve() for parent in lexical.parents)]
+        if any(location == root or root in location.parents for location in locations for root in roots):
             raise ValueError(f"Output would overwrite benchmark inputs: {path}")
         if any(_same_file(path, source) for source in inputs):
             raise ValueError(f"Output would overwrite an input file: {path}")
