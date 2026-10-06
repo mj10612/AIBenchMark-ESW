@@ -200,6 +200,10 @@ class TestWorkflowFeatures(unittest.TestCase):
         report["tasks"][0]["safety_metrics"]["findings"][0]["severity"] = "unknown"
         with self.assertRaises(ValueError):
             BenchmarkReporter.from_json_dict(report)
+        report["tasks"][0]["safety_metrics"]["findings"][0]["severity"] = "error"
+        report["tasks"][0]["safety_metrics"]["findings"][0].pop("rule_id")
+        with self.assertRaises(ValueError):
+            BenchmarkReporter.from_json_dict(report)
 
     def test_schema_and_python_reject_structural_corruption(self):
         try:
@@ -266,6 +270,31 @@ class TestWorkflowFeatures(unittest.TestCase):
         self.assertEqual(len(rows), 2)
         self.assertEqual(set(rows[0]), {"model","task_id","total","functional","memory","safety","measured","pass_at_1"})
         self.assertEqual(rows[1]["memory"], "")
+        third = copy.deepcopy(reference)
+        third.model_name = "three"
+        comparison = compare_runs([BenchmarkReporter.to_json_dict([reference], "one"),
+            BenchmarkReporter.to_json_dict([other], "two"), BenchmarkReporter.to_json_dict([third], "three")])
+        self.assertEqual(comparison["largest_gap"]["high"]["model"], "three")
+        self.assertEqual(len(list(csv.DictReader(io.StringIO(render_comparison(comparison, "csv-long"))))), 3)
+        self.assertIn("| three | 100.00 |", render_comparison(comparison))
+
+    def test_eval_invalid_assets_are_retained_before_compiler_construction(self):
+        import shutil
+        with TemporaryDirectory() as directory:
+            root = Path(directory) / "tasks"
+            task = root / self.task.id
+            shutil.copytree(self.task.task_dir, task)
+            (task / "prompt.md").unlink()
+            report_path = Path(directory) / "failed.json"
+            args = cli.build_parser().parse_args(["eval", "--task", self.task.id, "--reference",
+                "--tasks-root", str(root), "--output", str(report_path)])
+            with patch.object(cli, "_new_executor") as construct, redirect_stdout(io.StringIO()), redirect_stderr(io.StringIO()):
+                self.assertEqual(cli.cmd_eval(args), 1)
+                construct.assert_not_called()
+            report = json.loads(report_path.read_text())
+            self.assertIn("Missing prompt: prompt.md", report["tasks"][0]["error_log"])
+            self.assertEqual(report["overall_score"], 0)
+            BenchmarkReporter.from_json_dict(report)
 
 
 if __name__ == "__main__":

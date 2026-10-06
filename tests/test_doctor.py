@@ -43,7 +43,9 @@ class TestDoctor(unittest.TestCase):
         self.assertIn("Compiler not found", compiler["detail"])
 
     def test_optional_analyzer_absence_and_explicit_broken_analyzer_are_distinct(self):
-        with patch.dict(os.environ, {}, clear=True), patch("shutil.which", return_value=None):
+        real_which = shutil.which
+        with patch.dict(os.environ, {"AIBENCHMARK_ESW_CPPCHECK": ""}), patch(
+                "shutil.which", side_effect=lambda command: None if command == "cppcheck" else real_which(command)):
             report = run_doctor([self.task], self.loader, self.executor)
         self.assertTrue(report["passed"], report)
         analyzer = next(check for check in report["checks"] if check["name"] == "analyzer")

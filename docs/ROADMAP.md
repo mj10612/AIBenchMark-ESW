@@ -1,7 +1,7 @@
 # Roadmap and project status
 
 AIBenchMark-ESW is an early-stage, Apache-2.0 embedded C benchmark. The current
-dataset contains seven tasks and 65 C test cases. Public baseline results are
+dataset contains eight tasks and 77 C test cases. Public baseline results are
 golden-reference validation; no live OpenAI or Claude measurements have been
 published in this repository yet.
 
@@ -18,18 +18,25 @@ published in this repository yet.
 - Q1.15 saturation and truncation tests, faulty-implementation checks, and AVR arithmetic-width validation.
 - Rollover-safe tick timers with periodic phase retention, missed-expiration counts, and boundary/mutation tests.
 - CI across GCC/Clang/TCC, distribution installation checks, and baseline artifacts.
+- Compatible checkpoint resume, bounded parallel jobs, transient retries and public plan/review turns.
+- Offline doctor/preflight, cached reference validation, JUnit exports and repeated-run statistics.
+- Bounded COBS packet framing, 22 reviewed mutation probes and strengthened CRC/I2C/button contracts.
+- Structured safety findings, portable report schema and versioned scoring-policy validation.
+- Per-task comparison matrices, target-scoped AVR/ARM object evidence and process resource caps.
+- Ruff/type/coverage gates and a published-evidence fingerprint drift check.
 
 ## Next community priorities
 
-1. Add reviewed tasks for packet framing and DMA ownership,
+1. Add reviewed tasks for DMA ownership and additional peripheral contracts,
    with boundary tests and resource budgets calibrated per toolchain.
 2. Publish authorized, reproducible provider runs using exact model IDs and
    matching evaluation settings. Keep failed generations and missing usage visible.
-3. Add repeated-sampling statistics before making model-ranking claims.
+3. Expand reviewed mutation coverage and publish larger independent sample sets
+   before making model-ranking claims.
 4. Expand MCU cross-compilation and target-specific footprint calibration;
-   host footprints and LLVM width checks remain limited proxies.
-5. Explore opt-in process/container isolation for untrusted candidates. Current
-   native execution has no OS security boundary.
+   object footprints exclude startup/linker/stack/heap and remain limited proxies.
+5. Explore container/VM isolation for untrusted candidates beyond the implemented
+   process resource caps. Current execution has no filesystem/network security boundary.
 
 These are planned work, not implemented guarantees. Contributors can open a
 feature request with an API contract, test cases, and validation plan. Documentation

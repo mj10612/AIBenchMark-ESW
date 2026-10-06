@@ -34,14 +34,19 @@ def child_alive(pid):
             return api.WaitForSingleObject(handle, 200) == 258
         finally:
             api.CloseHandle(handle)
-    try:
-        os.kill(pid, 0)
-    except ProcessLookupError:
-        return False
-    status = Path(f"/proc/{pid}/stat")
-    if status.exists() and status.read_text().split(")", 1)[1].strip().startswith("Z"):
-        return False
-    return True
+    # SIGKILL delivery is asynchronous, like Windows Job termination above.
+    deadline = time.monotonic() + 0.2
+    while True:
+        try:
+            os.kill(pid, 0)
+            status = Path(f"/proc/{pid}/stat")
+            if status.exists() and status.read_text().split(")", 1)[1].strip().startswith("Z"):
+                return False
+        except (ProcessLookupError, FileNotFoundError):
+            return False
+        if time.monotonic() >= deadline:
+            return True
+        time.sleep(0.005)
 
 
 class TestRuntimeControls(unittest.TestCase):
@@ -146,7 +151,8 @@ int main(void){UNITY_BEGIN();RUN_TEST(test_ok);return UNITY_END();}
         result = run_bounded([sys.executable, "-c", source], timeout=5, max_output_bytes=4096,
                              isolation="process", memory_limit_bytes=128*1024*1024)
         self.assertNotEqual(result.returncode, 0)
-        self.assertNotIn(b"allocation succeeded", result.stdout)
+        # Python 3.13 traceback source echoes the string literal on failure.
+        self.assertNotIn(b"allocation succeeded", result.stdout.splitlines())
 
     def test_compile_timeout_is_configurable_independently(self):
         task = DatasetLoader().get_task("tier1_crc16")
@@ -244,7 +250,7 @@ int main(void){UNITY_BEGIN();RUN_TEST(test_ok);return UNITY_END();}
             task = replace(DatasetLoader().get_task("tier1_crc16"), task_dir=root)
             for sanitizer, source, diagnostic in (
                     ("undefined", "int answer(void){volatile int a=2147483647;return a+1;}", "runtime error:"),
-                    ("address", "int answer(void){volatile int a[1]={1};return a[2];}", "AddressSanitizer")):
+                    ("address", "int answer(void){volatile int a[1]={1};volatile int index=2;return a[index];}", "AddressSanitizer")):
                 with self.subTest(sanitizer=sanitizer):
                     executor = ExecutionSandbox(compiler, sanitizers=(sanitizer,))
                     compiled, result = executor.compile_and_test(task, "int answer(void){return 1;}")
