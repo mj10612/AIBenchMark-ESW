@@ -17,7 +17,7 @@ def include_benchmark_file(path):
         return False
     if path.name.startswith("_temp_"):
         return False
-    extensions = (".json", ".md", ".h", ".c") if path.parts[0] == "tasks" else (".h", ".c")
+    extensions = (".json", ".md", ".h", ".c", ".inc", ".bin") if path.parts[0] == "tasks" else (".h", ".c")
     return path.name == "CMakeLists.txt" or path.suffix.lower() in extensions
 
 

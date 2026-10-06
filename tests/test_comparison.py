@@ -125,3 +125,46 @@ class TestComparison(unittest.TestCase):
         self.assertEqual(row["cppcheck_failed_tasks"], 1)
         second["metadata"].pop("static_analysis")
         self.assertIn("static-analysis configuration/version is unknown", render_comparison(compare_runs([first, second])))
+
+    def test_baseline_or_missing_generation_settings_have_named_warning(self):
+        first, second = self.report("baseline"), self.report("generated")
+        first["metadata"]["generation_settings"] = None
+        comparison = compare_runs([first, second])
+        for format_name in ("cli", "markdown"):
+            rendered = render_comparison(comparison, format_name)
+            self.assertIn("baseline: generation settings", rendered)
+            self.assertIn("local/baseline", rendered)
+        second["metadata"].pop("generation_settings")
+        self.assertTrue(any("generated: generation settings" in warning
+                            for warning in compare_runs([first, second])["warnings"]))
+
+    def test_os_release_and_execution_settings_are_compared_when_recorded(self):
+        first, second = self.report("one"), self.report("two")
+        first["metadata"]["platform"]["release"] = "old"
+        second["metadata"]["platform"]["release"] = "new"
+        with self.assertRaisesRegex(ValueError, "release"):
+            compare_runs([first, second])
+        second["metadata"]["platform"].pop("release")
+        self.assertTrue(any("release is unknown" in warning for warning in compare_runs([first, second])["warnings"]))
+        first["metadata"]["execution_settings"] = {"isolation": "process"}
+        second["metadata"]["execution_settings"] = {"isolation": "native"}
+        with self.assertRaisesRegex(ValueError, "execution_settings"):
+            compare_runs([first, second])
+
+    def test_generation_strategy_defaults_and_system_prompt_identity(self):
+        first, second = self.report("one"), self.report("two")
+        second["metadata"]["generation_settings"].update(prompt_strategy="single", review_turn=False)
+        compare_runs([first, second])
+        second["metadata"]["generation_settings"]["prompt_strategy"] = "plan"
+        with self.assertRaisesRegex(ValueError, "prompt strategy"):
+            compare_runs([first, second])
+        second["metadata"]["generation_settings"]["prompt_strategy"] = "single"
+        second["metadata"]["generation_settings"]["system_prompt_sha256"] = "custom"
+        with self.assertRaisesRegex(ValueError, "prompt strategy"):
+            compare_runs([first, second])
+
+    def test_known_unreadable_input_provenance_is_rejected(self):
+        first, second = self.report("one"), self.report("two")
+        first["metadata"]["unreadable_assets"] = {"one": [{"asset": "task/prompt.md", "error": "PermissionError"}]}
+        with self.assertRaisesRegex(ValueError, "unreadable"):
+            compare_runs([first, second])

@@ -28,3 +28,11 @@ Makefile
 # Results / Temp logs
 _temp_*
 results/*.log
+
+# Local coverage and static-check caches
+.coverage
+.coverage.*
+coverage.xml
+htmlcov/
+.mypy_cache/
+.ruff_cache/

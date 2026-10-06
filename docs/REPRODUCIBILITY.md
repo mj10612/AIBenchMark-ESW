@@ -81,8 +81,11 @@ and an `interrupted` run status, then exits with code 130. Unfinished tasks stay
 in the report and denominator with zero scores and explicit diagnostics.
 `metadata.pending_tasks` identifies them. An abrupt process termination leaves
 the last checkpoint marked `running`. Report commands display unfinished state;
-comparisons require finished runs. Each new invocation starts fresh and replaces
-its requested output file, so use distinct filenames to retain prior runs.
+comparisons require finished runs. Use `run --resume checkpoint.json` to retry only pending tasks. Resume restores
+saved options, retains completed slots, usage history and run_id, and rejects
+changed fingerprints, toolchains, analyzers, platforms, targets or prompt settings
+before replacing the checkpoint. Ordinary new invocations start fresh; retain
+independent runs in distinct files.
 
 ## Fair comparisons
 
@@ -115,3 +118,72 @@ GitHub Actions publishes baseline JSON and Markdown for each compiler job.
 Those artifacts validate reference implementations and packaging, not paid
 provider model performance. Real provider evaluations are opt-in and require
 your own authorized API access.
+
+
+## Current evidence, schema and policy
+
+Verify the committed evidence without compiler/provider access:
+`python -m aibenchmark_esw.baseline_check results/baseline.json`.
+CI rejects evaluator or dataset drift on every push/PR. The refreshed published
+baseline sets `source_revision` and `source_dirty` to null with
+`source_revision_status=published-artifact`: a report cannot contain the hash of
+the commit that adds itself. Use the publishing commit from `git log -- results/baseline.json`
+and the verified code/dataset hashes. Runtime checkout reports still record HEAD
+and dirty state; installed distributions report null rather than an unrelated
+working-directory repository revision.
+
+New schema-2 reports declare a scoring policy (`functional-gated-v1`, 15/error,
+3/warning, per-task limits/weights). Deleting a per-task policy field or disagreeing
+with the recorded policy is rejected. Matching local bundled-task hashes permit
+configuration corroboration. Older reports without the declaration are explicitly
+legacy/unverifiable; their averages remain descriptive, with warnings and unknown
+comparison provenance. This is consistency checking, not report authentication.
+
+The portable draft 2020-12 JSON Schema is available from
+`aibenchmark_esw.report_schema.report_schema()` or `validate-report --schema`.
+It can be used with any compatible validator without installing this evaluator.
+The optional `schema` extra enables `validate-report file.json`, which also calls
+the Python consistency validator. Schema covers shapes, ranges, enums and required
+fields. Python additionally checks count/completion/return-code consistency,
+functional ratios, safety penalties, limits-based memory rewards, composite
+weights/policy, pending-task state and selection identity. JSON Schema does not
+prove arithmetic consistency or correspondence to a particular source dataset.
+
+`compare` adds a per-task total matrix and deterministic largest-gap summary,
+for example `Largest gap: tier1_crc16 (model-a 100.00 vs model-b 40.00)`.
+Unmeasured memory is labelled unavailable; aggregate memory preserves the previous
+zero-filled average with a named measured-count warning. Existing aggregate CSV
+columns are unchanged. `--format csv-long` exports fixed columns
+`model,task_id,total,functional,memory,safety,measured,pass_at_1`, with empty memory
+for unmeasured entries. `aggregate` accepts independent complete run IDs and
+reports mean/sample standard deviation, coverage and per-task pass frequency;
+it is not a Pass@k estimator. A single run has no standard-deviation estimate.
+
+`doctor --check-references` validates local tools with a trusted fixture before
+requests. An absent optional analyzer is valid builtin mode; a broken explicitly
+configured analyzer fails preflight. Mutations cover 22 hand-reviewed faulty
+candidates across eight tasks; compilation errors/timeouts are invalid probes,
+not successful kills. CI requires reference success and no surviving/invalid
+mutants. The suite contains eight tasks and 77 C test cases, including bounded
+COBS and strengthened CRC/I2C/HOLD contracts.
+
+Candidate tests and reference validation have separate durations. Caches use
+assets, reference text, compiler identity/settings and target identity, retain no
+compiled artifacts, and apply only within a process/run. Provider retries and
+plan/review turns retain public transcripts and known usage; missing token usage
+stays unknown. Resumed paid attempts remain in history with coverage rather than
+being overwritten. System prompt files and per-task prompt overrides are hashed.
+
+`--target arm:cortex-m0 --cross-compiler clang` and `--target avr:atmega328p`
+compile target objects while tests run on the host. Default limits may be overridden
+by `limits.targets["arm:cortex-m0"]` or CPU key `cortex-m0`; effective budgets,
+compiler/flags and target are recorded and rendered. Mixed targets cannot be
+ranked together. ELF allocated non-NOBITS sections count as Flash; writable and
+NOBITS sections count as RAM, including architecture-specific allocated sections.
+Measurements exclude startup/linker/stack/heap and do not establish final MCU fit.
+Native host behaviour remains the default; Mach-O footprint is unsupported.
+
+Structured safety findings retain rule_id, engine, severity, message, basename and
+line alongside legacy prose. Provenance declares rule configuration, effective
+standard policy and severity mapping; comparisons reject differences. File/line
+are diagnostic lexer/cppcheck locations; macro expansion can limit precision.

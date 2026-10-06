@@ -1,3 +1,8 @@
+> Historical design/workflow artifact from 2026-09-27. Its original implementation
+> assumptions preceded revision `3c04a078`. Current behaviour is defined by
+> [README](../../../README.md), [ROADMAP](../../ROADMAP.md), and
+> [REPRODUCIBILITY](../../REPRODUCIBILITY.md).
+
 # Embedded AI Coding Benchmark (`AIBenchMark-ESW`) Design Document
 
 ## 1. 개요 (Overview)

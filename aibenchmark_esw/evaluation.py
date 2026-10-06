@@ -13,6 +13,7 @@ from aibenchmark_esw.metrics.scorer import BenchmarkScorer
 from aibenchmark_esw.sandbox.executor import ExecutionSandbox
 from aibenchmark_esw.sandbox.size_analyzer import SizeAnalyzer
 from aibenchmark_esw.sandbox.static_analyzer import StaticAnalyzer
+from aibenchmark_esw.reference_cache import executor_reference_cache
 
 
 def failed_evaluation(task: TaskConfig, model_name: str, error: str) -> TaskEvaluationResult:
@@ -20,16 +21,19 @@ def failed_evaluation(task: TaskConfig, model_name: str, error: str) -> TaskEval
         task.id, task.tier, model_name, False,
         TestResult(output=error, completed=False), SizeMetrics(measured=False),
         StaticSafetyMetrics(cppcheck_status="not_run"), DimensionScores(), 0.0, error_log=error,
-        weights=task.weights, target_standard=task.target_standard,
+        weights=task.weights, target_standard=task.target_standard, limits=task.limits,
+        candidate_time_sec=0.0, reference_validation_time_sec=0.0,
     )
 
 
 def evaluate_task(task: TaskConfig, solution_code: str, reference_code: Optional[str],
                   model_name: str, executor: ExecutionSandbox,
-                  analyzer: Optional[StaticAnalyzer] = None) -> TaskEvaluationResult:
+                  analyzer: Optional[StaticAnalyzer] = None, reference_cache=None) -> TaskEvaluationResult:
     start = time.perf_counter()
     errors = []
     size = SizeMetrics(measured=False)
+    reference_elapsed = 0.0
+    cache_hit = False
     with tempfile.TemporaryDirectory(prefix="aibenchmark_eval_") as directory:
         work_dir = Path(directory)
         test_dir = work_dir / "tests"
@@ -41,31 +45,22 @@ def evaluate_task(task: TaskConfig, solution_code: str, reference_code: Optional
 
         if comp.success:
             try:
-                if not reference_code:
-                    raise ValueError("Reference implementation is required for memory measurement")
                 candidate = executor.compile_object(task, solution_code, work_dir / "candidate", "candidate")
-                reference = executor.compile_object(task, reference_code, work_dir / "reference", "reference")
                 if not candidate.success:
                     raise ValueError(candidate.output or "Candidate object compilation failed")
-                if not reference.success:
-                    raise ValueError(f"Reference validation failed: {reference.output or 'object compilation failed'}")
-                size = SizeAnalyzer().analyze(candidate.binary_path, reference.binary_path)
-                # Reuse an identical candidate's trusted test result; otherwise
-                # validate the reference in its own workspace with the same settings.
-                if reference_code == solution_code:
-                    ref_comp, ref_tests = comp, tests
-                else:
-                    ref_comp, ref_tests = executor.compile_and_test(
-                        task, reference_code, work_dir / "reference_tests")
-                if not ref_comp.success or not ref_tests.completed or not ref_tests.passed:
-                    detail = ref_comp.output if not ref_comp.success else ref_tests.output
-                    raise ValueError(f"Reference validation failed: reference must complete and pass all tests\n{detail}")
-                if size.ref_flash_bytes > task.limits.max_flash_bytes:
-                    raise ValueError("Reference validation failed: Flash footprint "
-                                     f"{size.ref_flash_bytes} exceeds budget {task.limits.max_flash_bytes}")
-                if size.ref_ram_bytes > task.limits.max_ram_bytes:
-                    raise ValueError("Reference validation failed: RAM footprint "
-                                     f"{size.ref_ram_bytes} exceeds budget {task.limits.max_ram_bytes}")
+                assert candidate.binary_path is not None
+                size = SizeAnalyzer().analyze(candidate.binary_path)
+                reference_start = time.perf_counter()
+                try:
+                    cache = reference_cache if reference_cache is not None else executor_reference_cache(executor)
+                    existing = (comp, tests, candidate) if reference_code == solution_code else None
+                    reference, cache_hit = cache.validate(task, reference_code, executor, existing)
+                finally:
+                    reference_elapsed = time.perf_counter() - reference_start
+                if reference.error:
+                    raise ValueError(reference.error)
+                size.ref_flash_bytes, size.ref_ram_bytes = reference.flash_bytes, reference.ram_bytes
+                size.measured = True
             except (OSError, ValueError) as error:
                 size.measured = False
                 errors.append(f"Memory analysis failed: {error}")
@@ -75,9 +70,14 @@ def evaluate_task(task: TaskConfig, solution_code: str, reference_code: Optional
                                                        comp.effective_standard or task.target_standard)
         scores = BenchmarkScorer.calculate_scores(task, comp, tests, size, safety)
 
+    candidate_elapsed = max(0.0, time.perf_counter() - start - reference_elapsed)
     return TaskEvaluationResult(
         task.id, task.tier, model_name, comp.success, tests, size, safety, scores,
-        time.perf_counter() - start, error_log="\n".join(errors) if errors else None,
+        candidate_elapsed, error_log="\n".join(errors) if errors else None,
         weights=task.weights, target_standard=task.target_standard,
         effective_standard=comp.effective_standard,
+        limits=task.limits, candidate_time_sec=candidate_elapsed,
+        reference_validation_time_sec=reference_elapsed,
+        provenance={"reference_cache_hit": cache_hit},
+        footprint_target=executor.cross.target if executor.cross is not None else "host",
     )

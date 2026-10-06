@@ -1,3 +1,8 @@
+> Historical design/workflow artifact from 2026-09-27. Its original implementation
+> assumptions preceded revision `3c04a078`. Current behaviour is defined by
+> [README](../../../README.md), [ROADMAP](../../ROADMAP.md), and
+> [REPRODUCIBILITY](../../REPRODUCIBILITY.md).
+
 # Embedded AI Coding Benchmark (AIBenchMark-ESW) Implementation Plan
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
@@ -6,7 +11,7 @@
 
 **Architecture:** Python-based CLI orchestrator (`aibenchmark_esw`) manages task loading, LLM interaction via LiteLLM, and execution within an isolated sandbox. The sandbox compiles C99 code, runs Unity unit test suites, extracts ELF Flash/RAM sizes, runs static analysis, and computes a composite multi-dimensional score.
 
-**Tech Stack:** Python 3.10+, Click/Typer, Pydantic, LiteLLM, Rich, C99, CMake, Unity Test Framework, GCC/Clang/MSVC, size/readelf.
+**Tech Stack:** Python 3.9+, argparse, dataclasses, optional LiteLLM, C99/C11/C17, Python-driven compilation, bundled Unity-compatible harness, GCC/Clang/TCC/MSVC, native ELF/COFF/PE parsers with GNU size fallback.
 
 ## Global Constraints
 - Target standard: Pure C (C99/C11 compatible).
@@ -70,7 +75,7 @@
 - [ ] **Step 3: Implement Execution Sandbox (CMake/compiler execution, timeout control, test log parsing)**
 - [ ] **Step 4: Implement Size Analyzer (binary footprint extraction with fallback heuristics)**
 - [ ] **Step 5: Implement Static Analyzer (cppcheck / clang-tidy integration)**
-- [ ] **Step 6: Implement Multi-Dimensional Scorer & Reporter (Markdown/Rich table/JSON)**
+- [ ] **Step 6: Implement Multi-Dimensional Scorer & Reporter (Markdown/plain CLI table/JSON)**
 - [ ] **Step 7: Implement LLM Client (LiteLLM wrapper with prompt construction and code block extraction)**
 - [ ] **Step 8: Implement CLI commands (`list`, `eval`, `run`, `report`)**
 - [ ] **Step 9: Commit orchestrator core**

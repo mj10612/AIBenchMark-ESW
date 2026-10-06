@@ -5,6 +5,7 @@
 static uint8_t mock_regs[256];
 static bool fail_next_read = false;
 static bool fail_next_write = false;
+static i2c_status_t failure_status = I2C_STATUS_ERROR_TIMEOUT;
 
 static i2c_status_t mock_read(uint8_t dev_addr, uint8_t reg_addr, uint8_t* data, size_t len) {
     if (dev_addr != SENSOR_DEFAULT_I2C_ADDR) {
@@ -12,7 +13,7 @@ static i2c_status_t mock_read(uint8_t dev_addr, uint8_t reg_addr, uint8_t* data,
     }
     if (fail_next_read) {
         fail_next_read = false;
-        return I2C_STATUS_ERROR_TIMEOUT;
+        return failure_status;
     }
     for (size_t i = 0; i < len; i++) {
         data[i] = mock_regs[(uint8_t)(reg_addr + i)];
@@ -26,7 +27,7 @@ static i2c_status_t mock_write(uint8_t dev_addr, uint8_t reg_addr, const uint8_t
     }
     if (fail_next_write) {
         fail_next_write = false;
-        return I2C_STATUS_ERROR_BUS_BUSY;
+        return failure_status;
     }
     for (size_t i = 0; i < len; i++) {
         mock_regs[(uint8_t)(reg_addr + i)] = data[i];
@@ -47,6 +48,7 @@ void setUp(void) {
     mock_regs[SENSOR_REG_WHO_AM_I] = SENSOR_EXPECTED_CHIP_ID;
     fail_next_read = false;
     fail_next_write = false;
+    failure_status = I2C_STATUS_ERROR_TIMEOUT;
     memset(&dev, 0, sizeof(dev));
 }
 
@@ -141,6 +143,46 @@ void test_missing_bus_and_callbacks(void) {
     TEST_ASSERT_EQUAL_INT(1234, temperature);
 }
 
+void test_all_bus_failure_statuses_are_propagated(void) {
+    const i2c_status_t failures[] = {I2C_STATUS_ERROR_NACK, I2C_STATUS_ERROR_TIMEOUT, I2C_STATUS_ERROR_BUS_BUSY};
+    for (size_t i = 0; i < sizeof(failures) / sizeof(failures[0]); ++i) {
+        failure_status = failures[i];
+        fail_next_read = true;
+        TEST_ASSERT_EQUAL(SENSOR_ERR_COMM_FAIL, sensor_init(&dev, &bus));
+        TEST_ASSERT_FALSE(dev.is_initialized);
+        fail_next_write = true;
+        TEST_ASSERT_EQUAL(SENSOR_ERR_COMM_FAIL, sensor_init(&dev, &bus));
+        TEST_ASSERT_FALSE(dev.is_initialized);
+        TEST_ASSERT_EQUAL(SENSOR_OK, sensor_init(&dev, &bus));
+        fail_next_read = true;
+        int16_t temperature = 1234;
+        TEST_ASSERT_EQUAL(SENSOR_ERR_COMM_FAIL, sensor_read_temperature_celsius_x100(&dev, &temperature));
+    }
+}
+
+void test_failed_reinitialization_invalidates_previous_device(void) {
+    int16_t temperature = 1234;
+    for (uint8_t scenario = 0; scenario < 6; ++scenario) {
+        i2c_bus_t invalid = bus;
+        mock_regs[SENSOR_REG_WHO_AM_I] = SENSOR_EXPECTED_CHIP_ID;
+        TEST_ASSERT_EQUAL(SENSOR_OK, sensor_init(&dev, &bus));
+        sensor_status_t expected = SENSOR_ERR_COMM_FAIL;
+        if (scenario == 0) fail_next_read = true;
+        if (scenario == 1) fail_next_write = true;
+        if (scenario == 2) {
+            mock_regs[SENSOR_REG_WHO_AM_I] = 0;
+            expected = SENSOR_ERR_INVALID_ID;
+        }
+        if (scenario == 3) invalid.read = NULL;
+        if (scenario == 4) invalid.write = NULL;
+        if (scenario >= 3) expected = SENSOR_ERR_NULL_PARAM;
+        TEST_ASSERT_EQUAL(expected, sensor_init(&dev, scenario == 5 ? NULL : &invalid));
+        TEST_ASSERT_FALSE(dev.is_initialized);
+        TEST_ASSERT_NULL(dev.bus);
+        TEST_ASSERT_EQUAL(SENSOR_ERR_COMM_FAIL, sensor_read_temperature_celsius_x100(&dev, &temperature));
+    }
+}
+
 int main(void) {
     UNITY_BEGIN();
     RUN_TEST(test_successful_init);
@@ -152,5 +194,7 @@ int main(void) {
     RUN_TEST(test_null_params_safety);
     RUN_TEST(test_temperature_range_and_fractional_values);
     RUN_TEST(test_missing_bus_and_callbacks);
+    RUN_TEST(test_all_bus_failure_statuses_are_propagated);
+    RUN_TEST(test_failed_reinitialization_invalidates_previous_device);
     return UNITY_END();
 }

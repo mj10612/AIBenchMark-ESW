@@ -1,7 +1,13 @@
 #include "i2c_sensor.h"
 
 sensor_status_t sensor_init(sensor_device_t* dev, const i2c_bus_t* bus) {
-    if (dev == NULL || bus == NULL || bus->read == NULL || bus->write == NULL) {
+    if (dev == NULL) {
+        return SENSOR_ERR_NULL_PARAM;
+    }
+    /* A failed re-initialization must never leave the old device usable. */
+    dev->is_initialized = false;
+    dev->bus = NULL;
+    if (bus == NULL || bus->read == NULL || bus->write == NULL) {
         return SENSOR_ERR_NULL_PARAM;
     }
 

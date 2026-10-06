@@ -91,6 +91,14 @@ void UnityIgnore(const char* message, uint32_t line)
 
 void UnityAssertEqualNumber(int64_t expected, int64_t actual, const char* msg, uint32_t line, int style)
 {
+    uint64_t mask = UINT64_MAX;
+    if (style == UNITY_DISPLAY_STYLE_HEX8) mask = UINT64_C(0xFF);
+    else if (style == UNITY_DISPLAY_STYLE_HEX16) mask = UINT64_C(0xFFFF);
+    else if (style == UNITY_DISPLAY_STYLE_HEX32) mask = UINT64_C(0xFFFFFFFF);
+    if (style == UNITY_DISPLAY_STYLE_HEX8 || style == UNITY_DISPLAY_STYLE_HEX16 || style == UNITY_DISPLAY_STYLE_HEX32) {
+        expected = (int64_t)((uint64_t)expected & mask);
+        actual = (int64_t)((uint64_t)actual & mask);
+    }
     if (expected != actual)
     {
         char buf[128];
@@ -112,4 +120,10 @@ void UnityAssertEqualNumber(int64_t expected, int64_t actual, const char* msg, u
         }
         UnityFail(msg ? msg : buf, line);
     }
+}
+
+void UnityAssertBits(uint32_t mask, uint32_t expected, uint32_t actual, const char* msg, uint32_t line)
+{
+    UnityAssertEqualNumber((int64_t)(expected & mask), (int64_t)(actual & mask),
+                           msg, line, UNITY_DISPLAY_STYLE_HEX32);
 }

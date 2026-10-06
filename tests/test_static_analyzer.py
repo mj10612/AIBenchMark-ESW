@@ -8,6 +8,74 @@ from aibenchmark_esw.sandbox.static_analyzer import StaticAnalyzer
 
 
 class TestStaticAnalyzer(unittest.TestCase):
+    def test_preprocessor_prose_and_inactive_branches_do_not_hide_real_code(self):
+        samples = [
+            "#if 0\ndon't parse this as a character literal\n#endif\nvoid *f(void){return malloc(8);}\nchar q='x';\n",
+            "#warning don't forget allocation\nvoid *f(void){return malloc(8);}\nchar q='x';\n",
+            '#pragma message("free")\nvoid *f(void){return malloc(8);}\n',
+            "#if 1\n#define ALLOC malloc\n#else\n#define ALLOC ignored\n#endif\n",
+        ]
+        with TemporaryDirectory() as directory:
+            source = Path(directory) / "source.c"
+            for sample in samples:
+                with self.subTest(sample=sample):
+                    source.write_text(sample, encoding="utf-8")
+                    self.assertEqual(StaticAnalyzer("off").analyze(source).error_count, 1)
+
+    def test_literal_disabled_nested_branches_are_excluded(self):
+        source_text = '''#if 0
+void disabled(void){malloc(1); goto end; end:; float x;}
+#if SOMETHING
+void nested(void){system("bad");}
+#endif
+#elif 1
+void active(void){}
+#else
+void disabled_else(void){calloc(1,1);}
+#endif
+'''
+        with TemporaryDirectory() as directory:
+            source = Path(directory) / "source.c"
+            source.write_text(source_text, encoding="utf-8")
+            metrics = StaticAnalyzer("off").analyze(source)
+        self.assertEqual(metrics.error_count, 0)
+        self.assertEqual(metrics.warning_count, 0)
+
+    def test_unknown_preprocessor_branches_keep_conservative_alias_detection(self):
+        with TemporaryDirectory() as directory:
+            source = Path(directory) / "source.c"
+            source.write_text("#if SOME_BUILD_FLAG\n#define ALLOC malloc\n#else\n#define ALLOC calloc\n#endif\n")
+            self.assertEqual(StaticAnalyzer("off").analyze(source).error_count, 1)
+
+    def test_keywords_do_not_match_identifier_substrings_or_literal_text(self):
+        with TemporaryDirectory() as directory:
+            source = Path(directory) / "source.c"
+            source.write_text('struct record { int is_double_buffered; int float_count; int goto_count; };\n'
+                              'const char *text="goto done; float x; unsigned int a;";\n'
+                              '/* double x; unsigned short a; */\n')
+            metrics = StaticAnalyzer("off").analyze(source)
+        self.assertEqual(metrics.error_count, 0)
+        self.assertEqual(metrics.warning_count, 0)
+
+    def test_named_allocator_policy_stays_conservative_for_bindings(self):
+        # Documented lexical policy: narrowing this to direct calls regresses
+        # macro aliases and function-pointer allocation (issue #13).
+        with TemporaryDirectory() as directory:
+            source = Path(directory) / "source.c"
+            source.write_text("void f(void){int free=3; (void)free;}\n")
+            self.assertEqual(StaticAnalyzer("off").analyze(source).error_count, 1)
+
+    def test_host_capabilities_are_flagged_with_aliases_and_ignore_member_access(self):
+        with TemporaryDirectory() as directory:
+            source = Path(directory) / "source.c"
+            source.write_text('#define RUN system\n#define CONNECT socket\n#define FILEOPEN fopen\n')
+            metrics = StaticAnalyzer("off").analyze(source)
+            self.assertEqual(metrics.error_count, 3)
+            self.assertTrue(any("process execution" in value for value in metrics.violations))
+            source.write_text('void f(void){bus->read(); bus->write(); thing.open();}\n'
+                              'char *message="system socket fopen"; /* popen */\n')
+            self.assertEqual(StaticAnalyzer("off").analyze(source).error_count, 0)
+
     def test_analyzer_selection_is_explicit_and_can_disable_incidental_tools(self):
         with patch.dict("os.environ", {"AIBENCHMARK_ESW_CPPCHECK": "configured-cppcheck"}):
             self.assertEqual(StaticAnalyzer().cppcheck_cmd, "configured-cppcheck")
@@ -111,7 +179,7 @@ void normal(void) {}
             self.assertEqual(metrics.error_count, 1)
             self.assertEqual(metrics.warning_count, 4)
             self.assertIn("--std=c11", run.call_args.args[0])
-            self.assertIn("--template={severity}:{id}:{message}", run.call_args.args[0])
+            self.assertIn("--template={severity}:{id}:{file}:{line}:{message}", run.call_args.args[0])
 
     def test_failed_cppcheck_falls_back_to_embedded_rules(self):
         with TemporaryDirectory() as directory:

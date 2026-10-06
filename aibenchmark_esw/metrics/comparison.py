@@ -8,14 +8,28 @@ from dataclasses import asdict
 from aibenchmark_esw.metrics.reporter import BenchmarkReporter
 
 
-def compare_runs(reports):
-    if len(reports) < 2:
+GENERATION_CONDITIONS = ("temperature", "max_tokens", "request_timeout_seconds",
+                         "prompt_strategy", "review_turn", "system_prompt_sha256")
+
+
+def generation_conditions(metadata):
+    settings = metadata.get("generation_settings")
+    if settings is None:
+        return None
+    # Defaults preserve comparison with the original one-turn report format.
+    defaults = {"prompt_strategy": "single", "review_turn": False}
+    return {key: settings.get(key, defaults.get(key)) for key in GENERATION_CONDITIONS}
+
+
+def compare_runs(reports, *, _allow_repeated_models=False, _check_generation=True):
+    if len(reports) < (1 if _allow_repeated_models else 2):
         raise ValueError("Comparison requires at least two reports")
     runs, models, warnings = [], set(), []
     for report in reports:
         results = BenchmarkReporter.from_json_dict(report)
         model = report.get("model_name")
-        if not isinstance(model, str) or not model or model in models:
+        if (not isinstance(model, str) or not model.strip()
+                or (model in models and not _allow_repeated_models)):
             raise ValueError("Reports must have distinct, nonempty model names")
         models.add(model)
         if not results:
@@ -26,6 +40,8 @@ def compare_runs(reports):
         if any(result.model_name != model for result in results):
             raise ValueError("Task model names must match the run model")
         metadata = report.get("metadata") or {}
+        if metadata.get("unreadable_assets"):
+            raise ValueError(f"Cannot compare {model}: benchmark inputs were unreadable when fingerprinted")
         if metadata.get("run_status") not in (None, "completed"):
             raise ValueError(f"Cannot compare unfinished run: {model} ({metadata['run_status']})")
         compiler = metadata.get("compiler") or {}
@@ -36,11 +52,17 @@ def compare_runs(reports):
         complete_provenance = bool(metadata.get("dataset_sha256") and metadata.get("evaluator_sha256")
                                    and compiler.get("name") and compiler.get("version")
                                    and host.get("system") and host.get("machine") and known_analysis)
+        if not metadata.get("scoring_policy"):
+            complete_provenance = False
+            warnings.append(f"{model}: legacy scoring policy is unverifiable; limits and weights are report-supplied.")
         if not complete_provenance:
             warnings.append(f"{model}: missing evaluator/dataset/toolchain provenance; compatibility cannot be fully checked.")
         if not known_analysis:
             warnings.append(f"{model}: static-analysis configuration/version is unknown.")
         warnings.extend(f"{model}: {warning}" for warning in BenchmarkReporter.analysis_warnings(results))
+        warnings.extend(f"{model}: {warning}" for warning in BenchmarkReporter.scoring_warnings(results))
+        if not host.get("release"):
+            warnings.append(f"{model}: host OS release is unknown; compatibility cannot be fully checked.")
         runs.append((report, results, tasks, metadata, complete_provenance))
 
     expected = set(runs[0][2])
@@ -49,6 +71,8 @@ def compare_runs(reports):
             raise ValueError("Reports must contain identical task sets, including failures")
     for task_id in expected:
         entries = [run[2][task_id] for run in runs]
+        if len({entry.footprint_target for entry in entries}) > 1:
+            raise ValueError(f"Incompatible footprint targets for {task_id}")
         weights = {tuple(asdict(entry.weights).values()) for entry in entries if entry.weights is not None}
         standards = {entry.target_standard for entry in entries if entry.target_standard is not None}
         effective = {entry.effective_standard for entry in entries if entry.effective_standard is not None}
@@ -60,22 +84,35 @@ def compare_runs(reports):
         fingerprints.discard(None)
         if len(fingerprints) > 1:
             raise ValueError(f"Incompatible task fingerprints for {task_id}")
+        limits = {tuple(asdict(entry.limits).values()) for entry in entries if entry.limits is not None}
+        if len(limits) > 1:
+            raise ValueError(f"Incompatible task limits for {task_id}")
 
-    for key in ("dataset_sha256", "evaluator_sha256", "benchmark_version", "compiler", "static_analysis"):
+    for key in ("dataset_sha256", "evaluator_sha256", "benchmark_version", "compiler", "static_analysis",
+                "execution_settings", "scoring_policy"):
         available = [metadata[key] for _, _, _, metadata, _ in runs if metadata.get(key)]
         if any(value != available[0] for value in available[1:]):
             raise ValueError(f"Incompatible {key} across reports")
-    hosts = [(metadata["platform"].get("system"), metadata["platform"].get("machine"))
-             for _, _, _, metadata, _ in runs if metadata.get("platform")]
-    if any(value != hosts[0] for value in hosts[1:]):
-        raise ValueError("Incompatible host platform/architecture across reports")
-    settings = [tuple(metadata["generation_settings"].get(key)
-                      for key in ("temperature", "max_tokens", "request_timeout_seconds"))
-                for _, _, _, metadata, _ in runs if metadata.get("generation_settings") is not None]
-    if any(value != settings[0] for value in settings[1:]):
-        raise ValueError("Incompatible temperature, token limits or request timeouts across reports")
+    for key in ("system", "machine", "release"):
+        values = [(metadata.get("platform") or {}).get(key) for _, _, _, metadata, _ in runs]
+        known = [value for value in values if value is not None]
+        if any(value != known[0] for value in known[1:]):
+            raise ValueError(f"Incompatible host platform/architecture ({key}) across reports")
+    settings = [generation_conditions(metadata) for _, _, _, metadata, _ in runs]
+    known_settings = [value for value in settings if value is not None]
+    if _check_generation and any(value != known_settings[0] for value in known_settings[1:]):
+        raise ValueError("Incompatible temperature, token limits, request timeouts or prompt strategy across reports")
+    if any(value is None for value in settings):
+        for (report, _, _, _, _), settings_value in zip(runs, settings):
+            if settings_value is None:
+                warnings.append(f"{report['model_name']}: generation settings are missing or not applicable "
+                                "to this local/baseline run; generation conditions cannot be fully compared.")
+    execution = [metadata.get("execution_settings") for _, _, _, metadata, _ in runs]
+    if any(value is not None for value in execution) and any(value is None for value in execution):
+        warnings.append("Some reports lack execution settings; runtime compatibility cannot be fully checked.")
 
     rows = []
+    task_rows = []
     for report, results, _, _, provenance in runs:
         tokens, durations = [], []
         for result in results:
@@ -92,6 +129,15 @@ def compare_runs(reports):
                     raise ValueError("Invalid generation duration in report")
                 durations.append(duration)
         summary = BenchmarkReporter.to_json_dict(results, report["model_name"])
+        measured_count = sum(r.size_metrics.measured for r in results)
+        if measured_count != len(results):
+            warnings.append(f"{report['model_name']}: memory average includes unmeasured zeros ({measured_count}/{len(results)} measured).")
+        for result in sorted(results, key=lambda item: item.task_id):
+            task_rows.append({"model": report["model_name"], "task_id": result.task_id,
+                "total": result.scores.total_score, "functional": result.scores.functional_score,
+                "memory": result.scores.memory_score if result.size_metrics.measured else None,
+                "safety": result.scores.safety_score, "measured": result.size_metrics.measured,
+                "pass_at_1": BenchmarkReporter._all_tests_passed(result)})
         rows.append({
             "model": report["model_name"], "tasks": len(results),
             "score": summary["overall_score"], "pass_at_1_pct": summary["pass_at_1_pct"],
@@ -104,14 +150,26 @@ def compare_runs(reports):
             "cppcheck_completed_tasks": sum(r.safety_metrics.cppcheck_status == "completed" for r in results),
             "cppcheck_failed_tasks": sum(r.safety_metrics.cppcheck_status == "failed" for r in results),
         })
-    return {"task_ids": sorted(expected), "warnings": warnings,
+    gaps = []
+    for task_id in sorted(expected):
+        scores = sorted((row for row in task_rows if row["task_id"] == task_id), key=lambda row: (row["total"], row["model"]))
+        gaps.append({"task_id": task_id, "gap": scores[-1]["total"] - scores[0]["total"],
+                     "high": scores[-1], "low": scores[0]})
+    largest = sorted(gaps, key=lambda gap: (-gap["gap"], gap["task_id"]))[0]
+    return {"task_ids": sorted(expected), "warnings": warnings, "task_rows": task_rows, "largest_gap": largest,
             "models": sorted(rows, key=lambda row: (-row["score"], row["model"]))}
 
 
 def render_comparison(comparison, format_name="markdown"):
+    if format_name == "csv-long":
+        stream = io.StringIO(newline="")
+        writer = csv.DictWriter(stream, fieldnames=["model", "task_id", "total", "functional", "memory", "safety", "measured", "pass_at_1"], lineterminator="\n")
+        writer.writeheader()
+        writer.writerows(comparison["task_rows"])
+        return stream.getvalue()
     if format_name == "csv":
         stream = io.StringIO(newline="")
-        writer = csv.DictWriter(stream, fieldnames=list(comparison["models"][0]))
+        writer = csv.DictWriter(stream, fieldnames=list(comparison["models"][0]), lineterminator="\n")
         writer.writeheader()
         writer.writerows(comparison["models"])
         return stream.getvalue()
@@ -124,6 +182,7 @@ def render_comparison(comparison, format_name="markdown"):
             lines.append(f"{model:<32} {row['score']:>8.2f} {row['pass_at_1_pct']:>7.2f}% {dimensions:>20} {row['provenance']:>12}")
         lines += ["", "Failed tasks remain in the denominator."]
         lines += [f"Warning: {warning}" for warning in comparison["warnings"]]
+        lines += _task_matrix(comparison, markdown=False)
         return "\n".join(lines)
     lines = ["# AIBenchMark-ESW Model Comparison", "",
              "Identical task sets; scores include failed tasks. Pass@1 measures fully passing suites.", ""]
@@ -142,4 +201,31 @@ def render_comparison(comparison, format_name="markdown"):
         if row["generation_seconds"] is not None and row["duration_tasks"] < row["tasks"]:
             duration += f" ({row['duration_tasks']}/{row['tasks']} tasks)"
         lines.append(f"| {model} | {row['score']:.2f} | {row['pass_at_1_pct']:.2f} | {row['functional']:.2f} | {row['memory']:.2f} | {row['safety']:.2f} | {tokens} | {duration} | {row['provenance']} |")
+    lines += _task_matrix(comparison, markdown=True)
     return "\n".join(lines)
+
+
+def _task_matrix(comparison, markdown):
+    def clean(value):
+        return str(value).replace("|", "\\|").replace("\r", " ").replace("\n", " ")
+    ids = comparison["task_ids"]
+    lines = ["", "### Per-task totals" if markdown else "Per-task totals", ""]
+    if markdown:
+        lines += ["| Model | " + " | ".join(clean(item) for item in ids) + " |",
+                  "| :--- | " + " | ".join("---:" for _ in ids) + " |"]
+    else:
+        lines.append("Model | " + " | ".join(ids))
+    coverage_notes = []
+    for model in (row["model"] for row in comparison["models"]):
+        tasks = {row["task_id"]: row for row in comparison["task_rows"] if row["model"] == model}
+        values = [f"{tasks[item]['total']:.2f}" for item in ids]
+        lines.append(("| " if markdown else "") + clean(model) + " | " + " | ".join(values) + (" |" if markdown else ""))
+        unavailable = [item for item in ids if not tasks[item]["measured"]]
+        if unavailable:
+            coverage_notes.append(f"Memory unavailable ({clean(model)}): " + ", ".join(clean(item) for item in unavailable))
+    if coverage_notes:
+        lines += [""] + coverage_notes
+    gap = comparison["largest_gap"]
+    lines += ["", f"Largest gap: {clean(gap['task_id'])} ({clean(gap['high']['model'])} {gap['high']['total']:.2f} vs "
+                      f"{clean(gap['low']['model'])} {gap['low']['total']:.2f})."]
+    return lines

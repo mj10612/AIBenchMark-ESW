@@ -152,6 +152,15 @@ int main(void) {
         self.assertTrue(result.completed)
         self.assertEqual(result.passed_tests, 3)
 
+    def test_posix_large_suite_uses_the_low_exit_status_byte(self):
+        output = self.unity_output(["PASS"] + ["FAIL"] * 256)
+        with patch("aibenchmark_esw.sandbox.executor.os.name", "posix"):
+            result = self.sandbox._parse_unity_output(output, 0, "fixture")
+        self.assertTrue(result.completed)
+        self.assertEqual(result.failed_tests, 256)
+        self.assertEqual(result.passed_tests, 1)
+        self.assertFalse(result.passed)
+
     def test_ignored_tests_do_not_count_as_all_passed(self):
         result = self.sandbox._parse_unity_output(self.unity_output(["PASS"] * 4 + ["IGNORE"]), 0, "fixture")
         self.assertFalse(result.passed)
@@ -198,11 +207,8 @@ int main(void) {
 
     def test_test_timeout_preserves_records_without_parsing_them_as_completed(self):
         task = self.loader.get_task("tier1_crc16")
-        real_run = subprocess.run
         for as_bytes in (False, True):
             def timeout_after_compile(command, **kwargs):
-                if "-o" in command:
-                    return real_run(command, **kwargs)
                 token = Path(command[0]).parent.glob("aibenchmark_tests_*.c")
                 wrapper = next(token).read_text(encoding="utf-8")
                 marker = wrapper.split("AIBenchMark-ESW:")[1].split(":END")[0]
@@ -211,7 +217,7 @@ int main(void) {
                     partial = partial.encode("utf-8")
                 raise subprocess.TimeoutExpired(command, 1, output=partial)
             with self.subTest(as_bytes=as_bytes), patch(
-                    "aibenchmark_esw.sandbox.executor.subprocess.run", side_effect=timeout_after_compile):
+                    "aibenchmark_esw.sandbox.executor.run_bounded", side_effect=timeout_after_compile):
                 compiled, result = self.sandbox.compile_and_test(task, self.loader.get_reference_solution(task.id))
             self.addCleanup(compiled.cleanup)
             self.assertTrue(compiled.success, compiled.output)

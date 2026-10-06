@@ -109,3 +109,46 @@ class TestTaskValidation(unittest.TestCase):
             self.assertEqual(len(errors), 2)
             self.assertTrue(any("Empty prompt" in error for error in errors))
             self.assertTrue(any("Missing reference" in error for error in errors))
+
+    def test_unreadable_prompt_keeps_valid_selected_tasks_and_failed_results(self):
+        with TemporaryDirectory() as directory:
+            root = Path(directory) / "tasks"
+            invalid = self.copy_task(root, "a_invalid")
+            self.copy_task(root, "z_valid")
+            (invalid / "prompt.md").write_bytes(b"\xff")
+            loader = DatasetLoader(root)
+            self.assertEqual(len(loader.list_tasks()), 2)
+            self.assertIn("Unreadable prompt", validate_task_assets(loader.get_task("a_invalid"))[0])
+            args = cli.build_parser().parse_args(["validate", "--tasks-root", str(root)])
+            with redirect_stdout(io.StringIO()) as output:
+                self.assertEqual(cli.cmd_validate(args), 1)
+            self.assertIn("Unreadable prompt", output.getvalue())
+            self.assertIn("z_valid", output.getvalue())
+            report = Path(directory) / "result.json"
+            args = cli.build_parser().parse_args(["run", "--tasks-root", str(root),
+                "--model", "mock", "--output", str(report)])
+            reference = DatasetLoader().get_reference_solution("tier1_crc16")
+            with patch.object(cli.LLMClient, "generate_solution", return_value=reference) as generate:
+                with redirect_stdout(io.StringIO()):
+                    self.assertEqual(cli.cmd_run(args), 1)
+                self.assertEqual(generate.call_count, 1)
+            results = json.loads(report.read_text(encoding="utf-8"))["tasks"]
+            self.assertEqual([result["task_id"] for result in results], ["a_invalid", "z_valid"])
+            self.assertEqual(results[0]["scores"]["total"], 0)
+            self.assertEqual(results[1]["scores"]["total"], 100)
+            selected = cli.build_parser().parse_args(["run", "--tasks-root", str(root),
+                "--model", "baseline", "--tasks", "z_valid"])
+            with redirect_stdout(io.StringIO()):
+                self.assertEqual(cli.cmd_run(selected), 0)
+
+    def test_prompt_read_oserror_is_reported_by_asset_validation(self):
+        original_read_text = Path.read_text
+        def unreadable(path, *args, **kwargs):
+            if path.name == "prompt.md":
+                raise PermissionError("fixture denies prompt access")
+            return original_read_text(path, *args, **kwargs)
+        with patch.object(Path, "read_text", unreadable):
+            loader = DatasetLoader()
+            self.assertEqual(loader.get_task("tier1_crc16").prompt, "")
+            self.assertTrue(any("Unreadable prompt" in error for error in
+                                validate_task_assets(loader.get_task("tier1_crc16"))))

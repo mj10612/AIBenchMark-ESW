@@ -21,6 +21,36 @@ class TestSizeAnalyzer(unittest.TestCase):
             with self.assertRaises(FileNotFoundError):
                 self.analyzer.analyze(Path(directory) / "missing.o")
 
+    def test_real_macho_is_explicitly_unavailable_instead_of_miscounted(self):
+        compiler = find_clang()
+        if compiler is None:
+            self.skipTest("Clang is required for Darwin object validation")
+        with TemporaryDirectory() as directory:
+            source = Path(directory) / "memory.c"
+            obj = Path(directory) / "memory.o"
+            source.write_text("unsigned char buffer[2048]; unsigned char data[256]={1}; "
+                              "int read_memory(int i){return buffer[i&2047]+data[i&255];}")
+            result = subprocess.run([compiler, "--target=x86_64-apple-darwin", "-std=c99", "-Os",
+                                     "-c", str(source), "-o", str(obj)], capture_output=True, text=True, timeout=30)
+            self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+            self.analyzer.size_tool = "size"
+            with patch("aibenchmark_esw.sandbox.size_analyzer.subprocess.run") as size_run:
+                with self.assertRaisesRegex(ValueError, "Mach-O memory measurement is unsupported"):
+                    self.analyzer._measure_file(obj)
+                size_run.assert_not_called()
+
+    def test_unknown_external_column_layout_is_rejected(self):
+        with TemporaryDirectory() as directory:
+            obj = Path(directory) / "unknown.o"
+            obj.write_bytes(b"unknown object")
+            self.analyzer.size_tool = "size"
+            for output in ("104 2304 0 0 2408 968\n", "100 20 30\n", "100 20 30 151 97 object\n"):
+                with self.subTest(output=output), patch(
+                        "aibenchmark_esw.sandbox.size_analyzer.subprocess.run",
+                        return_value=subprocess.CompletedProcess([], 0, output, "")):
+                    with self.assertRaises(ValueError):
+                        self.analyzer._measure_file(obj)
+
     def test_unknown_format_is_not_estimated(self):
         with TemporaryDirectory() as directory:
             path = Path(directory) / "bad.o"

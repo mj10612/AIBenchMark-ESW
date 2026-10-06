@@ -11,13 +11,14 @@ class TestDatasetLoader(unittest.TestCase):
 
     def test_list_all_tasks(self):
         tasks = self.loader.list_tasks()
-        self.assertGreaterEqual(len(tasks), 7)
+        self.assertGreaterEqual(len(tasks), 8)
         task_ids = [t.id for t in tasks]
         self.assertIn("tier1_ring_buffer", task_ids)
         self.assertIn("tier1_crc16", task_ids)
         self.assertIn("tier1_q15_math", task_ids)
         self.assertIn("tier2_debounce_fsm", task_ids)
         self.assertIn("tier2_tick_timer", task_ids)
+        self.assertIn("tier2_cobs_codec", task_ids)
         self.assertIn("tier3_i2c_sensor", task_ids)
         self.assertIn("tier4_bitmask_fix", task_ids)
 
@@ -25,6 +26,15 @@ class TestDatasetLoader(unittest.TestCase):
         tier1_tasks = self.loader.list_tasks(tier=1)
         self.assertTrue(all(t.tier == 1 for t in tier1_tasks))
         self.assertGreaterEqual(len(tier1_tasks), 2)
+
+    def test_category_filter_and_tier_intersection(self):
+        category = self.loader.get_task("tier1_crc16").category
+        tasks = self.loader.list_tasks(category=category)
+        self.assertTrue(tasks)
+        self.assertTrue(all(task.category == category for task in tasks))
+        self.assertTrue(all(task.tier == 1 and task.category == category
+                            for task in self.loader.list_tasks(tier=1, category=category)))
+        self.assertEqual(self.loader.list_tasks(category="no-such-category"), [])
 
     def test_task_metadata_and_prompt(self):
         task = self.loader.get_task("tier1_ring_buffer")
@@ -93,6 +103,38 @@ class TestDatasetLoader(unittest.TestCase):
             with self.assertLogs("aibenchmark_esw.dataset", level="ERROR"):
                 with self.assertRaisesRegex(ValueError, "Duplicate task id"):
                     DatasetLoader(Path(directory))
+
+    def test_diagnostic_loading_retains_valid_tasks_and_reports_metadata_errors(self):
+        with TemporaryDirectory() as directory:
+            root = Path(directory)
+            for name, metadata in (("bad", "{"), ("good", '{"id":"good"}'),
+                                   ("duplicate", '{"id":"good"}')):
+                task_dir = root / name
+                task_dir.mkdir()
+                (task_dir / "task.json").write_text(metadata, encoding="utf-8")
+            with self.assertLogs("aibenchmark_esw.dataset", level="ERROR"):
+                loader = DatasetLoader(root, strict=False)
+            self.assertEqual([task.id for task in loader.list_tasks()], ["good"])
+            self.assertEqual(len(loader.load_errors), 2)
+            self.assertTrue(any("Duplicate task id" in value for value in loader.load_errors.values()))
+
+    def test_text_metadata_and_prompt_overrides_are_validated(self):
+        from aibenchmark_esw.models import TaskConfig
+        for field in ("name", "category", "description"):
+            for value in (None, 4, False, [], {}):
+                with self.subTest(field=field, value=value), self.assertRaisesRegex(ValueError, field):
+                    TaskConfig.from_dict({"id": "task", field: value}, Path("task"))
+        invalid = [None, [], {"allow_dynamic_memory": 1}, {"extra_rules": "rule"},
+                   {"extra_rules": [None]}, {"extra_rules": [" "]}, {"typo": True}]
+        for value in invalid:
+            with self.subTest(overrides=value), self.assertRaisesRegex(ValueError, "prompt_overrides"):
+                TaskConfig.from_dict({"id": "task", "prompt_overrides": value}, Path("task"))
+        config = TaskConfig.from_dict({"id": "task", "prompt_overrides": {
+            "allow_dynamic_memory": True, "extra_rules": ["Use a caller-provided allocator."]}}, Path("task"))
+        self.assertTrue(config.prompt_overrides["allow_dynamic_memory"])
+        self.assertEqual(config.reference_path, Path("task/reference/solution.c"))
+        config.reference_file = "gold/answer.ref"
+        self.assertEqual(config.reference_path, Path("task/gold/answer.ref"))
 
 
 if __name__ == "__main__":

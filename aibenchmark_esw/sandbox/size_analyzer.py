@@ -38,13 +38,17 @@ class SizeAnalyzer:
                 if proc.returncode == 0:
                     for line in proc.stdout.splitlines():
                         parts = line.split()
-                        if len(parts) < 3:
+                        # Accept only a Berkeley/GNU text,data,bss,dec,hex,file
+                        # row. Other layouts (notably Mach-O segment totals)
+                        # cannot be interpreted using this accounting policy.
+                        if len(parts) < 6:
                             continue
                         try:
                             text, data, bss = map(int, parts[:3])
+                            total, hexadecimal = int(parts[3]), int(parts[4], 16)
                         except ValueError:
                             continue
-                        if min(text, data, bss) >= 0:
+                        if min(text, data, bss) >= 0 and total == hexadecimal == text + data + bss:
                             return text + data, data + bss
             except (OSError, ValueError, subprocess.TimeoutExpired):
                 pass
@@ -52,6 +56,11 @@ class SizeAnalyzer:
 
     def _parse_binary_sections(self, file_path: Path) -> Tuple[int, int]:
         data = file_path.read_bytes()
+        if data[:4] in (b"\xfe\xed\xfa\xce", b"\xce\xfa\xed\xfe",
+                        b"\xfe\xed\xfa\xcf", b"\xcf\xfa\xed\xfe",
+                        b"\xca\xfe\xba\xbe", b"\xbe\xba\xfe\xca",
+                        b"\xca\xfe\xba\xbf", b"\xbf\xba\xfe\xca"):
+            raise ValueError("Mach-O memory measurement is unsupported: segment totals do not distinguish zero-filled RAM from Flash")
         if data.startswith(b"\x7fELF"):
             return self._parse_elf(data)
         if data.startswith(b"MZ"):
@@ -132,7 +141,7 @@ class SizeAnalyzer:
                 flash += size
                 if flags & 0x1:
                     ram += size
-        common = {}
+        common: dict = {}
         symbol_fmt = endian + ("IBBHQQ" if is_64 else "IIIBBH")
         symbol_size = struct.calcsize(symbol_fmt)
         for section_index, section in enumerate(sections):

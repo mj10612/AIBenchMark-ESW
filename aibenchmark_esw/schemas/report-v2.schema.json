@@ -1,0 +1,593 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/sentimentalmija-lgtm/AIBenchMark-ESW/blob/main/aibenchmark_esw/schemas/report-v2.schema.json",
+  "title": "AIBenchMark-ESW report v2",
+  "description": "Structural contract. Python additionally validates scoring, task policy, suite consistency and run state.",
+  "type": "object",
+  "properties": {
+    "schema_version": {
+      "const": 2
+    },
+    "model_name": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "\\S"
+    },
+    "overall_score": {
+      "type": "number",
+      "minimum": 0,
+      "maximum": 100
+    },
+    "pass_at_1_pct": {
+      "type": "number",
+      "minimum": 0,
+      "maximum": 100
+    },
+    "metadata": {
+      "anyOf": [
+        {
+          "type": "object",
+          "properties": {
+            "compiler": {
+              "type": [
+                "object",
+                "null"
+              ]
+            },
+            "platform": {
+              "type": [
+                "object",
+                "null"
+              ]
+            },
+            "generation_settings": {
+              "type": [
+                "object",
+                "null"
+              ]
+            },
+            "static_analysis": {
+              "type": [
+                "object",
+                "null"
+              ]
+            },
+            "execution_settings": {
+              "type": [
+                "object",
+                "null"
+              ]
+            },
+            "run_status": {
+              "enum": [
+                "running",
+                "interrupted",
+                "aborted",
+                "completed"
+              ]
+            },
+            "selected_tasks": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "minLength": 1,
+                "pattern": "\\S"
+              },
+              "uniqueItems": true
+            },
+            "pending_tasks": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "minLength": 1,
+                "pattern": "\\S"
+              },
+              "uniqueItems": true
+            },
+            "scoring_policy": {
+              "anyOf": [
+                {
+                  "type": "object",
+                  "required": [
+                    "formula_version",
+                    "safety_error_penalty",
+                    "safety_warning_penalty",
+                    "tasks"
+                  ],
+                  "properties": {
+                    "formula_version": {
+                      "const": "functional-gated-v1"
+                    },
+                    "safety_error_penalty": {
+                      "const": 15
+                    },
+                    "safety_warning_penalty": {
+                      "const": 3
+                    },
+                    "tasks": {
+                      "type": "object",
+                      "additionalProperties": {
+                        "type": "object",
+                        "required": [
+                          "weights",
+                          "limits"
+                        ],
+                        "properties": {
+                          "weights": {
+                            "type": "object",
+                            "properties": {
+                              "functional": {
+                                "type": "number",
+                                "minimum": 0,
+                                "maximum": 1
+                              },
+                              "memory": {
+                                "type": "number",
+                                "minimum": 0,
+                                "maximum": 1
+                              },
+                              "safety": {
+                                "type": "number",
+                                "minimum": 0,
+                                "maximum": 1
+                              }
+                            },
+                            "required": [],
+                            "additionalProperties": false
+                          },
+                          "limits": {
+                            "type": "object",
+                            "properties": {
+                              "max_flash_bytes": {
+                                "type": "integer",
+                                "minimum": 1
+                              },
+                              "max_ram_bytes": {
+                                "type": "integer",
+                                "minimum": 0
+                              },
+                              "timeout_seconds": {
+                                "type": "integer",
+                                "minimum": 1
+                              }
+                            },
+                            "required": [],
+                            "additionalProperties": false
+                          }
+                        }
+                      }
+                    }
+                  }
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            }
+          },
+          "required": []
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "tasks": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "task_id": {
+            "type": "string",
+            "minLength": 1,
+            "pattern": "\\S"
+          },
+          "model_name": {
+            "type": "string",
+            "minLength": 1,
+            "pattern": "\\S"
+          },
+          "tier": {
+            "type": "integer",
+            "enum": [
+              1,
+              2,
+              3,
+              4
+            ]
+          },
+          "compiled": {
+            "type": "boolean"
+          },
+          "test_result": {
+            "type": "object",
+            "properties": {
+              "total": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "passed": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "failed": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "ignored": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "all_passed": {
+                "type": "boolean"
+              },
+              "completed": {
+                "type": "boolean"
+              },
+              "returncode": {
+                "type": [
+                  "integer",
+                  "null"
+                ]
+              }
+            },
+            "required": [
+              "total",
+              "passed",
+              "failed",
+              "all_passed"
+            ]
+          },
+          "size_metrics": {
+            "type": "object",
+            "properties": {
+              "flash_bytes": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "ram_bytes": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "ref_flash_bytes": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "ref_ram_bytes": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "measured": {
+                "type": "boolean"
+              }
+            },
+            "required": [],
+            "additionalProperties": false
+          },
+          "safety_metrics": {
+            "type": "object",
+            "properties": {
+              "error_count": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "warning_count": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "violations": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "cppcheck_status": {
+                "enum": [
+                  null,
+                  "disabled",
+                  "not_run",
+                  "completed",
+                  "failed"
+                ]
+              },
+              "cppcheck_diagnostic": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "findings": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "rule_id": {
+                      "type": "string",
+                      "minLength": 1,
+                      "pattern": "\\S"
+                    },
+                    "engine": {
+                      "enum": [
+                        "builtin",
+                        "cppcheck"
+                      ]
+                    },
+                    "severity": {
+                      "enum": [
+                        "error",
+                        "warning",
+                        "style",
+                        "performance",
+                        "portability"
+                      ]
+                    },
+                    "message": {
+                      "type": "string",
+                      "minLength": 1,
+                      "pattern": "\\S"
+                    },
+                    "file": {
+                      "type": "string",
+                      "minLength": 1,
+                      "pattern": "\\S"
+                    },
+                    "line": {
+                      "type": [
+                        "integer",
+                        "null"
+                      ],
+                      "minimum": 1
+                    }
+                  },
+                  "required": [
+                    "rule_id",
+                    "engine",
+                    "severity",
+                    "message",
+                    "file"
+                  ]
+                }
+              }
+            },
+            "required": [],
+            "additionalProperties": false
+          },
+          "scores": {
+            "type": "object",
+            "properties": {
+              "functional": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 100
+              },
+              "memory": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 100
+              },
+              "safety": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 100
+              },
+              "total": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 100
+              }
+            },
+            "required": [
+              "functional",
+              "memory",
+              "safety",
+              "total"
+            ]
+          },
+          "execution_time_sec": {
+            "type": "number",
+            "minimum": 0
+          },
+          "candidate_time_sec": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "minimum": 0
+          },
+          "reference_validation_time_sec": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "minimum": 0
+          },
+          "weights": {
+            "anyOf": [
+              {
+                "type": "object",
+                "properties": {
+                  "functional": {
+                    "type": "number",
+                    "minimum": 0,
+                    "maximum": 1
+                  },
+                  "memory": {
+                    "type": "number",
+                    "minimum": 0,
+                    "maximum": 1
+                  },
+                  "safety": {
+                    "type": "number",
+                    "minimum": 0,
+                    "maximum": 1
+                  }
+                },
+                "required": [],
+                "additionalProperties": false
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "limits": {
+            "anyOf": [
+              {
+                "type": "object",
+                "properties": {
+                  "max_flash_bytes": {
+                    "type": "integer",
+                    "minimum": 1
+                  },
+                  "max_ram_bytes": {
+                    "type": "integer",
+                    "minimum": 0
+                  },
+                  "timeout_seconds": {
+                    "type": "integer",
+                    "minimum": 1
+                  }
+                },
+                "required": [],
+                "additionalProperties": false
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "footprint_target": {
+            "type": "string",
+            "minLength": 1,
+            "pattern": "\\S"
+          },
+          "generation": {
+            "type": [
+              "object",
+              "null"
+            ]
+          },
+          "provenance": {
+            "type": [
+              "object",
+              "null"
+            ]
+          },
+          "error_log": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "target_standard": {
+            "enum": [
+              null,
+              "c99",
+              "c11",
+              "c17"
+            ]
+          },
+          "effective_standard": {
+            "enum": [
+              null,
+              "c99",
+              "c11",
+              "c17"
+            ]
+          }
+        },
+        "required": [
+          "task_id",
+          "tier",
+          "compiled",
+          "test_result",
+          "size_metrics",
+          "safety_metrics",
+          "scores",
+          "execution_time_sec"
+        ]
+      }
+    }
+  },
+  "required": [
+    "schema_version",
+    "tasks"
+  ],
+  "allOf": [
+    {
+      "if": {
+        "required": [
+          "metadata"
+        ],
+        "properties": {
+          "metadata": {
+            "type": "object",
+            "required": [
+              "scoring_policy"
+            ],
+            "properties": {
+              "scoring_policy": {
+                "type": "object"
+              }
+            }
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "tasks": {
+            "items": {
+              "required": [
+                "weights",
+                "limits"
+              ],
+              "properties": {
+                "weights": {
+                  "type": "object",
+                  "properties": {
+                    "functional": {
+                      "type": "number",
+                      "minimum": 0,
+                      "maximum": 1
+                    },
+                    "memory": {
+                      "type": "number",
+                      "minimum": 0,
+                      "maximum": 1
+                    },
+                    "safety": {
+                      "type": "number",
+                      "minimum": 0,
+                      "maximum": 1
+                    }
+                  },
+                  "required": [],
+                  "additionalProperties": false
+                },
+                "limits": {
+                  "type": "object",
+                  "properties": {
+                    "max_flash_bytes": {
+                      "type": "integer",
+                      "minimum": 1
+                    },
+                    "max_ram_bytes": {
+                      "type": "integer",
+                      "minimum": 0
+                    },
+                    "timeout_seconds": {
+                      "type": "integer",
+                      "minimum": 1
+                    }
+                  },
+                  "required": [],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  ]
+}
