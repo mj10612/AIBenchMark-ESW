@@ -54,11 +54,26 @@ jobs:
         shell: pwsh
         run: |
           $archive = Join-Path $env:RUNNER_TEMP 'tcc.zip'
-          Invoke-WebRequest 'https://download.savannah.gnu.org/releases/tinycc/tcc-0.9.27-win64-bin.zip' -OutFile $archive
           $expected = '34a721949a2583fdff725312da092fa0f5f1f284b702e6f811c6954714faabb2'
-          if ((Get-FileHash $archive -Algorithm SHA256).Hash.ToLowerInvariant() -ne $expected) {
-            throw 'Downloaded TCC checksum does not match'
+          $downloaded = $false
+          $mirrors = @(
+            'https://download.savannah.gnu.org/releases/tinycc/tcc-0.9.27-win64-bin.zip',
+            'https://mirror.csclub.uwaterloo.ca/nongnu/tinycc/tcc-0.9.27-win64-bin.zip',
+            'https://nongnu.askapache.com/tinycc/tcc-0.9.27-win64-bin.zip'
+          )
+          foreach ($mirror in $mirrors) {
+            try {
+              Invoke-WebRequest $mirror -OutFile $archive -TimeoutSec 20
+              if ((Get-FileHash $archive -Algorithm SHA256).Hash.ToLowerInvariant() -ne $expected) {
+                throw 'Downloaded TCC checksum does not match'
+              }
+              $downloaded = $true
+              break
+            } catch {
+              Write-Warning "TCC download failed or mismatched at $mirror; trying next verified source"
+            }
           }
+          if (-not $downloaded) { throw 'Could not download the pinned TCC archive from any source' }
           $destination = Join-Path $env:RUNNER_TEMP 'tcc-toolchain'
           Expand-Archive $archive -DestinationPath $destination
           (Join-Path $destination 'tcc') | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append

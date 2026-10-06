@@ -35,7 +35,7 @@ class _WindowsJob:
         from ctypes import wintypes as w
 
         self.ctypes = ctypes
-        self.api = ctypes.WinDLL("kernel32", use_last_error=True)
+        self.api = ctypes.WinDLL("kernel32", use_last_error=True)  # type: ignore[attr-defined]  # Windows-only API; absent in POSIX ctypes stubs.
         size_t = ctypes.c_size_t
 
         class Basic(ctypes.Structure):
@@ -59,7 +59,7 @@ class _WindowsJob:
         self.api.CloseHandle.argtypes = [w.HANDLE]
         self.handle = self.api.CreateJobObjectW(None, None)
         if not self.handle:
-            raise ctypes.WinError(ctypes.get_last_error())
+            raise ctypes.WinError(ctypes.get_last_error())  # type: ignore[attr-defined]  # Windows-only API; absent in POSIX ctypes stubs.
         limits = Extended()
         limits.basic.flags = 0x2000  # JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE
         if cpu_seconds is not None:
@@ -69,7 +69,7 @@ class _WindowsJob:
             limits.basic.flags |= 0x200  # JOB_OBJECT_LIMIT_JOB_MEMORY
             limits.job_memory = memory_bytes
         if not self.api.SetInformationJobObject(self.handle, 9, ctypes.byref(limits), ctypes.sizeof(limits)):
-            error = ctypes.WinError(ctypes.get_last_error())
+            error = ctypes.WinError(ctypes.get_last_error())  # type: ignore[attr-defined]  # Windows-only API; absent in POSIX ctypes stubs.
             self.close()
             raise error
 
@@ -78,7 +78,7 @@ class _WindowsJob:
         import ctypes
         from ctypes import wintypes as w
         if not self.api.AssignProcessToJobObject(self.handle, int(process._handle)):
-            raise ctypes.WinError(ctypes.get_last_error())
+            raise ctypes.WinError(ctypes.get_last_error())  # type: ignore[attr-defined]  # Windows-only API; absent in POSIX ctypes stubs.
 
         class ThreadEntry(ctypes.Structure):
             _fields_ = [("size", w.DWORD), ("usage", w.DWORD), ("thread_id", w.DWORD),
@@ -95,7 +95,7 @@ class _WindowsJob:
         self.api.ResumeThread.restype = w.DWORD
         snapshot = self.api.CreateToolhelp32Snapshot(0x4, 0)  # TH32CS_SNAPTHREAD
         if snapshot == ctypes.c_void_p(-1).value:
-            raise ctypes.WinError(ctypes.get_last_error())
+            raise ctypes.WinError(ctypes.get_last_error())  # type: ignore[attr-defined]  # Windows-only API; absent in POSIX ctypes stubs.
         try:
             entry = ThreadEntry()
             entry.size = ctypes.sizeof(entry)
@@ -104,10 +104,10 @@ class _WindowsJob:
                 if entry.owner_pid == process.pid:
                     thread = self.api.OpenThread(0x2, False, entry.thread_id)  # THREAD_SUSPEND_RESUME
                     if not thread:
-                        raise ctypes.WinError(ctypes.get_last_error())
+                        raise ctypes.WinError(ctypes.get_last_error())  # type: ignore[attr-defined]  # Windows-only API; absent in POSIX ctypes stubs.
                     try:
                         if self.api.ResumeThread(thread) == 0xFFFFFFFF:
-                            raise ctypes.WinError(ctypes.get_last_error())
+                            raise ctypes.WinError(ctypes.get_last_error())  # type: ignore[attr-defined]  # Windows-only API; absent in POSIX ctypes stubs.
                     finally:
                         self.api.CloseHandle(thread)
                     return
@@ -140,7 +140,7 @@ def run_bounded(command, *, timeout, max_output_bytes, cwd=None, env=None,
             kwargs = dict(cwd=cwd, env=env, stdin=subprocess.DEVNULL,
                           stdout=output, stderr=subprocess.STDOUT)
             if os.name == "nt":
-                kwargs["creationflags"] = subprocess.CREATE_NO_WINDOW | 0x4  # CREATE_SUSPENDED
+                kwargs["creationflags"] = 0x08000000 | 0x4  # CREATE_NO_WINDOW | CREATE_SUSPENDED
             else:
                 kwargs["start_new_session"] = True
                 if isolation == "process":
