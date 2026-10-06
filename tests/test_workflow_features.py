@@ -221,6 +221,13 @@ class TestWorkflowFeatures(unittest.TestCase):
                 validate_report_structure(data)
             with self.assertRaises(ValueError):
                 BenchmarkReporter.from_json_dict(data)
+        for key in ("size_metrics", "safety_metrics", "weights", "limits"):
+            data = copy.deepcopy(report)
+            data["tasks"][0][key]["unknown_field"] = 1
+            with self.assertRaises(ValueError):
+                validate_report_structure(data)
+            with self.assertRaises((ValueError, TypeError)):
+                BenchmarkReporter.from_json_dict(data)
 
     def test_published_fingerprint_gate_matching_and_drift(self):
         fresh = current_fingerprints()

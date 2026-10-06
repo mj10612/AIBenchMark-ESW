@@ -250,7 +250,11 @@ int main(void){UNITY_BEGIN();RUN_TEST(test_ok);return UNITY_END();}
             task = replace(DatasetLoader().get_task("tier1_crc16"), task_dir=root)
             for sanitizer, source, diagnostic in (
                     ("undefined", "int answer(void){volatile int a=2147483647;return a+1;}", "runtime error:"),
-                    ("address", "int answer(void){volatile int a[1]={1};volatile int index=2;return a[index];}", "AddressSanitizer")):
+                    # Runtime allocation size prevents scalar replacement from
+                    # deleting the out-of-bounds access before ASan runs.
+                    ("address", "#include <stdlib.h>\nint answer(void){volatile unsigned count=1;"
+                     "volatile unsigned index=2;int *a=malloc(count*sizeof *a);if(!a)return 1;"
+                     "a[0]=1;int value=a[index];free(a);return value;}", "AddressSanitizer")):
                 with self.subTest(sanitizer=sanitizer):
                     executor = ExecutionSandbox(compiler, sanitizers=(sanitizer,))
                     compiled, result = executor.compile_and_test(task, "int answer(void){return 1;}")
@@ -260,7 +264,7 @@ int main(void){UNITY_BEGIN();RUN_TEST(test_ok);return UNITY_END();}
                     compiled, result = executor.compile_and_test(task, source)
                     self.addCleanup(compiled.cleanup)
                     self.assertTrue(compiled.success, compiled.output)
-                    self.assertFalse(result.completed)
+                    self.assertFalse(result.completed, result.output)
                     self.assertIn(diagnostic, result.output)
 
 

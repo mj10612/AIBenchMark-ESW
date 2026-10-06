@@ -83,6 +83,86 @@
                 "pattern": "\\S"
               },
               "uniqueItems": true
+            },
+            "scoring_policy": {
+              "anyOf": [
+                {
+                  "type": "object",
+                  "required": [
+                    "formula_version",
+                    "safety_error_penalty",
+                    "safety_warning_penalty",
+                    "tasks"
+                  ],
+                  "properties": {
+                    "formula_version": {
+                      "const": "functional-gated-v1"
+                    },
+                    "safety_error_penalty": {
+                      "const": 15
+                    },
+                    "safety_warning_penalty": {
+                      "const": 3
+                    },
+                    "tasks": {
+                      "type": "object",
+                      "additionalProperties": {
+                        "type": "object",
+                        "required": [
+                          "weights",
+                          "limits"
+                        ],
+                        "properties": {
+                          "weights": {
+                            "type": "object",
+                            "properties": {
+                              "functional": {
+                                "type": "number",
+                                "minimum": 0,
+                                "maximum": 1
+                              },
+                              "memory": {
+                                "type": "number",
+                                "minimum": 0,
+                                "maximum": 1
+                              },
+                              "safety": {
+                                "type": "number",
+                                "minimum": 0,
+                                "maximum": 1
+                              }
+                            },
+                            "required": [],
+                            "additionalProperties": false
+                          },
+                          "limits": {
+                            "type": "object",
+                            "properties": {
+                              "max_flash_bytes": {
+                                "type": "integer",
+                                "minimum": 1
+                              },
+                              "max_ram_bytes": {
+                                "type": "integer",
+                                "minimum": 0
+                              },
+                              "timeout_seconds": {
+                                "type": "integer",
+                                "minimum": 1
+                              }
+                            },
+                            "required": [],
+                            "additionalProperties": false
+                          }
+                        }
+                      }
+                    }
+                  }
+                },
+                {
+                  "type": "null"
+                }
+              ]
             }
           },
           "required": []
@@ -181,7 +261,8 @@
                 "type": "boolean"
               }
             },
-            "required": []
+            "required": [],
+            "additionalProperties": false
           },
           "safety_metrics": {
             "type": "object",
@@ -268,7 +349,8 @@
                 }
               }
             },
-            "required": []
+            "required": [],
+            "additionalProperties": false
           },
           "scores": {
             "type": "object",
@@ -340,7 +422,8 @@
                     "maximum": 1
                   }
                 },
-                "required": []
+                "required": [],
+                "additionalProperties": false
               },
               {
                 "type": "null"
@@ -365,7 +448,8 @@
                     "minimum": 1
                   }
                 },
-                "required": []
+                "required": [],
+                "additionalProperties": false
               },
               {
                 "type": "null"
@@ -428,5 +512,82 @@
   "required": [
     "schema_version",
     "tasks"
+  ],
+  "allOf": [
+    {
+      "if": {
+        "required": [
+          "metadata"
+        ],
+        "properties": {
+          "metadata": {
+            "type": "object",
+            "required": [
+              "scoring_policy"
+            ],
+            "properties": {
+              "scoring_policy": {
+                "type": "object"
+              }
+            }
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "tasks": {
+            "items": {
+              "required": [
+                "weights",
+                "limits"
+              ],
+              "properties": {
+                "weights": {
+                  "type": "object",
+                  "properties": {
+                    "functional": {
+                      "type": "number",
+                      "minimum": 0,
+                      "maximum": 1
+                    },
+                    "memory": {
+                      "type": "number",
+                      "minimum": 0,
+                      "maximum": 1
+                    },
+                    "safety": {
+                      "type": "number",
+                      "minimum": 0,
+                      "maximum": 1
+                    }
+                  },
+                  "required": [],
+                  "additionalProperties": false
+                },
+                "limits": {
+                  "type": "object",
+                  "properties": {
+                    "max_flash_bytes": {
+                      "type": "integer",
+                      "minimum": 1
+                    },
+                    "max_ram_bytes": {
+                      "type": "integer",
+                      "minimum": 0
+                    },
+                    "timeout_seconds": {
+                      "type": "integer",
+                      "minimum": 1
+                    }
+                  },
+                  "required": [],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        }
+      }
+    }
   ]
 }
