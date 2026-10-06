@@ -6,22 +6,27 @@ import subprocess
 import uuid
 import json
 import locale
+import math
 from pathlib import Path
 from typing import Optional, Tuple
 
 from aibenchmark_esw.models import TaskConfig, CompilationResult, TestResult
 from aibenchmark_esw.resources import data_root
 from aibenchmark_esw.sandbox.c_source import mask_noncode
+from aibenchmark_esw.sandbox.process_runner import run_bounded, OutputLimitExceeded, ExecutionCancelled
 
 
 def _timeout_output(error: subprocess.TimeoutExpired) -> str:
     """TimeoutExpired can contain bytes even when subprocess uses text mode."""
     streams = []
     for stream in (error.stdout, error.stderr):
+        decoded: Optional[str]
         if isinstance(stream, bytes):
-            stream = stream.decode(locale.getpreferredencoding(False), errors="backslashreplace")
-        if stream:
-            streams.append(stream)
+            decoded = stream.decode(locale.getpreferredencoding(False), errors="backslashreplace")
+        else:
+            decoded = stream
+        if decoded:
+            streams.append(decoded)
     partial = "".join(streams)
     if not partial:
         return str(error)
@@ -29,10 +34,49 @@ def _timeout_output(error: subprocess.TimeoutExpired) -> str:
 
 
 class ExecutionSandbox:
-    def __init__(self, compiler_path: Optional[str] = None, allow_standard_fallback: bool = False):
+    def __init__(self, compiler_path: Optional[str] = None, allow_standard_fallback: bool = False,
+                 compile_timeout_seconds: float = 30, max_output_bytes: int = 1048576,
+                 isolation: str = "native", memory_limit_bytes: Optional[int] = None,
+                 sanitizers=(), target=None, cross_compiler=None):
         self.compiler_path = compiler_path or os.environ.get("AIBENCHMARK_ESW_COMPILER") or self._find_c_compiler()
+        if Path(self.compiler_path).is_file():
+            self.compiler_path = str(Path(self.compiler_path).resolve())
         self.unity_dir = data_root() / "third_party" / "unity"
         self.allow_standard_fallback = allow_standard_fallback
+        if (isinstance(compile_timeout_seconds, bool) or not isinstance(compile_timeout_seconds, (float, int))
+                or not math.isfinite(compile_timeout_seconds) or compile_timeout_seconds <= 0):
+            raise ValueError("compile_timeout_seconds must be a finite positive number")
+        if isinstance(max_output_bytes, bool) or not isinstance(max_output_bytes, int) or max_output_bytes <= 0:
+            raise ValueError("max_output_bytes must be a positive integer")
+        if isolation not in ("native", "process"):
+            raise ValueError("isolation must be native or process")
+        if memory_limit_bytes is not None:
+            if isinstance(memory_limit_bytes, bool) or not isinstance(memory_limit_bytes, int) or memory_limit_bytes <= 0:
+                raise ValueError("memory_limit_bytes must be a positive integer")
+            if isolation != "process":
+                raise ValueError("memory_limit_bytes requires process isolation")
+        if isinstance(sanitizers, str):
+            sanitizers = sanitizers.split(",") if sanitizers else ()
+        self.sanitizers = tuple(sorted(set(sanitizers)))
+        if set(self.sanitizers) - {"address", "undefined"}:
+            raise ValueError("sanitizers must contain only address and/or undefined")
+        self.compile_timeout_seconds = compile_timeout_seconds
+        self.max_output_bytes = max_output_bytes
+        self.isolation = isolation
+        self.memory_limit_bytes = memory_limit_bytes
+        self.cancel_event = None
+        self.cross = None
+        if target is not None:
+            from aibenchmark_esw.sandbox.cross_compiler import CrossCompiler
+            self.cross = CrossCompiler(target, cross_compiler, compile_timeout_seconds)
+
+    def execution_settings(self):
+        return {"compile_timeout_seconds": self.compile_timeout_seconds,
+                "max_output_bytes": self.max_output_bytes, "isolation": self.isolation,
+                "memory_limit_bytes": self.memory_limit_bytes, "sanitizers": list(self.sanitizers),
+                "process_backend": "windows-job" if os.name == "nt" else "posix-session",
+                "cpu_limit": "task-timeout" if self.isolation == "process" else None,
+                "footprint": self.cross.settings() if self.cross else {"target": "host", "measurement": "host-object"}}
 
     def _find_c_compiler(self) -> str:
         for cmd in ["gcc", "clang", "tcc", "cl"]:
@@ -42,9 +86,9 @@ class ExecutionSandbox:
         user_profile = os.environ.get("USERPROFILE", "")
         if user_profile:
             for relative in ["tcc/current/tcc/tcc.exe", "gcc/current/bin/gcc.exe"]:
-                path = Path(user_profile) / "scoop" / "apps" / relative
-                if path.is_file():
-                    return str(path)
+                bundled_path = Path(user_profile) / "scoop" / "apps" / relative
+                if bundled_path.is_file():
+                    return str(bundled_path)
         return "gcc"
 
     def _compile(self, task: TaskConfig, sources, output: Path, object_only=False,
@@ -55,6 +99,9 @@ class ExecutionSandbox:
         includes += [Path(directory).resolve() for directory in extra_includes]
         sources = [str(Path(source).resolve()) for source in sources]
         standard = task.target_standard
+        if self.sanitizers and not object_only and (compiler_name in ("tcc", "cl", "clang-cl")):
+            message = "Sanitizers require a GCC/Clang driver with the requested sanitizer runtime installed"
+            return CompilationResult(False, message, error_message="Unsupported sanitizer toolchain")
         if compiler_name == "cl":
             if standard == "c99":
                 if not self.allow_standard_fallback:
@@ -78,8 +125,11 @@ class ExecutionSandbox:
             if object_only:
                 cmd.append("-c")
             cmd += sources + ["-o", str(output)]
+            if self.sanitizers and not object_only:
+                cmd += ["-fsanitize=" + ",".join(self.sanitizers), "-fno-sanitize-recover=all",
+                        "-fno-omit-frame-pointer", "-g"]
         try:
-            proc = subprocess.run(cmd, capture_output=True, text=True, errors="backslashreplace", timeout=30,
+            proc = subprocess.run(cmd, capture_output=True, text=True, errors="backslashreplace", timeout=self.compile_timeout_seconds,
                                   cwd=str(output.parent))
             log = proc.stdout + proc.stderr
             if proc.returncode != 0 or not output.is_file():
@@ -100,6 +150,8 @@ class ExecutionSandbox:
         workspace.mkdir(parents=True, exist_ok=True)
         source = workspace / f"{name}.c"
         source.write_text(solution_code, encoding="utf-8")
+        if self.cross:
+            return self.cross.compile(task, source, workspace / f"{name}.o")
         return self._compile(task, [source], workspace / f"{name}.o", object_only=True)
 
     def compile_and_test(self, task: TaskConfig, solution_code: str,
@@ -162,14 +214,28 @@ class ExecutionSandbox:
             comp_result._workspace = workspace
             retained = True
             try:
-                proc = subprocess.run([str(binary_path)], stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
-                                      text=True, errors="backslashreplace",
-                                      timeout=task.limits.timeout_seconds, cwd=str(work_dir))
-                test_result = self._parse_unity_output(proc.stdout, proc.returncode, completion_token)
+                environment = None
+                if self.sanitizers:
+                    environment = os.environ.copy()
+                    # Explicitly prevent recovery or redirected diagnostics from
+                    # inherited host sanitizer configuration.
+                    environment["ASAN_OPTIONS"] = "halt_on_error=1:abort_on_error=1:detect_leaks=0"
+                    environment["UBSAN_OPTIONS"] = "halt_on_error=1:print_stacktrace=1"
+                proc = run_bounded([str(binary_path)], timeout=task.limits.timeout_seconds,
+                                   max_output_bytes=self.max_output_bytes, cwd=str(work_dir), env=environment,
+                                   isolation=self.isolation, memory_limit_bytes=self.memory_limit_bytes,
+                                   cancel_event=self.cancel_event)
+                output = proc.stdout.decode(locale.getpreferredencoding(False), errors="backslashreplace")
+                test_result = self._parse_unity_output(output, proc.returncode, completion_token)
+                if self.sanitizers and re.search(r"AddressSanitizer|UndefinedBehaviorSanitizer|runtime error:", output):
+                    test_result.completed = test_result.passed = False
             except subprocess.TimeoutExpired as error:
                 # Partial records are diagnostics only; a timeout never completes
                 # a suite, even if its buffered output resembles a valid summary.
                 test_result = TestResult(output=_timeout_output(error), completed=False)
+            except (OutputLimitExceeded, ExecutionCancelled) as error:
+                output = error.output.decode(locale.getpreferredencoding(False), errors="backslashreplace")
+                test_result = TestResult(output=output + "\n" + str(error), completed=False)
             except OSError as error:
                 test_result = TestResult(output=str(error), completed=False)
             return comp_result, test_result
@@ -196,7 +262,8 @@ class ExecutionSandbox:
         # A summary alone is candidate-controlled output. Require the harness
         # completion marker, consistent per-test records, and Unity's exit code.
         completed = (match is not None and total > 0 and passed >= 0
-                     and observed == (passed, failures, ignored) and returncode == failures
+                     and observed == (passed, failures, ignored)
+                     and returncode == (failures if os.name == "nt" else failures % 256)
                      and len(markers) == 1 and markers[0].start() > match.end())
         all_passed = completed and failures == 0 and ignored == 0
         return TestResult(total_tests=total, passed_tests=max(0, passed), failed_tests=failures,

@@ -8,7 +8,7 @@
 
 > A host-based benchmark for evaluating AI-generated embedded C using functional tests, resource budgets, and selected static safety rules.
 
-The project is in early development: seven tasks and 65 C test cases provide a reproducible reference baseline. The published [100-point baseline](results/baseline.md) measures the bundled golden implementations; it is not an OpenAI or Claude model score. See [reproducibility](docs/REPRODUCIBILITY.md), the [roadmap](docs/ROADMAP.md), and [contributor guidance](CONTRIBUTING.md).
+The project is in early development: eight tasks and 77 C test cases provide a reproducible reference baseline. The published [100-point baseline](results/baseline.md) measures the bundled golden implementations; it is not an OpenAI or Claude model score. See [reproducibility](docs/REPRODUCIBILITY.md), the [roadmap](docs/ROADMAP.md), and [contributor guidance](CONTRIBUTING.md).
 
 ---
 
@@ -46,6 +46,7 @@ However, **embedded systems software (firmware)** operates under fundamentally d
 | **1** | Core Fundamentals | `tier1_crc16` | Standard CRC-16/CCITT-FALSE Checksum Engine | Fixed polynomial (0x1021), bitwise manipulation, lookup logic |
 | **1** | Core Fundamentals | `tier1_q15_math` | Saturating Q1.15 Arithmetic | Overflow-safe add/subtract/multiply, negative-product truncation, 16-bit-int portability |
 | **2** | FSM & Protocols | `tier2_debounce_fsm` | Noise-Immune Button Input Debounce FSM | Glitch rejection, multi-event emission (Click, Hold, Release) |
+| **2** | FSM & Protocols | `tier2_cobs_codec` | Bounded COBS packet codec | Zero-free framing, exact capacities, malformed blocks, 254-byte boundaries |
 | **2** | FSM & Protocols | `tier2_tick_timer` | Rollover-Safe Tick Timer | One-shot/periodic deadlines, missed expirations, phase retention, full-width intervals |
 | **3** | Device Drivers | `tier3_i2c_sensor` | I2C Temperature Sensor Driver with Mock HAL | Register verification, error/timeout propagation, fixed-point math |
 | **4** | Bug Fix & Safety | `tier4_bitmask_fix` | W1C Interrupt Status Register & Priority Bitmask Fix | Write-1-to-Clear race condition, bitfield isolation |
@@ -65,7 +66,7 @@ cd AIBenchMark-ESW
 # Install minimal core
 pip install -e .
 
-# Or install with full LLM and UI dependencies
+# Or install with LLM provider dependencies
 pip install -e ".[full]"
 
 # Development and distribution validation
@@ -153,9 +154,9 @@ Comparison requires identical task sets, weights, standards, and compatible reco
 
 For cross-toolchain validation, set `AIBENCHMARK_ESW_COMPILER` to a compiler executable (for example, `clang`); an explicit `--compiler` argument takes precedence. Provider settings must be supported by the selected model. A token-limit-truncated response is recorded as a generation failure.
 
-With `--output`, runs save a complete JSON checkpoint before generation and after each task. Ctrl+C preserves completed work and usage, marks pending tasks explicitly, and exits with code 130. Pending tasks remain in the denominator at zero points; reports show the unfinished status and `compare` rejects unfinished runs. Each invocation starts a new run; choose a new output filename to retain earlier runs. Local `eval --output` also exports provenance and failed evaluations. `--reference` and `--solution` are mutually exclusive.
+With `--output`, runs save a complete JSON checkpoint before generation and after each task. Ctrl+C preserves completed work and usage, marks pending tasks explicitly, and exits with code 130. Pending tasks remain in the denominator at zero points; reports show the unfinished status and `compare` rejects unfinished runs. Use `run --resume results/checkpoint.json` to continue pending tasks under the same verified inputs and run identity. Without `--resume`, each invocation starts a new run; choose a new output filename to retain earlier runs. Local `eval --output` also exports provenance and failed evaluations. `--reference` and `--solution` are mutually exclusive.
 
-Output paths are checked before evaluation or provider calls. Reports and saved candidate files must not overwrite source inputs, task data, the evaluator, or the Unity harness. Comparison exports cannot replace their input JSON files. Existing output reports can still be replaced intentionally.
+Output paths are checked before evaluation or provider calls. Reports and saved candidate files must not overwrite source inputs, task data, the evaluator, or the Unity harness. Comparison and aggregation exports also protect task, evaluator, and harness sources. Existing output reports can still be replaced intentionally.
 
 Reports record the static-analysis backend and cppcheck version. When cppcheck fails, its diagnostic is saved and reports warn that safety scoring used only the built-in rules. Comparisons reject known mismatches in analyzer configuration and flag missing legacy analyzer information.
 
@@ -259,3 +260,85 @@ OpenAI and Claude models, expand task coverage, and share reproducible results
 with the open-source firmware community. Please consider selecting this project
 based on its verifiable technical work and potential community benefit.
 -->
+
+## Operating and auditing runs
+
+```bash
+# Offline tool readiness; optionally validate every selected reference.
+aibenchmark-esw doctor --check-references
+# Abort before provider requests if tools or references are unavailable.
+aibenchmark-esw run --model baseline --preflight --jobs 2 --category core_fundamentals --output results/run.json
+# Retry pending tasks with identical evaluator, assets, toolchain, and prompts.
+aibenchmark-esw run --resume results/checkpoint.json --jobs 2
+# Export a task-level CI report.
+aibenchmark-esw eval --task tier1_crc16 --reference --junit-output results/crc.xml
+# Summarize independent repetitions of one model (mean/sample standard deviation).
+aibenchmark-esw aggregate --results results/run1.json results/run2.json --format csv --output results/repeats.csv
+# Review which tasks account for the score difference.
+aibenchmark-esw compare --results results/model_a.json results/model_b.json --format markdown
+# Stable long-form columns: model,task_id,total,functional,memory,safety,measured,pass_at_1.
+aibenchmark-esw compare --results results/model_a.json results/model_b.json --format csv-long
+# Test adequacy against 22 reviewed faulty candidates across all eight tasks.
+aibenchmark-esw mutations
+# Verify the published evidence corresponds to the current code and dataset.
+python -m aibenchmark_esw.baseline_check results/baseline.json
+```
+
+`--jobs` defaults to 1. Workers use separate generation state and stable task order;
+only the coordinator replaces checkpoints. `--quiet` suppresses progress while
+retaining the final summary; `--verbose` adds test diagnostics to stderr. Errors
+always go to stderr. Task/category conflicts are rejected before requests.
+Malformed metadata is diagnosed by `list`/`validate`; evaluation remains strict
+because missing IDs, weights, or tiers cannot define a trustworthy denominator.
+
+Provider options include `--max-retries 2 --retry-backoff 1` for bounded transient
+retries, `--prompt-strategy plan` (alias `--multi-turn`) for a short implementation
+plan followed by code, and `--review-turn` for a final review. Public messages,
+responses, per-attempt timing, and available usage are retained. Authentication,
+missing provider packages, and systematic generation failures mark a run aborted.
+Truncated responses receive zero points and remain in generation metadata; with
+`--save-solutions`, their extracted prefix is saved as `.truncated.c` for diagnosis.
+Task `prompt_overrides` accepts `allow_dynamic_memory` and `extra_rules`;
+`--system-prompt-file` replaces the system message and records its hash.
+
+`--compile-timeout 30`, `--max-output-bytes 1048576`, and optional
+`--isolation process --memory-limit-bytes 134217728` control compilation and test
+resource use. Native mode owns a process group/Windows Job and bounds captured
+output. Process mode adds CPU and optional memory caps. These are resource controls;
+see [SECURITY.md](SECURITY.md) for containment limitations. Optional
+`--sanitizers address,undefined` requires GCC/Clang runtimes and instruments only
+host tests; footprint objects remain uninstrumented. Reference validation is
+cached within a run using input/configuration identities, while candidate and
+reference-validation durations are reported separately.
+
+Default footprint remains the host object. `--target arm:cortex-m0 --cross-compiler
+clang` or `--target avr:atmega328p` adds real target-object compilation while Unity
+runs on the host. Cross compilers resolve from `--cross-compiler`,
+`AIBENCHMARK_ESW_CROSS_CC`, the architecture's GCC driver, then Clang on PATH.
+Task limits may use `default` plus `targets` overrides keyed by full target or CPU.
+Target, compiler, effective budgets and flags are recorded; mixed-target comparisons
+are rejected. Allocated non-NOBITS ELF sections count toward Flash, writable/NOBITS
+sections toward RAM (including AVR progmem/vectors and ARM unwind/array sections
+when allocated). This excludes linker layout, startup libraries, stack and heap;
+a target object is not a final MCU image or proof of deployment fit. Mach-O is
+explicitly unsupported rather than estimated from ambiguous segment totals.
+
+Built-in analysis records rule IDs, severity, file/line, rule configuration and
+safety penalties (15/error, 3/warning). Long/short and signed/unsigned integer/char
+spellings now trigger the fixed-width rule; plain `int` status/main APIs and plain
+`char` character data are documented exceptions. A lone such warning scores 97
+versus 100 for fixed-width types. Allocation and host process/network/file APIs
+use conservative named-reference detection, including aliases. Heuristics are
+not a complete MISRA check. Structured findings supplement legacy `violations`.
+
+New reports preserve `metadata.scoring_policy`: formula version, penalties and
+per-task limits/weights. Readers reject per-task omissions or policy mismatches
+and corroborate matching bundled task fingerprints. Pre-policy reports remain
+readable with an unavoidable **unverifiable** warning and `Unknown` comparison
+provenance. Report files and hashes are not digital signatures.
+
+The draft 2020-12 [report schema](aibenchmark_esw/schemas/report-v2.schema.json) is
+shipped in distributions. `aibenchmark-esw validate-report --schema` prints it;
+`pip install -e ".[schema]"` enables `validate-report results/run.json` for offline
+structure and Python consistency checks. See [reproducibility](docs/REPRODUCIBILITY.md)
+for which checks cannot be expressed in JSON Schema.

@@ -1,21 +1,21 @@
 # AIBenchMark-ESW Benchmark Report: `baseline`
 
 ### Summary Overview
-- **Total Tasks**: 7
-- **Compilation Rate**: 7/7 (100.0%)
-- **Pass@1 (All Tests Passed)**: 7/7 (100.0%)
+- **Total Tasks**: 8
+- **Compilation Rate**: 8/8 (100.0%)
+- **Pass@1 (All Tests Passed)**: 8/8 (100.0%)
 - **Overall AIBenchMark-ESW Score**: **100.00 / 100.0**
 
 ### Reproducibility
-- **Run (UTC)**: 2026-10-04T13:54:59.310666+00:00
+- **Run (UTC)**: 2026-10-06T14:26:20.761351+00:00
 - **Run status**: completed
 - **Benchmark / Python**: 0.1.0 / 3.11.15
 - **Compiler**: tcc / tcc version 0.9.27 (x86_64 Windows) (native)
 - **Static analysis**: builtin / No cppcheck version recorded
-- **Dataset SHA-256**: `51666cee03a28722f5be778949910b330eef6eac0dee0e708a20c47119232e56`
-- **Evaluator SHA-256**: `ea7a79bbdc025515361af1b7ec90089c8a5e668ef4626470359b24a157af5009`
-- **Source revision**: `5724b561f3a0791c0ba20a311de84ffd70082544`
-- **Source had local changes**: False
+- **Dataset SHA-256**: `7560070a1f197ce704b41ad2114ce060af0bf89a932ea7349606bb56b8c8f765`
+- **Evaluator SHA-256**: `93dc27935477c4e15f8637b0753d251103eb358605d6acb2c888d970266fa74e`
+- **Source revision**: `Unavailable in installed distribution`
+- **Source had local changes**: None
 
 ### Dimensional Scores
 | Dimension | Average Score | Weight |
@@ -30,10 +30,11 @@ Weights below are functional/memory/safety. Memory and safety contributions are 
 
 | Tier | Task ID | Standard | Weights | Compile | Tests Passed | Flash/RAM (B) | Safety | Score | Time |
 | :---: | :--- | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: |
-| 1 | `tier1_crc16` | c99 | 60%/20%/20% | PASS | 5/5 | 361 / 0 | Err:0, Warn:0 | **100.0** | 0.15s |
-| 1 | `tier1_q15_math` | c99 | 60%/20%/20% | PASS | 16/16 | 270 / 0 | Err:0, Warn:0 | **100.0** | 0.14s |
-| 1 | `tier1_ring_buffer` | c99 | 60%/20%/20% | PASS | 9/9 | 1474 / 0 | Err:0, Warn:0 | **100.0** | 0.14s |
-| 2 | `tier2_debounce_fsm` | c99 | 60%/20%/20% | PASS | 5/5 | 1134 / 0 | Err:0, Warn:0 | **100.0** | 0.14s |
-| 2 | `tier2_tick_timer` | c99 | 60%/20%/20% | PASS | 16/16 | 636 / 0 | Err:0, Warn:0 | **100.0** | 0.16s |
-| 3 | `tier3_i2c_sensor` | c99 | 60%/20%/20% | PASS | 9/9 | 790 / 0 | Err:0, Warn:0 | **100.0** | 0.16s |
-| 4 | `tier4_bitmask_fix` | c99 | 60%/20%/20% | PASS | 5/5 | 462 / 0 | Err:0, Warn:0 | **100.0** | 0.15s |
+| 1 | `tier1_crc16` | c99 | 60%/20%/20% | PASS | 6/6 | 361 / 0 | Err:0, Warn:0 | **100.0** | 0.20s |
+| 1 | `tier1_q15_math` | c99 | 60%/20%/20% | PASS | 16/16 | 270 / 0 | Err:0, Warn:0 | **100.0** | 0.26s |
+| 1 | `tier1_ring_buffer` | c99 | 60%/20%/20% | PASS | 9/9 | 1474 / 0 | Err:0, Warn:0 | **100.0** | 0.27s |
+| 2 | `tier2_cobs_codec` | c99 | 60%/20%/20% | PASS | 9/9 | 1186 / 0 | Err:0, Warn:0 | **100.0** | 0.22s |
+| 2 | `tier2_debounce_fsm` | c99 | 60%/20%/20% | PASS | 5/5 | 1134 / 0 | Err:0, Warn:0 | **100.0** | 0.30s |
+| 2 | `tier2_tick_timer` | c99 | 60%/20%/20% | PASS | 16/16 | 636 / 0 | Err:0, Warn:0 | **100.0** | 0.28s |
+| 3 | `tier3_i2c_sensor` | c99 | 60%/20%/20% | PASS | 11/11 | 830 / 0 | Err:0, Warn:0 | **100.0** | 0.24s |
+| 4 | `tier4_bitmask_fix` | c99 | 60%/20%/20% | PASS | 5/5 | 462 / 0 | Err:0, Warn:0 | **100.0** | 0.26s |

@@ -2,6 +2,8 @@
 
 import math
 
+from aibenchmark_esw.metrics.scorer import BenchmarkScorer
+
 
 def _object(value, name):
     if not isinstance(value, dict):
@@ -22,8 +24,13 @@ def _count(value, name):
 
 
 def _number(value, name):
-    if (isinstance(value, bool) or not isinstance(value, (int, float))
-            or not math.isfinite(value) or value < 0):
+    if isinstance(value, bool) or not isinstance(value, (int, float)) or value < 0:
+        raise ValueError(f"{name} must be a finite nonnegative number")
+    try:
+        finite = math.isfinite(value)
+    except OverflowError:
+        finite = False
+    if not finite:
         raise ValueError(f"{name} must be a finite nonnegative number")
 
 
@@ -71,9 +78,27 @@ def validate_task_result(item, default_model):
         raise ValueError("safety_metrics.violations must be an array of strings")
     if safety.get("cppcheck_status") not in (None, "disabled", "not_run", "completed", "failed"):
         raise ValueError("Unknown cppcheck status")
+    findings = safety.get("findings", [])
+    if not isinstance(findings, list):
+        raise ValueError("findings must be an array")
+    for finding in findings:
+        _object(finding, "finding")
+        for field in ("rule_id", "message", "file"):
+            _name(finding.get(field), "finding." + field)
+        if finding.get("engine") not in ("builtin", "cppcheck") or finding.get("severity") not in (
+                "error", "warning", "style", "performance", "portability"):
+            raise ValueError("Unknown finding engine or severity")
+        if finding.get("line") is not None:
+            _count(finding["line"], "finding.line")
+            if finding["line"] == 0:
+                raise ValueError("finding.line must be positive")
     if safety.get("cppcheck_diagnostic") is not None and not isinstance(safety["cppcheck_diagnostic"], str):
         raise ValueError("cppcheck_diagnostic must be a string or null")
     _number(item.get("execution_time_sec"), "execution_time_sec")
+    _name(item.get("footprint_target", "host"), "footprint_target")
+    for name in ("candidate_time_sec", "reference_validation_time_sec"):
+        if item.get(name) is not None:
+            _number(item[name], name)
     for name in ("target_standard", "effective_standard"):
         if item.get(name) is not None and item[name] not in ("c99", "c11", "c17"):
             raise ValueError(f"{name} must be c99, c11, c17 or null")
@@ -97,6 +122,17 @@ def validate_task_result(item, default_model):
 
 
 def validate_composite_score(result):
+    scores = result.scores
+    if scores.total_score > scores.functional_score + 0.02:
+        raise ValueError("Composite score cannot exceed the functional score")
+    if result.compiled and result.test_result.completed:
+        expected_safety = BenchmarkScorer.safety_score(result.safety_metrics)
+        if not math.isclose(scores.safety_score, expected_safety, abs_tol=0.01):
+            raise ValueError("Safety score contradicts the recorded error and warning counts")
+        if result.limits is not None:
+            expected_memory = round(BenchmarkScorer.memory_score(result.limits, result.size_metrics), 2)
+            if not math.isclose(scores.memory_score, expected_memory, abs_tol=0.01):
+                raise ValueError("Memory score contradicts the recorded sizes and task limits")
     if result.weights is None:
         return  # Older reports did not preserve the weights.
     scores, weights = result.scores, result.weights
@@ -119,7 +155,7 @@ def validate_run_state(metadata, results):
         if metadata.get("pending_tasks"):
             raise ValueError("Pending tasks require an explicit run_status")
         return
-    if status not in ("running", "completed", "interrupted"):
+    if status not in ("running", "completed", "interrupted", "aborted"):
         raise ValueError("Unknown run_status")
     pending = metadata.get("pending_tasks")
     if (not isinstance(pending, list) or any(not isinstance(item, str) for item in pending)

@@ -8,7 +8,35 @@ from aibenchmark_esw.models import (
 )
 
 
+SCORING_FORMULA_VERSION = "functional-gated-v1"
+SAFETY_ERROR_PENALTY = 15
+SAFETY_WARNING_PENALTY = 3
+
+
 class BenchmarkScorer:
+    @staticmethod
+    def memory_score(limits, size_metrics):
+        """Keep independent hard limits before applying the combined-size reward."""
+        max_budget = limits.max_flash_bytes + limits.max_ram_bytes
+        actual_size = size_metrics.flash_bytes + size_metrics.ram_bytes
+        ref_size = size_metrics.ref_flash_bytes + size_metrics.ref_ram_bytes
+        if (not size_metrics.measured or ref_size <= 0
+                or size_metrics.flash_bytes > limits.max_flash_bytes
+                or size_metrics.ram_bytes > limits.max_ram_bytes
+                or size_metrics.ref_flash_bytes > limits.max_flash_bytes
+                or size_metrics.ref_ram_bytes > limits.max_ram_bytes):
+            return 0.0
+        if actual_size <= ref_size:
+            return 100.0
+        if actual_size >= max_budget:
+            return 0.0
+        return max(0.0, 100.0 - 100.0 * (actual_size - ref_size) / max(1, max_budget - ref_size))
+
+    @staticmethod
+    def safety_score(safety_metrics):
+        penalty = safety_metrics.error_count * SAFETY_ERROR_PENALTY + safety_metrics.warning_count * SAFETY_WARNING_PENALTY
+        return 0.0 if penalty >= 100 else 100.0 - penalty
+
     @staticmethod
     def calculate_scores(
         task: TaskConfig,
@@ -27,29 +55,10 @@ class BenchmarkScorer:
             func_score = (test_res.passed_tests / test_res.total_tests) * 100.0
 
         # 2. Memory Footprint Score (0.0 - 100.0)
-        max_budget = task.limits.max_flash_bytes + task.limits.max_ram_bytes
-        actual_size = size_metrics.flash_bytes + size_metrics.ram_bytes
-        ref_size = size_metrics.ref_flash_bytes + size_metrics.ref_ram_bytes
-
-        if (not size_metrics.measured or ref_size <= 0
-                or size_metrics.flash_bytes > task.limits.max_flash_bytes
-                or size_metrics.ram_bytes > task.limits.max_ram_bytes
-                or size_metrics.ref_flash_bytes > task.limits.max_flash_bytes
-                or size_metrics.ref_ram_bytes > task.limits.max_ram_bytes):
-            mem_score = 0.0
-        elif actual_size <= ref_size:
-            mem_score = 100.0
-        elif actual_size >= max_budget:
-            mem_score = 0.0
-        else:
-            # Linear penalty between ref_size and max_budget
-            denom = max(1, max_budget - ref_size)
-            excess_ratio = (actual_size - ref_size) / denom
-            mem_score = max(0.0, 100.0 - (100.0 * excess_ratio))
+        mem_score = BenchmarkScorer.memory_score(task.limits, size_metrics)
 
         # 3. Code Safety & MISRA Score (0.0 - 100.0)
-        penalty = (safety_metrics.error_count * 15.0) + (safety_metrics.warning_count * 3.0)
-        safety_score = max(0.0, 100.0 - penalty)
+        safety_score = BenchmarkScorer.safety_score(safety_metrics)
 
         # 4. Total Composite Score
         # If functional tests fail, memory and safety are scaled down proportionally

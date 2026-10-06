@@ -11,10 +11,9 @@ logger = logging.getLogger(__name__)
 
 def validate_task_assets(task: TaskConfig) -> List[str]:
     """Check readable, nonempty prompt/API/source/test inputs without executing C."""
-    reference = task.reference_file or f"reference/{Path(task.entry_file).name}"
     required = [("prompt", task.task_dir / "prompt.md"),
                 ("starter implementation", task.task_dir / task.entry_file),
-                ("reference implementation", task.task_dir / reference)]
+                ("reference implementation", task.reference_path)]
     errors = []
     for folder, pattern, label in (("include", "*.h", "API header"), ("tests", "test_*.c", "test source")):
         matches = sorted((task.task_dir / folder).glob(pattern))
@@ -34,7 +33,9 @@ def validate_task_assets(task: TaskConfig) -> List[str]:
 
 
 class DatasetLoader:
-    def __init__(self, tasks_root: Optional[Path] = None):
+    def __init__(self, tasks_root: Optional[Path] = None, strict: bool = True):
+        self.strict = strict
+        self.load_errors: Dict[str, str] = {}
         if tasks_root is None:
             self.tasks_root = data_root() / "tasks"
         else:
@@ -63,8 +64,12 @@ class DatasetLoader:
                 prompt_file = task_dir / "prompt.md"
                 prompt_content = ""
                 if prompt_file.is_file():
-                    with open(prompt_file, "r", encoding="utf-8") as pf:
-                        prompt_content = pf.read()
+                    # Keep valid metadata selectable even when an asset is broken.
+                    # validate_task_assets diagnoses the unreadable prompt per task.
+                    try:
+                        prompt_content = prompt_file.read_text(encoding="utf-8")
+                    except (OSError, UnicodeError):
+                        pass
 
                 config = TaskConfig.from_dict(data, task_dir=task_dir, prompt=prompt_content)
                 if config.id in tasks:
@@ -72,13 +77,17 @@ class DatasetLoader:
                 tasks[config.id] = config
             except (OSError, UnicodeError, ValueError, KeyError, TypeError) as error:
                 logger.error("Failed to load task at %s: %s", task_dir, error)
-                raise ValueError(f"Invalid task at {task_dir}: {error}") from error
+                if self.strict:
+                    raise ValueError(f"Invalid task at {task_dir}: {error}") from error
+                self.load_errors[str(task_dir)] = str(error)
         self._tasks = tasks
 
-    def list_tasks(self, tier: Optional[int] = None) -> List[TaskConfig]:
+    def list_tasks(self, tier: Optional[int] = None, category: Optional[str] = None) -> List[TaskConfig]:
         tasks = list(self._tasks.values())
         if tier is not None:
             tasks = [t for t in tasks if t.tier == tier]
+        if category is not None:
+            tasks = [t for t in tasks if t.category == category]
         return sorted(tasks, key=lambda t: (t.tier, t.id))
 
     def get_task(self, task_id: str) -> Optional[TaskConfig]:
@@ -88,9 +97,7 @@ class DatasetLoader:
         task = self.get_task(task_id)
         if not task:
             return None
-        # Existing datasets may use the documented basename convention.
-        relative_path = task.reference_file or f"reference/{Path(task.entry_file).name}"
-        ref_file = task.task_dir / relative_path
+        ref_file = task.reference_path
         if ref_file.is_file():
             with open(ref_file, "r", encoding="utf-8") as f:
                 return f.read()

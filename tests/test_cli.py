@@ -139,6 +139,7 @@ class TestCLI(unittest.TestCase):
     def test_report_formats_and_legacy_json(self):
         data = json.loads(Path("results/baseline.json").read_text(encoding="utf-8"))
         # Exercise the pre-change schema even after refreshing the stored baseline.
+        data["metadata"].pop("scoring_policy", None)
         for task in data["tasks"]:
             task["test_result"].pop("completed", None)
             task["test_result"].pop("returncode", None)

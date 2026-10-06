@@ -2,7 +2,7 @@ from typing import List, Dict, Any
 from typing import Optional
 from aibenchmark_esw.metrics.validation import validate_task_result, validate_composite_score, validate_run_state
 from aibenchmark_esw.models import (
-    TaskEvaluationResult, TestResult, SizeMetrics, StaticSafetyMetrics, DimensionScores, TaskWeights,
+    TaskEvaluationResult, TestResult, SizeMetrics, StaticSafetyMetrics, DimensionScores, TaskWeights, TaskLimits,
 )
 
 
@@ -45,20 +45,57 @@ class BenchmarkReporter:
         version = data.get("schema_version", 1)
         if isinstance(version, bool) or not isinstance(version, int) or version not in (1, 2):
             raise ValueError(f"Unsupported report schema version: {version}")
+        for field in ("overall_score", "pass_at_1_pct"):
+            value = data.get(field)
+            if field in data and (isinstance(value, bool) or not isinstance(value, (float, int)) or not 0 <= value <= 100):
+                raise ValueError(f"{field} must be a finite score from 0 to 100")
+        if "model_name" in data and (not isinstance(data["model_name"], str) or not data["model_name"].strip()):
+            raise ValueError("model_name must be a nonempty string")
         if data.get("metadata") is not None and not isinstance(data["metadata"], dict):
             raise ValueError("Run metadata must be an object")
-        for key in ("compiler", "platform", "generation_settings", "static_analysis"):
+        for key in ("compiler", "platform", "generation_settings", "static_analysis", "execution_settings"):
             value = (data.get("metadata") or {}).get(key)
             if value is not None and not isinstance(value, dict):
                 raise ValueError(f"Metadata {key} must be an object")
         results = []
+        policy = (data.get("metadata") or {}).get("scoring_policy")
+        if policy is not None:
+            from aibenchmark_esw.metrics.scorer import SCORING_FORMULA_VERSION, SAFETY_ERROR_PENALTY, SAFETY_WARNING_PENALTY
+            if (not isinstance(policy, dict) or policy.get("formula_version") != SCORING_FORMULA_VERSION
+                    or policy.get("safety_error_penalty") != SAFETY_ERROR_PENALTY
+                    or policy.get("safety_warning_penalty") != SAFETY_WARNING_PENALTY
+                    or not isinstance(policy.get("tasks"), dict)):
+                raise ValueError("Unknown or invalid scoring_policy")
         for item in data["tasks"]:
             if not isinstance(item, dict):
                 raise ValueError("Each task result must be an object")
             validate_task_result(item, data.get("model_name", "unknown"))
+            if policy is not None:
+                expected = policy["tasks"].get(item["task_id"])
+                if not isinstance(expected, dict) or any(item.get(key) != expected.get(key) or item.get(key) is None
+                        for key in ("limits", "weights")):
+                    raise ValueError("Task limits/weights disagree with recorded scoring_policy")
+                # Corroborate a bundled task only when its fingerprint identifies
+                # the local configuration; external datasets remain portable.
+                from dataclasses import asdict, replace
+                from aibenchmark_esw.dataset import DatasetLoader
+                from aibenchmark_esw.provenance import task_sha256
+                from aibenchmark_esw.resources import data_root
+                local = DatasetLoader().get_task(item["task_id"])
+                if local is not None and item.get("footprint_target", "host") != "host":
+                    target = item["footprint_target"]
+                    effective_limits = local.target_limits.get(target) or local.target_limits.get(target.split(":")[-1])
+                    if effective_limits is not None:
+                        local = replace(local, limits=effective_limits)
+                fingerprint = (item.get("provenance") or {}).get("task_sha256")
+                if local is not None and fingerprint == task_sha256(local, data_root() / "third_party" / "unity"):
+                    if expected != {"limits": asdict(local.limits), "weights": asdict(local.weights)}:
+                        raise ValueError("Scoring policy disagrees with the referenced task configuration")
             for key in ("generation", "provenance"):
                 if item.get(key) is not None and not isinstance(item[key], dict):
                     raise ValueError(f"Task {key} must be an object")
+            if item.get("limits") is not None and not isinstance(item["limits"], dict):
+                raise ValueError("Task limits must be an object")
             usage = (item.get("generation") or {}).get("usage")
             if usage is not None and not isinstance(usage, dict):
                 raise ValueError("Generation usage must be an object")
@@ -68,7 +105,7 @@ class BenchmarkReporter:
             scores = item["scores"]
             results.append(TaskEvaluationResult(
                 task_id=item["task_id"], tier=item["tier"],
-                model_name=item.get("model_name", data.get("model_name", "unknown")),
+                model_name=item["model_name"] if "model_name" in item else data.get("model_name", "unknown"),
                 compiled=item["compiled"],
                 test_result=TestResult(
                     total_tests=tests["total"], passed_tests=tests["passed"],
@@ -85,6 +122,10 @@ class BenchmarkReporter:
                 effective_standard=item.get("effective_standard"),
                 generation=item.get("generation"),
                 provenance=item.get("provenance"),
+                limits=TaskLimits(**item["limits"]) if item.get("limits") is not None else None,
+                candidate_time_sec=item.get("candidate_time_sec"),
+                reference_validation_time_sec=item.get("reference_validation_time_sec"),
+                footprint_target=item.get("footprint_target", "host"),
             ))
             validate_composite_score(results[-1])
         if len({result.task_id for result in results}) != len(results):
@@ -112,6 +153,8 @@ class BenchmarkReporter:
         warning = BenchmarkReporter.run_warning(metadata)
         if warning:
             md.append(f"**{warning}**\n")
+        if (metadata or {}).get("unreadable_assets"):
+            md.append("**Dataset provenance is incomplete because some input assets were unreadable.**\n")
         md.append("### Summary Overview")
         md.append(f"- **Total Tasks**: {total_tasks}")
         md.append(f"- **Compilation Rate**: {compiled_tasks}/{total_tasks} ({compiled_tasks/total_tasks*100:.1f}%)")
@@ -157,10 +200,24 @@ class BenchmarkReporter:
             time_str = f"{r.execution_time_sec:.2f}s"
             md.append(f"| {r.tier} | `{r.task_id}` | {BenchmarkReporter._standard(r)} | {BenchmarkReporter._task_weights(r)} | {status_comp} | {test_str} | {mem_str} | {safe_str} | {score_str} | {time_str} |")
 
-        warnings = BenchmarkReporter.analysis_warnings(results)
+        for r in results:
+            if r.footprint_target != "host" and r.limits is not None:
+                md.append(f"\nFootprint target: {r.footprint_target}; {r.task_id} budget Flash/RAM="
+                          f"{r.limits.max_flash_bytes}/{r.limits.max_ram_bytes}B\n")
+
+        warnings = BenchmarkReporter.analysis_warnings(results) + BenchmarkReporter.scoring_warnings(results)
+        if not (metadata or {}).get("scoring_policy"):
+            warnings.append("Legacy scoring policy is unverifiable; limits and weights are report-supplied.")
         if warnings:
-            md += ["", "### Static-analysis coverage", ""]
+            md += ["", "### Validation and analysis coverage", ""]
             md += [f"- {warning}" for warning in warnings]
+        findings = [(result.task_id, finding) for result in results for finding in result.safety_metrics.findings]
+        if findings:
+            md += ["", "### Static-analysis findings", ""]
+            for task_id, finding in findings:
+                message = finding["message"].replace("|", "\\|").replace("\n", " ")
+                md.append(f"- `{task_id}` [{finding['engine']} / {finding['rule_id']} / {finding['severity']}] "
+                          f"{finding['file']}:{finding['line'] or '?'}: {message}")
 
         return "\n".join(md)
 
@@ -176,6 +233,8 @@ class BenchmarkReporter:
         lines.append("-" * 110)
 
         for r in results:
+            if r.footprint_target != "host" and r.limits is not None:
+                lines.append(f"Target {r.footprint_target}: {r.task_id} Flash/RAM budget {r.limits.max_flash_bytes}/{r.limits.max_ram_bytes}B")
             comp = "PASS" if r.compiled else "FAIL"
             tests = (f"{r.test_result.passed_tests}/{r.test_result.total_tests}"
                      if r.test_result.completed else "INCOMP")
@@ -191,16 +250,25 @@ class BenchmarkReporter:
         pass_at_1 = sum(1 for r in results if BenchmarkReporter._all_tests_passed(r)) / max(1, len(results)) * 100.0
         lines.append(f"Final Score: {avg_total:.2f}/100.0 | Pass@1: {pass_at_1:.1f}%")
         lines.append("=" * 110)
-        lines += [f"Warning: {warning}" for warning in BenchmarkReporter.analysis_warnings(results)]
+        lines += [f"Warning: {warning}" for warning in
+                  BenchmarkReporter.analysis_warnings(results) + BenchmarkReporter.scoring_warnings(results)]
         warning = BenchmarkReporter.run_warning(metadata)
         if warning:
             lines.append(warning)
+        if (metadata or {}).get("unreadable_assets"):
+            lines.append("Dataset provenance is incomplete because some input assets were unreadable.")
+        if not (metadata or {}).get("scoring_policy"):
+            lines.append("Warning: Legacy scoring policy is unverifiable; limits and weights are report-supplied.")
+        for result in results:
+            for finding in result.safety_metrics.findings:
+                lines.append(f"[{result.task_id}] {finding['engine']} / {finding['rule_id']} / {finding['severity']}: "
+                             f"{finding['file']}:{finding['line'] or '?'}: {finding['message']}")
         return "\n".join(lines)
 
     @staticmethod
     def run_warning(metadata):
         metadata = metadata or {}
-        if metadata.get("run_status") in ("running", "interrupted"):
+        if metadata.get("run_status") in ("running", "interrupted", "aborted"):
             return (f"Run status: {metadata['run_status']}; {len(metadata.get('pending_tasks', []))} "
                     "tasks pending (included as zero). This run is unfinished.")
         return None
@@ -215,6 +283,14 @@ class BenchmarkReporter:
             elif result.compiled and result.test_result.completed and status in (None, "not_run"):
                 warnings.append(f"{result.task_id}: static-analysis coverage was not recorded or did not run.")
         return warnings
+
+    @staticmethod
+    def scoring_warnings(results: List[TaskEvaluationResult]) -> List[str]:
+        missing = [result.task_id for result in results
+                   if result.compiled and result.test_result.completed
+                   and result.size_metrics.measured and result.limits is None]
+        return (["Memory scores cannot be independently verified without recorded task limits: "
+                 + ", ".join(missing) + "."] if missing else [])
 
     @staticmethod
     def to_json_dict(results: List[TaskEvaluationResult], model_name: str,

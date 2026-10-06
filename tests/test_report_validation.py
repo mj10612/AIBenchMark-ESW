@@ -12,7 +12,10 @@ from aibenchmark_esw.metrics.reporter import BenchmarkReporter
 
 class TestReportValidation(unittest.TestCase):
     def report(self):
-        return json.loads(Path("results/baseline.json").read_text(encoding="utf-8"))
+        data = json.loads(Path("results/baseline.json").read_text(encoding="utf-8"))
+        # These fixtures deliberately exercise the pre-policy legacy path.
+        data["metadata"].pop("scoring_policy", None)
+        return data
 
     def test_invalid_flags_counts_measurements_and_scores_are_rejected(self):
         mutations = [
@@ -60,6 +63,9 @@ class TestReportValidation(unittest.TestCase):
         data = self.report()
         task = data["tasks"][0]
         task["test_result"].update(total=3, passed=1, failed=2, ignored=0, all_passed=False, returncode=2)
+        task["safety_metrics"].update(error_count=0, warning_count=2)
+        task["limits"] = {"max_flash_bytes": 10000, "max_ram_bytes": 0, "timeout_seconds": 10}
+        task["size_metrics"].update(flash_bytes=8451, ram_bytes=0, ref_flash_bytes=1000, ref_ram_bytes=0)
         task["scores"].update(functional=33.33, memory=17.21, safety=94, total=27.41)
         self.assertEqual(BenchmarkReporter.from_json_dict(data)[0].scores.total_score, 27.41)
         legacy = self.report()
@@ -103,6 +109,57 @@ class TestReportValidation(unittest.TestCase):
                     self.assertEqual(command(args), 1)
                     self.assertIn("compiled must be a boolean", errors.getvalue())
                     self.assertNotIn("Traceback", errors.getvalue())
+
+    def test_impossible_safety_and_legacy_composites_are_rejected(self):
+        data = self.report()
+        data["tasks"][0]["safety_metrics"]["error_count"] = 7
+        with self.assertRaisesRegex(ValueError, "Safety score"):
+            BenchmarkReporter.from_json_dict(data)
+        data = self.report()
+        task = data["tasks"][0]
+        total = task["test_result"]["total"]
+        task["test_result"].update(passed=0, failed=total, all_passed=False, returncode=total)
+        task["scores"].update(functional=0, total=100)
+        task.pop("weights", None)
+        with self.assertRaisesRegex(ValueError, "cannot exceed"):
+            BenchmarkReporter.from_json_dict(data)
+
+    def test_recorded_limits_validate_memory_and_legacy_limits_remain_visibly_unknown(self):
+        data = self.report()
+        task = data["tasks"][0]
+        task["limits"] = {"max_flash_bytes": 1, "max_ram_bytes": 0, "timeout_seconds": 10}
+        with self.assertRaisesRegex(ValueError, "Memory score"):
+            BenchmarkReporter.from_json_dict(data)
+        task.pop("limits")
+        restored = BenchmarkReporter.from_json_dict(data)
+        self.assertIn("cannot be independently verified", BenchmarkReporter.generate_markdown(restored, "baseline"))
+
+    def test_aborted_state_and_optional_timings_round_trip(self):
+        data = self.report()
+        data["metadata"]["run_status"] = "aborted"
+        data["metadata"]["pending_tasks"] = []
+        data["tasks"][0].update(candidate_time_sec=0.25, reference_validation_time_sec=0.5)
+        restored = BenchmarkReporter.from_json_dict(data)
+        self.assertEqual(restored[0].candidate_time_sec, 0.25)
+        self.assertEqual(restored[0].reference_validation_time_sec, 0.5)
+        self.assertIn("aborted", BenchmarkReporter.run_warning(data["metadata"]))
+        data["tasks"][0]["candidate_time_sec"] = -1
+        with self.assertRaisesRegex(ValueError, "candidate_time_sec"):
+            BenchmarkReporter.from_json_dict(data)
+
+    def test_cli_report_and_compare_reject_contradictory_safety(self):
+        with TemporaryDirectory() as directory:
+            path = Path(directory) / "contradiction.json"
+            data = self.report()
+            data["tasks"][0]["safety_metrics"]["warning_count"] = 2
+            path.write_text(json.dumps(data), encoding="utf-8")
+            for argv in (["report", "--results", str(path)],
+                         ["compare", "--results", str(path), "results/baseline.json"]):
+                args = cli.build_parser().parse_args(argv)
+                command = cli.cmd_report if args.command == "report" else cli.cmd_compare
+                with redirect_stderr(io.StringIO()) as errors, redirect_stdout(io.StringIO()):
+                    self.assertEqual(command(args), 1)
+                self.assertIn("Safety score", errors.getvalue())
 
 
 if __name__ == "__main__":

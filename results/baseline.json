@@ -1,10 +1,10 @@
 {
   "schema_version": 2,
   "metadata": {
-    "run_id": "9f66538026f44b66a2ae1b0e0474f28d",
-    "created_at_utc": "2026-10-04T13:54:59.310666+00:00",
+    "run_id": "868fce7a8a344264b829809ab7d109c5",
+    "created_at_utc": "2026-10-06T14:26:20.761351+00:00",
     "benchmark_version": "0.1.0",
-    "evaluator_sha256": "ea7a79bbdc025515361af1b7ec90089c8a5e668ef4626470359b24a157af5009",
+    "evaluator_sha256": "93dc27935477c4e15f8637b0753d251103eb358605d6acb2c888d970266fa74e",
     "python_version": "3.11.15",
     "platform": {
       "system": "Windows",
@@ -14,37 +14,206 @@
     "compiler": {
       "name": "tcc",
       "version": "tcc version 0.9.27 (x86_64 Windows)",
+      "target": {
+        "target": "host"
+      },
       "optimization": "native",
       "allow_standard_fallback": false
     },
     "static_analysis": {
       "engine": "builtin",
-      "cppcheck_version": null
+      "cppcheck_version": null,
+      "configuration": {
+        "builtin_rules": [
+          "allocation-reference",
+          "misra.15.1",
+          "floating-types",
+          "misra.4.6",
+          "host-process",
+          "host-network",
+          "host-filesystem"
+        ],
+        "basic_type_exceptions": [
+          "plain int (status/main APIs)",
+          "plain char (character data)"
+        ],
+        "cppcheck_enabled": [
+          "warning",
+          "style",
+          "performance",
+          "portability"
+        ],
+        "inconclusive": true,
+        "standard": "task effective standard",
+        "error_severities": [
+          "error"
+        ],
+        "warning_severities": [
+          "warning",
+          "style",
+          "performance",
+          "portability"
+        ]
+      }
     },
-    "source_revision": "5724b561f3a0791c0ba20a311de84ffd70082544",
-    "source_dirty": false,
+    "source_revision": null,
+    "source_dirty": null,
     "selected_tasks": [
       "tier1_crc16",
       "tier1_q15_math",
       "tier1_ring_buffer",
+      "tier2_cobs_codec",
       "tier2_debounce_fsm",
       "tier2_tick_timer",
       "tier3_i2c_sensor",
       "tier4_bitmask_fix"
     ],
     "task_fingerprints": {
-      "tier1_crc16": "ab381f814643ae15193bd2f38b49dd6b14cf90118a326dae26bbb4eba10d203a",
-      "tier1_q15_math": "4a17ca0c6371fedb615d2db66920569c2374dc1702852a7d1fba7c4910ee8487",
-      "tier1_ring_buffer": "af6fccefe14a9a05a45ae344ce583b024f53d5e2297715b04619115601c3dc7c",
-      "tier2_debounce_fsm": "f508440bf636078db5dd59342eb571ccc6811e8e8e73df744ed739004b168fa0",
-      "tier2_tick_timer": "bd1c1bcbc812bdc2d4435cc25543bb1473ebd9519e34e262739df75563728bf8",
-      "tier3_i2c_sensor": "4607eab661515cd735fc43a15e699ebc71c9110dc80d0d77736cf94813ea8ffb",
-      "tier4_bitmask_fix": "43a97ee78b86a62bef6f9ed9cd7b78559ad96b558b877bf0a31fd9e47fbe0296"
+      "tier1_crc16": "2305e3e65b1ac04ef8b9b4a066ff1ca53313b1de8ff181ae891a059c3d5b81fd",
+      "tier1_q15_math": "18310898e6843f8ed3a3accbff6839c3b70db316febb4b7a73482061e2cfa8f7",
+      "tier1_ring_buffer": "d76eeddd101c31cabc7817cab27011226efb36b2c8594bed121d66c54d2a3a18",
+      "tier2_cobs_codec": "37cbbae63ade560e083d9d4e576d7560d2147bb851e14d821edb17b4f507c9d9",
+      "tier2_debounce_fsm": "1887d3b314b45dcac68e81b994a4eed01965152752a7a8d54dedae1e4432ec48",
+      "tier2_tick_timer": "0b698a42acca7a861cfd5398205698d68dd91c7cdb16fdda8416a260f1c3cbc0",
+      "tier3_i2c_sensor": "6a78c585499f682e9ee61cc2795310e183b89ab53001c7ddc1d816965086c1ce",
+      "tier4_bitmask_fix": "fea84fe73fa0529a29af6435eb2f37d6396a215f11b500af79d9abbb2e9a19ed"
     },
-    "dataset_sha256": "51666cee03a28722f5be778949910b330eef6eac0dee0e708a20c47119232e56",
+    "dataset_sha256": "7560070a1f197ce704b41ad2114ce060af0bf89a932ea7349606bb56b8c8f765",
+    "unreadable_assets": {},
     "generation_settings": null,
+    "scoring_policy": {
+      "formula_version": "functional-gated-v1",
+      "safety_error_penalty": 15,
+      "safety_warning_penalty": 3,
+      "tasks": {
+        "tier1_crc16": {
+          "weights": {
+            "functional": 0.6,
+            "memory": 0.2,
+            "safety": 0.2
+          },
+          "limits": {
+            "max_flash_bytes": 1024,
+            "max_ram_bytes": 128,
+            "timeout_seconds": 5
+          }
+        },
+        "tier1_q15_math": {
+          "weights": {
+            "functional": 0.6,
+            "memory": 0.2,
+            "safety": 0.2
+          },
+          "limits": {
+            "max_flash_bytes": 1024,
+            "max_ram_bytes": 0,
+            "timeout_seconds": 5
+          }
+        },
+        "tier1_ring_buffer": {
+          "weights": {
+            "functional": 0.6,
+            "memory": 0.2,
+            "safety": 0.2
+          },
+          "limits": {
+            "max_flash_bytes": 2048,
+            "max_ram_bytes": 128,
+            "timeout_seconds": 5
+          }
+        },
+        "tier2_cobs_codec": {
+          "weights": {
+            "functional": 0.6,
+            "memory": 0.2,
+            "safety": 0.2
+          },
+          "limits": {
+            "max_flash_bytes": 2048,
+            "max_ram_bytes": 0,
+            "timeout_seconds": 5
+          }
+        },
+        "tier2_debounce_fsm": {
+          "weights": {
+            "functional": 0.6,
+            "memory": 0.2,
+            "safety": 0.2
+          },
+          "limits": {
+            "max_flash_bytes": 1536,
+            "max_ram_bytes": 128,
+            "timeout_seconds": 5
+          }
+        },
+        "tier2_tick_timer": {
+          "weights": {
+            "functional": 0.6,
+            "memory": 0.2,
+            "safety": 0.2
+          },
+          "limits": {
+            "max_flash_bytes": 1536,
+            "max_ram_bytes": 0,
+            "timeout_seconds": 5
+          }
+        },
+        "tier3_i2c_sensor": {
+          "weights": {
+            "functional": 0.6,
+            "memory": 0.2,
+            "safety": 0.2
+          },
+          "limits": {
+            "max_flash_bytes": 2048,
+            "max_ram_bytes": 256,
+            "timeout_seconds": 5
+          }
+        },
+        "tier4_bitmask_fix": {
+          "weights": {
+            "functional": 0.6,
+            "memory": 0.2,
+            "safety": 0.2
+          },
+          "limits": {
+            "max_flash_bytes": 1024,
+            "max_ram_bytes": 128,
+            "timeout_seconds": 5
+          }
+        }
+      }
+    },
+    "execution_settings": {
+      "compile_timeout_seconds": 30.0,
+      "max_output_bytes": 1048576,
+      "isolation": "native",
+      "memory_limit_bytes": null,
+      "sanitizers": [],
+      "process_backend": "windows-job",
+      "cpu_limit": null,
+      "footprint": {
+        "target": "host",
+        "measurement": "host-object"
+      }
+    },
+    "run_options": {
+      "compiler": "C:\\Users\\Admin\\scoop\\apps\\tcc\\0.9.27\\tcc\\tcc.exe",
+      "allow_standard_fallback": false,
+      "compile_timeout": 30.0,
+      "max_output_bytes": 1048576,
+      "isolation": "native",
+      "memory_limit_bytes": null,
+      "sanitizers": [],
+      "save_solutions": null,
+      "tasks_root": null,
+      "system_prompt_file": null,
+      "target": null,
+      "cross_compiler": null
+    },
     "run_status": "completed",
-    "pending_tasks": []
+    "pending_tasks": [],
+    "source_revision_status": "published-artifact"
   },
   "model_name": "baseline",
   "overall_score": 100.0,
@@ -56,8 +225,8 @@
       "model_name": "baseline",
       "compiled": true,
       "test_result": {
-        "total": 5,
-        "passed": 5,
+        "total": 6,
+        "passed": 6,
         "failed": 0,
         "ignored": 0,
         "all_passed": true,
@@ -76,7 +245,8 @@
         "warning_count": 0,
         "violations": [],
         "cppcheck_status": "disabled",
-        "cppcheck_diagnostic": null
+        "cppcheck_diagnostic": null,
+        "findings": []
       },
       "scores": {
         "functional": 100.0,
@@ -84,7 +254,7 @@
         "safety": 100.0,
         "total": 100.0
       },
-      "execution_time_sec": 0.149,
+      "execution_time_sec": 0.2,
       "error_log": null,
       "weights": {
         "functional": 0.6,
@@ -95,10 +265,19 @@
       "effective_standard": "c99",
       "generation": null,
       "provenance": {
-        "task_sha256": "ab381f814643ae15193bd2f38b49dd6b14cf90118a326dae26bbb4eba10d203a",
+        "reference_cache_hit": false,
+        "task_sha256": "2305e3e65b1ac04ef8b9b4a066ff1ca53313b1de8ff181ae891a059c3d5b81fd",
         "candidate_sha256": "dc86b51824ee6720d2e976308cb11acd0e436490b0c8b44d99615029c334e667",
         "prompt_sha256": null
-      }
+      },
+      "limits": {
+        "max_flash_bytes": 1024,
+        "max_ram_bytes": 128,
+        "timeout_seconds": 5
+      },
+      "candidate_time_sec": 0.20022830000016256,
+      "reference_validation_time_sec": 0.03873389999898791,
+      "footprint_target": "host"
     },
     {
       "task_id": "tier1_q15_math",
@@ -126,7 +305,8 @@
         "warning_count": 0,
         "violations": [],
         "cppcheck_status": "disabled",
-        "cppcheck_diagnostic": null
+        "cppcheck_diagnostic": null,
+        "findings": []
       },
       "scores": {
         "functional": 100.0,
@@ -134,7 +314,7 @@
         "safety": 100.0,
         "total": 100.0
       },
-      "execution_time_sec": 0.141,
+      "execution_time_sec": 0.263,
       "error_log": null,
       "weights": {
         "functional": 0.6,
@@ -145,10 +325,19 @@
       "effective_standard": "c99",
       "generation": null,
       "provenance": {
-        "task_sha256": "4a17ca0c6371fedb615d2db66920569c2374dc1702852a7d1fba7c4910ee8487",
+        "reference_cache_hit": false,
+        "task_sha256": "18310898e6843f8ed3a3accbff6839c3b70db316febb4b7a73482061e2cfa8f7",
         "candidate_sha256": "7031ddca96f3d8cd496fdb3f8829115c402d2c8acb6afb3012fe072f4a5971f6",
         "prompt_sha256": null
-      }
+      },
+      "limits": {
+        "max_flash_bytes": 1024,
+        "max_ram_bytes": 0,
+        "timeout_seconds": 5
+      },
+      "candidate_time_sec": 0.26262779999888153,
+      "reference_validation_time_sec": 0.03855160000057367,
+      "footprint_target": "host"
     },
     {
       "task_id": "tier1_ring_buffer",
@@ -176,7 +365,8 @@
         "warning_count": 0,
         "violations": [],
         "cppcheck_status": "disabled",
-        "cppcheck_diagnostic": null
+        "cppcheck_diagnostic": null,
+        "findings": []
       },
       "scores": {
         "functional": 100.0,
@@ -184,7 +374,7 @@
         "safety": 100.0,
         "total": 100.0
       },
-      "execution_time_sec": 0.143,
+      "execution_time_sec": 0.269,
       "error_log": null,
       "weights": {
         "functional": 0.6,
@@ -195,10 +385,79 @@
       "effective_standard": "c99",
       "generation": null,
       "provenance": {
-        "task_sha256": "af6fccefe14a9a05a45ae344ce583b024f53d5e2297715b04619115601c3dc7c",
+        "reference_cache_hit": false,
+        "task_sha256": "d76eeddd101c31cabc7817cab27011226efb36b2c8594bed121d66c54d2a3a18",
         "candidate_sha256": "915422a09ac1a34ddb89b99e0927f43d510fe3d50ea7922041d2802bbbf1a833",
         "prompt_sha256": null
-      }
+      },
+      "limits": {
+        "max_flash_bytes": 2048,
+        "max_ram_bytes": 128,
+        "timeout_seconds": 5
+      },
+      "candidate_time_sec": 0.2685176000013598,
+      "reference_validation_time_sec": 0.039090000000214786,
+      "footprint_target": "host"
+    },
+    {
+      "task_id": "tier2_cobs_codec",
+      "tier": 2,
+      "model_name": "baseline",
+      "compiled": true,
+      "test_result": {
+        "total": 9,
+        "passed": 9,
+        "failed": 0,
+        "ignored": 0,
+        "all_passed": true,
+        "completed": true,
+        "returncode": 0
+      },
+      "size_metrics": {
+        "flash_bytes": 1186,
+        "ram_bytes": 0,
+        "ref_flash_bytes": 1186,
+        "ref_ram_bytes": 0,
+        "measured": true
+      },
+      "safety_metrics": {
+        "error_count": 0,
+        "warning_count": 0,
+        "violations": [],
+        "cppcheck_status": "disabled",
+        "cppcheck_diagnostic": null,
+        "findings": []
+      },
+      "scores": {
+        "functional": 100.0,
+        "memory": 100.0,
+        "safety": 100.0,
+        "total": 100.0
+      },
+      "execution_time_sec": 0.222,
+      "error_log": null,
+      "weights": {
+        "functional": 0.6,
+        "memory": 0.2,
+        "safety": 0.2
+      },
+      "target_standard": "c99",
+      "effective_standard": "c99",
+      "generation": null,
+      "provenance": {
+        "reference_cache_hit": false,
+        "task_sha256": "37cbbae63ade560e083d9d4e576d7560d2147bb851e14d821edb17b4f507c9d9",
+        "candidate_sha256": "3cf92331d34af279f25f0624f1883b12182f9fcd526d6a6997192330e54f6dad",
+        "prompt_sha256": null
+      },
+      "limits": {
+        "max_flash_bytes": 2048,
+        "max_ram_bytes": 0,
+        "timeout_seconds": 5
+      },
+      "candidate_time_sec": 0.22206199999891396,
+      "reference_validation_time_sec": 0.04284720000032394,
+      "footprint_target": "host"
     },
     {
       "task_id": "tier2_debounce_fsm",
@@ -226,7 +485,8 @@
         "warning_count": 0,
         "violations": [],
         "cppcheck_status": "disabled",
-        "cppcheck_diagnostic": null
+        "cppcheck_diagnostic": null,
+        "findings": []
       },
       "scores": {
         "functional": 100.0,
@@ -234,7 +494,7 @@
         "safety": 100.0,
         "total": 100.0
       },
-      "execution_time_sec": 0.142,
+      "execution_time_sec": 0.304,
       "error_log": null,
       "weights": {
         "functional": 0.6,
@@ -245,10 +505,19 @@
       "effective_standard": "c99",
       "generation": null,
       "provenance": {
-        "task_sha256": "f508440bf636078db5dd59342eb571ccc6811e8e8e73df744ed739004b168fa0",
+        "reference_cache_hit": false,
+        "task_sha256": "1887d3b314b45dcac68e81b994a4eed01965152752a7a8d54dedae1e4432ec48",
         "candidate_sha256": "80aded9420a1c7fc5b24425a06641a32c2ff0957310388805372cfa4881a65f3",
         "prompt_sha256": null
-      }
+      },
+      "limits": {
+        "max_flash_bytes": 1536,
+        "max_ram_bytes": 128,
+        "timeout_seconds": 5
+      },
+      "candidate_time_sec": 0.3040985000006913,
+      "reference_validation_time_sec": 0.03979319999962172,
+      "footprint_target": "host"
     },
     {
       "task_id": "tier2_tick_timer",
@@ -276,7 +545,8 @@
         "warning_count": 0,
         "violations": [],
         "cppcheck_status": "disabled",
-        "cppcheck_diagnostic": null
+        "cppcheck_diagnostic": null,
+        "findings": []
       },
       "scores": {
         "functional": 100.0,
@@ -284,7 +554,7 @@
         "safety": 100.0,
         "total": 100.0
       },
-      "execution_time_sec": 0.162,
+      "execution_time_sec": 0.275,
       "error_log": null,
       "weights": {
         "functional": 0.6,
@@ -295,10 +565,19 @@
       "effective_standard": "c99",
       "generation": null,
       "provenance": {
-        "task_sha256": "bd1c1bcbc812bdc2d4435cc25543bb1473ebd9519e34e262739df75563728bf8",
+        "reference_cache_hit": false,
+        "task_sha256": "0b698a42acca7a861cfd5398205698d68dd91c7cdb16fdda8416a260f1c3cbc0",
         "candidate_sha256": "569d0432b3073150cbabda7a724c32e799e7cbb5079d083c65c4e1b89458aef6",
         "prompt_sha256": null
-      }
+      },
+      "limits": {
+        "max_flash_bytes": 1536,
+        "max_ram_bytes": 0,
+        "timeout_seconds": 5
+      },
+      "candidate_time_sec": 0.2747618000012153,
+      "reference_validation_time_sec": 0.04069549999985611,
+      "footprint_target": "host"
     },
     {
       "task_id": "tier3_i2c_sensor",
@@ -306,8 +585,8 @@
       "model_name": "baseline",
       "compiled": true,
       "test_result": {
-        "total": 9,
-        "passed": 9,
+        "total": 11,
+        "passed": 11,
         "failed": 0,
         "ignored": 0,
         "all_passed": true,
@@ -315,9 +594,9 @@
         "returncode": 0
       },
       "size_metrics": {
-        "flash_bytes": 790,
+        "flash_bytes": 830,
         "ram_bytes": 0,
-        "ref_flash_bytes": 790,
+        "ref_flash_bytes": 830,
         "ref_ram_bytes": 0,
         "measured": true
       },
@@ -326,7 +605,8 @@
         "warning_count": 0,
         "violations": [],
         "cppcheck_status": "disabled",
-        "cppcheck_diagnostic": null
+        "cppcheck_diagnostic": null,
+        "findings": []
       },
       "scores": {
         "functional": 100.0,
@@ -334,7 +614,7 @@
         "safety": 100.0,
         "total": 100.0
       },
-      "execution_time_sec": 0.156,
+      "execution_time_sec": 0.243,
       "error_log": null,
       "weights": {
         "functional": 0.6,
@@ -345,10 +625,19 @@
       "effective_standard": "c99",
       "generation": null,
       "provenance": {
-        "task_sha256": "4607eab661515cd735fc43a15e699ebc71c9110dc80d0d77736cf94813ea8ffb",
-        "candidate_sha256": "3033f1bd1b6b5fe4340f3aecb4894444e798abbc5f3abe9e1aee9a0904a7fa45",
+        "reference_cache_hit": false,
+        "task_sha256": "6a78c585499f682e9ee61cc2795310e183b89ab53001c7ddc1d816965086c1ce",
+        "candidate_sha256": "577024c15480ce7155d3ae2ebb9bd87c5ce3de8b75b65307b2b583499eb022eb",
         "prompt_sha256": null
-      }
+      },
+      "limits": {
+        "max_flash_bytes": 2048,
+        "max_ram_bytes": 256,
+        "timeout_seconds": 5
+      },
+      "candidate_time_sec": 0.24268360000132816,
+      "reference_validation_time_sec": 0.04140519999964454,
+      "footprint_target": "host"
     },
     {
       "task_id": "tier4_bitmask_fix",
@@ -376,7 +665,8 @@
         "warning_count": 0,
         "violations": [],
         "cppcheck_status": "disabled",
-        "cppcheck_diagnostic": null
+        "cppcheck_diagnostic": null,
+        "findings": []
       },
       "scores": {
         "functional": 100.0,
@@ -384,7 +674,7 @@
         "safety": 100.0,
         "total": 100.0
       },
-      "execution_time_sec": 0.146,
+      "execution_time_sec": 0.263,
       "error_log": null,
       "weights": {
         "functional": 0.6,
@@ -395,10 +685,19 @@
       "effective_standard": "c99",
       "generation": null,
       "provenance": {
-        "task_sha256": "43a97ee78b86a62bef6f9ed9cd7b78559ad96b558b877bf0a31fd9e47fbe0296",
+        "reference_cache_hit": false,
+        "task_sha256": "fea84fe73fa0529a29af6435eb2f37d6396a215f11b500af79d9abbb2e9a19ed",
         "candidate_sha256": "37f9c84348ef76f44e07416d60f2cc871d96e240889b0e80e62e12d7f96b1d63",
         "prompt_sha256": null
-      }
+      },
+      "limits": {
+        "max_flash_bytes": 1024,
+        "max_ram_bytes": 128,
+        "timeout_seconds": 5
+      },
+      "candidate_time_sec": 0.2626963999991858,
+      "reference_validation_time_sec": 0.04068069999993895,
+      "footprint_target": "host"
     }
   ]
 }

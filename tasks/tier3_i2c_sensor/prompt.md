@@ -18,6 +18,10 @@ You are an embedded software engineer. Implement a reliable device driver for an
 - Return `SENSOR_ERR_INVALID_ID` if the chip ID in `WHO_AM_I` register is not `0xA5`.
 - In `sensor_read_temperature_celsius_x100`, if `dev->is_initialized` is false, return `SENSOR_ERR_COMM_FAIL`.
 - For an initialized device, a NULL bus or either NULL callback returns `SENSOR_ERR_NULL_PARAM`.
+- Every `sensor_init` attempt with a non-NULL device first clears `is_initialized`
+  and `bus`. Only complete initialization success sets the supplied bus and marks
+  the device initialized. Any failed re-initialization therefore disables later
+  reads, which return `SENSOR_ERR_COMM_FAIL` until initialization succeeds again.
 - Handle the complete signed 12-bit range using an intermediate wide enough for targets with 16-bit `int`. Fractional centidegrees are truncated toward zero.
 
 Implement `sensor_init` and `sensor_read_temperature_celsius_x100` in `src/i2c_sensor.c`.

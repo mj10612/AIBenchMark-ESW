@@ -22,3 +22,18 @@ Run untrusted candidates in an isolated, disposable environment with no secrets
 or sensitive mounted files. The evaluator does not restrict filesystem, network,
 or child-process access. Provider evaluations require opt-in API access; CI runs
 only checked-in test fixtures and golden references without provider credentials.
+
+
+Native execution captures a bounded output prefix in a temporary file and owns
+Windows Job/POSIX process groups. Opt-in process mode adds CPU and memory caps.
+Filesystem and network access remain available; a POSIX descendant deliberately
+calling setsid can escape the original group. Run untrusted code inside an
+external container/VM with suitable access controls. Static host-API findings and
+sanitizers provide diagnostic evidence, not access enforcement.
+
+Footprint defaults to a host object, not an MCU image. Opt-in AVR/ARM compilation
+measures allocated target-object sections with target-scoped budgets; it excludes
+final linking, startup code, stack and heap. Host Unity tests still supply
+functional evidence. MISRA heuristics cover allocation references, goto, floating
+types, long/short and signed/unsigned basic types, and host capability APIs; plain
+int for status/main and plain char for character data are deliberate exceptions.

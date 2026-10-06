@@ -108,3 +108,16 @@ Record the compiler and use the same task selection, generation limits, and stan
 AI-assisted patches are welcome. Review every generated change, describe the concrete problem, and include relevant regression evidence. Do not submit fabricated results or describe mocked provider tests as live model measurements. Avoid committing API keys, account identifiers, or private response content. Use the issue and pull-request templates to provide a reproducible example and validation details.
 
 For vulnerabilities, follow [SECURITY.md](SECURITY.md).
+
+Current implementation guidance is [README.md](README.md),
+[docs/ROADMAP.md](docs/ROADMAP.md), and
+[docs/REPRODUCIBILITY.md](docs/REPRODUCIBILITY.md).
+The `docs/superpowers` files are historical planning artifacts.
+
+Development gates: `ruff check aibenchmark_esw`, `mypy aibenchmark_esw`, and
+`coverage run -m unittest discover -s tests -v` followed by `coverage report`.
+The initial branch-coverage threshold is 70%; type checking starts permissively
+but checks untyped function bodies. Distribution checks share one build fixture
+and report each stage independently; exclude `test_packaging.py` when iterating
+on unrelated fast checks. These local checks add seconds plus the existing
+packaging build; CI retains its 15-minute job budget and exports coverage XML.

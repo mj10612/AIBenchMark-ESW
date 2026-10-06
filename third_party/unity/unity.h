@@ -39,6 +39,10 @@ void tearDown(void);
     UnityAssertEqualNumber((int64_t)(expected), (int64_t)(actual), NULL, __LINE__, UNITY_DISPLAY_STYLE_HEX32)
 
 #define TEST_ASSERT_EQUAL(expected, actual) TEST_ASSERT_EQUAL_INT(expected, actual)
+#define TEST_ASSERT_BITS(mask, expected, actual) \
+    UnityAssertBits((uint32_t)(mask), (uint32_t)(expected), (uint32_t)(actual), NULL, __LINE__)
+#define TEST_ASSERT_BITS_HIGH(mask, actual) TEST_ASSERT_BITS(mask, mask, actual)
+#define TEST_ASSERT_BITS_LOW(mask, actual) TEST_ASSERT_BITS(mask, 0, actual)
 #define TEST_FAIL_MESSAGE(msg) UnityFail(msg, __LINE__)
 #define TEST_IGNORE_MESSAGE(msg) UnityIgnore(msg, __LINE__)
 

@@ -48,8 +48,23 @@ class TaskConfig:
     task_dir: Path
     prompt: str = ""
     reference_file: Optional[str] = None
+    prompt_overrides: Dict[str, Any] = field(default_factory=dict)
+    target_limits: Dict[str, TaskLimits] = field(default_factory=dict)
 
     def __post_init__(self):
+        for name in ("name", "category", "description"):
+            if not isinstance(getattr(self, name), str):
+                raise ValueError(f"Task {name} must be a string")
+        if not isinstance(self.prompt_overrides, dict):
+            raise ValueError("prompt_overrides must be an object")
+        unknown = set(self.prompt_overrides) - {"allow_dynamic_memory", "extra_rules"}
+        if unknown:
+            raise ValueError(f"Unknown prompt_overrides fields: {', '.join(sorted(unknown))}")
+        if "allow_dynamic_memory" in self.prompt_overrides and not isinstance(self.prompt_overrides["allow_dynamic_memory"], bool):
+            raise ValueError("prompt_overrides.allow_dynamic_memory must be a boolean")
+        rules = self.prompt_overrides.get("extra_rules", [])
+        if not isinstance(rules, list) or any(not isinstance(rule, str) or not rule.strip() for rule in rules):
+            raise ValueError("prompt_overrides.extra_rules must be an array of nonempty strings")
         if not isinstance(self.id, str) or not re.fullmatch(r"[A-Za-z0-9_][A-Za-z0-9_-]*", self.id):
             raise ValueError("Task id must use letters, digits, underscores or hyphens and cannot start with a hyphen")
         reserved = {"CON", "PRN", "AUX", "NUL"} | {f"{prefix}{i}" for prefix in ("COM", "LPT") for i in range(1, 10)}
@@ -70,6 +85,11 @@ class TaskConfig:
                 raise ValueError(f"{name} must stay within the task directory")
             setattr(self, name, path.as_posix())
 
+    @property
+    def reference_path(self) -> Path:
+        """Resolve the explicit reference or the legacy entry-basename convention."""
+        return self.task_dir / (self.reference_file or f"reference/{Path(self.entry_file).name}")
+
     @classmethod
     def from_dict(cls, data: Dict[str, Any], task_dir: Path, prompt: str = "") -> "TaskConfig":
         if not isinstance(data, dict):
@@ -77,11 +97,23 @@ class TaskConfig:
         limits_data = data.get("limits", {})
         if not isinstance(limits_data, dict):
             raise ValueError("Task limits must be an object")
+        targets = limits_data.get("targets", {})
+        if not isinstance(targets, dict):
+            raise ValueError("limits.targets must be an object")
+        target_limits = {}
+        defaults = limits_data.get("default", limits_data)
+        if not isinstance(defaults, dict):
+            raise ValueError("limits.default must be an object")
+        limits_data = defaults
         limits = TaskLimits(
             max_flash_bytes=limits_data.get("max_flash_bytes", 2048),
             max_ram_bytes=limits_data.get("max_ram_bytes", 256),
             timeout_seconds=limits_data.get("timeout_seconds", 10),
         )
+        for target, override in targets.items():
+            if not isinstance(target, str) or not isinstance(override, dict):
+                raise ValueError("Target limits must map target names to limit objects")
+            target_limits[target] = TaskLimits(**{**asdict(limits), **override})
         weights_data = data.get("weights", {})
         if not isinstance(weights_data, dict):
             raise ValueError("Task weights must be an object")
@@ -92,7 +124,7 @@ class TaskConfig:
         )
         return cls(
             id=data["id"],
-            name=data.get("name", data["id"]),
+            name=data["name"] if "name" in data else data["id"],
             tier=data.get("tier", 1),
             category=data.get("category", "general"),
             target_standard=data.get("target_standard", "c99"),
@@ -103,6 +135,8 @@ class TaskConfig:
             task_dir=task_dir,
             prompt=prompt,
             reference_file=data.get("reference_file"),
+            prompt_overrides=data.get("prompt_overrides", {}),
+            target_limits=target_limits,
         )
 
 
@@ -151,6 +185,7 @@ class StaticSafetyMetrics:
     violations: List[str] = field(default_factory=list)
     cppcheck_status: Optional[str] = None
     cppcheck_diagnostic: Optional[str] = None
+    findings: List[Dict[str, Any]] = field(default_factory=list)
 
 
 @dataclass
@@ -185,6 +220,10 @@ class TaskEvaluationResult:
     effective_standard: Optional[str] = None
     generation: Optional[Dict[str, Any]] = None
     provenance: Optional[Dict[str, Any]] = None
+    limits: Optional[TaskLimits] = None
+    candidate_time_sec: Optional[float] = None
+    reference_validation_time_sec: Optional[float] = None
+    footprint_target: str = "host"
 
     def to_dict(self) -> Dict[str, Any]:
         return {
@@ -214,6 +253,7 @@ class TaskEvaluationResult:
                 "violations": self.safety_metrics.violations,
                 "cppcheck_status": self.safety_metrics.cppcheck_status,
                 "cppcheck_diagnostic": self.safety_metrics.cppcheck_diagnostic,
+                "findings": self.safety_metrics.findings,
             },
             "scores": {
                 "functional": round(self.scores.functional_score, 2),
@@ -228,4 +268,8 @@ class TaskEvaluationResult:
             "effective_standard": self.effective_standard,
             "generation": self.generation,
             "provenance": self.provenance,
+            "limits": asdict(self.limits) if self.limits is not None else None,
+            "candidate_time_sec": self.candidate_time_sec,
+            "reference_validation_time_sec": self.reference_validation_time_sec,
+            "footprint_target": self.footprint_target,
         }

@@ -66,14 +66,21 @@ void test_hold_and_release_event(void) {
     debounce_fsm_update(&btn, 1);
     TEST_ASSERT_EQUAL(BUTTON_STATE_PRESSED, debounce_fsm_get_state(&btn));
 
-    button_event_t hold_evt = BUTTON_EVENT_NONE;
+    uint8_t hold_events = 0;
     for (int i = 0; i < 15; i++) {
         button_event_t e = debounce_fsm_update(&btn, 1);
         if (e == BUTTON_EVENT_HOLD) {
-            hold_evt = e;
+            ++hold_events;
         }
     }
-    TEST_ASSERT_EQUAL(BUTTON_EVENT_HOLD, hold_evt);
+    TEST_ASSERT_EQUAL_UINT(1, hold_events);
+
+    /* A release glitch cannot re-arm HOLD for the current press. */
+    TEST_ASSERT_EQUAL(BUTTON_EVENT_NONE, debounce_fsm_update(&btn, 0));
+    TEST_ASSERT_EQUAL(BUTTON_EVENT_NONE, debounce_fsm_update(&btn, 1));
+    for (uint16_t tick = 0; tick < 1000; ++tick) {
+        TEST_ASSERT_EQUAL(BUTTON_EVENT_NONE, debounce_fsm_update(&btn, 1));
+    }
 
     /* Release */
     debounce_fsm_update(&btn, 0);
@@ -81,6 +88,12 @@ void test_hold_and_release_event(void) {
     button_event_t rel_evt = debounce_fsm_update(&btn, 0);
     TEST_ASSERT_EQUAL(BUTTON_EVENT_RELEASE, rel_evt);
     TEST_ASSERT_EQUAL(BUTTON_STATE_RELEASED, debounce_fsm_get_state(&btn));
+
+    hold_events = 0;
+    for (uint8_t tick = 0; tick < 25; ++tick) {
+        if (debounce_fsm_update(&btn, 1) == BUTTON_EVENT_HOLD) ++hold_events;
+    }
+    TEST_ASSERT_EQUAL_UINT(1, hold_events);
 }
 
 void test_null_safety(void) {
