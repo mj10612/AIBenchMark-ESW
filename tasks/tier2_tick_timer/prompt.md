@@ -1,3 +1,4 @@
+<!-- AIBENCHMARK_ESW_CANARY_V1_tier2_tick_timer -->
 # Rollover-Safe Tick Timer
 
 Implement the API in `tick_timer.h` using portable C99. A caller supplies

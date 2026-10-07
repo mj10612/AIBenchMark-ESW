@@ -1,3 +1,4 @@
+/* AIBENCHMARK_ESW_CANARY_V1_tier1_crc16 */
 #include "unity.h"
 #include "crc16.h"
 #include <string.h>
@@ -72,6 +73,19 @@ void test_every_binary_byte_and_streaming_state(void) {
     TEST_ASSERT_EQUAL_HEX16(0xFFFF, crc16_ccitt(NULL, 0));
 }
 
+void test_lengths_at_and_beyond_uint16_limit(void) {
+    static uint8_t data[65537];
+    const size_t lengths[] = {65535U, 65536U, 65537U};
+    /* Host fixture only; candidate RAM accounting excludes test data. */
+    uint16_t expected = 0xFFFF;
+    for (size_t i = 0; i < sizeof(data); ++i) data[i] = (uint8_t)(i * 37U + i / 251U);
+    size_t consumed = 0;
+    for (size_t n = 0; n < sizeof(lengths) / sizeof(lengths[0]); ++n) {
+        while (consumed < lengths[n]) expected = oracle_update(expected, data[consumed++]);
+        TEST_ASSERT_EQUAL_HEX16(expected, crc16_ccitt(data, lengths[n]));
+    }
+}
+
 int main(void) {
     UNITY_BEGIN();
     RUN_TEST(test_standard_test_vector);
@@ -80,5 +94,6 @@ int main(void) {
     RUN_TEST(test_single_byte_and_stepwise_update);
     RUN_TEST(test_all_zeros_and_ones);
     RUN_TEST(test_every_binary_byte_and_streaming_state);
+    RUN_TEST(test_lengths_at_and_beyond_uint16_limit);
     return UNITY_END();
 }

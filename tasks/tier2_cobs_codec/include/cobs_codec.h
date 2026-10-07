@@ -1,3 +1,4 @@
+/* AIBENCHMARK_ESW_CANARY_V1_tier2_cobs_codec */
 #ifndef COBS_CODEC_H
 #define COBS_CODEC_H
 

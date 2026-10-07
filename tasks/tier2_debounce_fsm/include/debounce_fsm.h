@@ -1,3 +1,4 @@
+/* AIBENCHMARK_ESW_CANARY_V1_tier2_debounce_fsm */
 #ifndef DEBOUNCE_FSM_H
 #define DEBOUNCE_FSM_H
 

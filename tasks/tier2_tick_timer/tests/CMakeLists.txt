@@ -1,3 +1,4 @@
+# AIBENCHMARK_ESW_CANARY_V1_tier2_tick_timer
 cmake_minimum_required(VERSION 3.12)
 project(test_tier2_tick_timer C)
 

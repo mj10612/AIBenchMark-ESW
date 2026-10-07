@@ -1,3 +1,4 @@
+/* AIBENCHMARK_ESW_CANARY_V1_tier4_bitmask_fix */
 #ifndef IRQ_MANAGER_H
 #define IRQ_MANAGER_H
 

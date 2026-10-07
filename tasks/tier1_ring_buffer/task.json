@@ -16,5 +16,6 @@
     "safety": 0.2
   },
   "entry_file": "src/ring_buffer.c",
-  "reference_file": "reference/ring_buffer.c"
+  "reference_file": "reference/ring_buffer.c",
+  "canary": "AIBENCHMARK_ESW_CANARY_V1_tier1_ring_buffer"
 }

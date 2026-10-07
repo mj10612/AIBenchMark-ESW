@@ -1,6 +1,7 @@
+<!-- AIBENCHMARK_ESW_CANARY_V1_tier4_bitmask_fix -->
 # Task: Fix W1C Register & Priority Masking Bugs in Interrupt Controller
 
-You are debugging firmware in an embedded system. The interrupt manager in `src/irq_manager.c` contains two critical bugs reported by the hardware team:
+You are debugging firmware in an embedded system. The interrupt manager in `src/irq_manager.c` contains three critical bugs reported by the hardware team:
 
 ## Bug Reports:
 1. **Accidental Clearing of Pending Interrupts**:

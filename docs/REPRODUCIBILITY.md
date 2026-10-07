@@ -26,7 +26,8 @@ selection, and generation settings. Task fingerprints cover effective task
 configuration, task text/sources/tests, and the Unity harness; candidate and
 prompt hashes identify the generated implementation and submitted messages.
 An evaluator hash identifies the Python implementation used for grading.
-Checkout paths and CRLF/LF differences do not alter these hashes.
+Checkout paths and CRLF/LF differences in recognized text assets do not alter
+these hashes. Opaque/binary fixtures preserve all bytes, including newlines.
 
 `validate` checks required files without compilation or API access. During a
 run, missing, empty, or unreadable task assets fail that task before generation;
@@ -157,15 +158,17 @@ columns are unchanged. `--format csv-long` exports fixed columns
 `model,task_id,total,functional,memory,safety,measured,pass_at_1`, with empty memory
 for unmeasured entries. `aggregate` accepts independent complete run IDs and
 reports mean/sample standard deviation, coverage and per-task pass frequency;
-it is not a Pass@k estimator. A single run has no standard-deviation estimate.
+Independent sampling collections also carry unbiased Pass@k estimates. A single
+run has no standard-deviation or confidence-interval estimate.
 
 `doctor --check-references` validates local tools with a trusted fixture before
 requests. An absent optional analyzer is valid builtin mode; a broken explicitly
-configured analyzer fails preflight. Mutations cover 22 hand-reviewed faulty
-candidates across eight tasks; compilation errors/timeouts are invalid probes,
+configured analyzer fails preflight. Mutations cover 47 hand-reviewed faulty
+candidates across 13 tasks; compilation errors/timeouts are invalid probes,
 not successful kills. CI requires reference success and no surviving/invalid
-mutants. The suite contains eight tasks and 77 C test cases, including bounded
-COBS and strengthened CRC/I2C/HOLD contracts.
+mutants. The suite contains 13 tasks and 113 C test cases, including bounded
+COBS, SPI NOR, DMA ownership, fixed-point control, flash updates, framed UART,
+and strengthened CRC/I2C/HOLD contracts.
 
 Candidate tests and reference validation have separate durations. Caches use
 assets, reference text, compiler identity/settings and target identity, retain no
@@ -181,9 +184,90 @@ compiler/flags and target are recorded and rendered. Mixed targets cannot be
 ranked together. ELF allocated non-NOBITS sections count as Flash; writable and
 NOBITS sections count as RAM, including architecture-specific allocated sections.
 Measurements exclude startup/linker/stack/heap and do not establish final MCU fit.
-Native host behaviour remains the default; Mach-O footprint is unsupported.
+Native host behaviour remains the default. ELF, COFF and Mach-O relocatable
+footprints are supported; universal Mach-O conservatively uses the largest
+component measurements. RISC-V targets include `riscv:rv32imac` and
+`riscv:rv64gc`, with recorded ISA/ABI/compiler flags.
 
 Structured safety findings retain rule_id, engine, severity, message, basename and
 line alongside legacy prose. Provenance declares rule configuration, effective
 standard policy and severity mapping; comparisons reject differences. File/line
 are diagnostic lexer/cppcheck locations; macro expansion can limit precision.
+
+## Sampling, usage, costs and offline exports
+
+```bash
+aibenchmark-esw run --model '<provider/model>' --samples 5 --pass-k 1,3,5 --temperature 0.7 --max-tokens 4096 --output results/samples.json --save-solutions results/sample_sources
+aibenchmark-esw run --model '<provider/model>' --tasks tier1_crc16 --dry-run --max-tokens 4096 --input-cost-per-million 1 --output-cost-per-million 2
+aibenchmark-esw run --model '<provider/model>' --max-tokens 4096 --max-cost-usd 2 --input-cost-per-million 1 --output-cost-per-million 2 --output results/budget.json
+aibenchmark-esw replay --results results/model.json --solutions results/model_sources --output results/replayed.json
+aibenchmark-esw report --results results/model.json --format html --output results/model.html
+aibenchmark-esw report --results results/model.json --format sarif --output results/model.sarif
+aibenchmark-esw compare --results results/model_a.json results/model_b.json --format junit --baseline-model model-a --regression-threshold 1 --output results/regressions.xml
+aibenchmark-esw trend --results results/day1.json results/day2.json --format html --output results/trend.html
+```
+
+Custom prices above are examples, not provider price quotations. Cost is USD;
+the client records provider response cost when supplied, otherwise known token
+counts with explicit prices or LiteLLM's installed price table. Unknown pricing
+is `null`, never zero. Each provider attempt and turn retains measurements;
+failed/missing measurements keep full totals unknown and publish known subtotals
+with coverage. Cached/reasoning token details are retained when reported.
+
+The shared budget reserves a conservative UTF-8 prompt bound plus the configured
+maximum output before each request, across retries, turns, jobs and samples.
+Unknown prices or missing `--max-tokens` fail before making a request. An
+attempt without measured cost keeps its reservation charged. It is an estimate
+guard, not a provider billing guarantee; unusual provider surcharges or price
+changes can exceed an estimate. A resumed budget can be increased explicitly
+with `--max-cost-usd`; prior charged/reserved history stays recorded. Dry-run
+validates task assets and builds prompts without compilation/provider requests;
+unavailable prices/output bounds are shown as unknown. Dry-run cannot overwrite
+a resume checkpoint.
+
+`samples` is an additive schema-2 array of identified independent full reports.
+The wrapper's ordinary task table represents its first completed sample;
+`sampling.statistics` contains means, sample standard deviations, approximate
+95% mean intervals, and `1 - C(n-c,k)/C(n,k)`. Normal approximation intervals
+are descriptive and unreliable for small samples; they are not ranking proof.
+Temperature zero warns about possibly redundant samples. Per-sample checkpoints
+live beside the collection in `<output>.samples/`; save that folder when moving
+an interrupted collection. Completed samples are retained; resume reruns only
+pending samples/tasks. Each sample's saved C files have a separate directory.
+Aggregation rejects unfinished collections and expands complete collections.
+
+Replay checks every saved source's hash before grading, creates fresh evaluator/
+task/toolchain provenance and a new run ID, and records the origin run ID.
+Missing or truncated candidates are explicit zero slots; historical generation
+data is labelled origin evidence rather than new provider spending. Replay runs
+cannot be counted as independent model samples. HTML exports contain their own
+scripts/styles and no external services. SARIF locations include only known
+positive line numbers. Comparison JUnit creates threshold-based regression
+failures; trend history groups incompatible fingerprints instead of ranking
+them together. Every file export protects source inputs and output ancestors.
+
+## Optional execution and dataset checks
+
+`--warnings` adds recorded compiler flags and scored warning findings.
+`--extended-safety-rules` opts into bounded embedded heuristics (stdio/control
+flow/VLA/recursion/math); these are diagnostic checks, not formal MISRA
+certification. `--static-analysis-timeout` bounds cppcheck and records timeout
+coverage explicitly. Differing rule/flag configurations cannot be compared.
+
+`--isolation container --container-engine docker --container-image gcc:14`
+compiles and tests inside a compiler-equipped image with an immutable recorded
+image ID, disabled network, read-only root, dropped capabilities, non-root user
+and a workspace-only mount. Podman and Linux bubblewrap are also supported.
+These require working local runtimes; native/process remain the default. Read
+[SECURITY.md](../SECURITY.md) for the exact trust boundary and prerequisites.
+
+`mutations --auto --max-mutants 20 --jobs 2 --min-score 0.8` adds deterministic
+operator mutants. The reviewed gate remains mandatory; automatically generated
+invalid mutants are separated from killed/surviving compiled mutations. A score
+is a coverage aid and does not prove correctness. Canary audit markers, private
+test overlays, reproducible CRC variants and reference-similarity warnings are
+described in [TASK_VARIANTS.md](TASK_VARIANTS.md). Variant fingerprints include
+effective assets; held-out tests enter evaluation and never enter LLM prompts.
+CI covers GCC/Clang/TCC, macOS, actual MSVC, sanitizer runtimes and Docker;
+scheduled runs remain offline. The reusable consumer action is documented in
+[GITHUB_ACTION.md](GITHUB_ACTION.md).

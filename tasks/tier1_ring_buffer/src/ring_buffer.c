@@ -1,3 +1,4 @@
+/* AIBENCHMARK_ESW_CANARY_V1_tier1_ring_buffer */
 #include "ring_buffer.h"
 
 void ring_buffer_init(ring_buffer_t* rb, uint8_t* buffer, size_t capacity) {

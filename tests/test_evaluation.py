@@ -29,9 +29,14 @@ class TestEvaluation(unittest.TestCase):
         self.assertEqual(result.size_metrics.ram_bytes, 0)
         self.assertEqual(result.scores.total_score, 100)
         with TemporaryDirectory() as directory:
-            comp, _ = self.executor.compile_and_test(self.task, self.reference, Path(directory))
-            executable_size = SizeAnalyzer()._measure_file(comp.binary_path)[0]
-        self.assertLess(result.size_metrics.flash_bytes, executable_size)
+            # Compare allocated object sections on every platform, including
+            # Mach-O. The Unity runtime must be excluded from scored objects.
+            unity_object = Path(directory) / "unity.o"
+            comp = self.executor._compile(self.task, [self.executor.unity_dir / "unity.c"],
+                                          unity_object, object_only=True)
+            self.assertTrue(comp.success, comp.output)
+            harness_size = SizeAnalyzer()._measure_file(unity_object)[0]
+        self.assertLess(result.size_metrics.flash_bytes, harness_size)
 
     def test_crash_after_passing_tests_receives_zero(self):
         code = '#include <stdio.h>\n#include <stdlib.h>\nstatic void fail_at_exit(void) { fflush(NULL); _Exit(7); }\n'
@@ -220,7 +225,7 @@ uint16_t crc16_ccitt(const uint8_t *data, size_t length) {
         comp, result = self.executor.compile_and_test(task, ref)
         self.addCleanup(comp.cleanup)
         self.assertTrue(result.passed, result.output)
-        self.assertEqual(result.total_tests, 9)
+        self.assertEqual(result.total_tests, 11)
 
     def test_debounce_with_only_confirmed_states_satisfies_the_contract(self):
         task = self.loader.get_task("tier2_debounce_fsm")
@@ -228,7 +233,7 @@ uint16_t crc16_ccitt(const uint8_t *data, size_t length) {
         result = evaluate_task(task, candidate, self.loader.get_reference_solution(task.id),
                                "confirmed-states", self.executor)
         self.assertTrue(result.test_result.passed, result.error_log)
-        self.assertEqual(result.test_result.total_tests, 5)
+        self.assertEqual(result.test_result.total_tests, 7)
         self.assertEqual(result.scores.total_score, 100)
         self.assertIsNone(result.error_log)
 

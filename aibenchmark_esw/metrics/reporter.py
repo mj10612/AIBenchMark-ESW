@@ -8,6 +8,11 @@ from aibenchmark_esw.models import (
 
 class BenchmarkReporter:
     @staticmethod
+    def generate_html(results, model_name, metadata=None):
+        from aibenchmark_esw.metrics.exports import report_html
+        return report_html(results, model_name, metadata)
+
+    @staticmethod
     def _all_tests_passed(result: TaskEvaluationResult) -> bool:
         tests = result.test_result
         return (result.compiled is True and tests.completed is True and tests.passed is True
@@ -53,12 +58,68 @@ class BenchmarkReporter:
             raise ValueError("model_name must be a nonempty string")
         if data.get("metadata") is not None and not isinstance(data["metadata"], dict):
             raise ValueError("Run metadata must be an object")
-        for key in ("compiler", "platform", "generation_settings", "static_analysis", "execution_settings"):
+        for key in ("compiler", "platform", "generation_settings", "static_analysis", "execution_settings", "task_categories", "cost_budget", "run_options"):
             value = (data.get("metadata") or {}).get(key)
             if value is not None and not isinstance(value, dict):
                 raise ValueError(f"Metadata {key} must be an object")
+        if "generation_summary" in data:
+            from aibenchmark_esw.metrics.measurements import measurement_summary
+            summary = data["generation_summary"]
+            if not isinstance(summary, dict) or set(measurement_summary([])) - set(summary):
+                raise ValueError("generation_summary must contain the measurement summary fields")
+            for key in measurement_summary([]):
+                value = summary.get(key)
+                if value is not None and (isinstance(value, bool) or not isinstance(value, (int, float))
+                                          or value < 0 or value != value or value == float('inf')):
+                    raise ValueError("Invalid generation_summary measurement: " + key)
         results = []
+        samples = data.get("samples")
+        if samples is not None:
+            if not isinstance(samples, list):
+                raise ValueError("samples must be an array of independent reports")
+            for sample in samples:
+                if not isinstance(sample, dict) or "samples" in sample:
+                    raise ValueError("Each sample must be a full report without nested samples")
+                BenchmarkReporter.from_json_dict(sample)
+            sampling = data.get("sampling")
+            if not isinstance(sampling, dict):
+                raise ValueError("sampling must describe the independent samples")
+            requested, completed, pending = (sampling.get(key) for key in ("requested", "completed", "pending"))
+            if (isinstance(requested, bool) or not isinstance(requested, int) or requested < 1
+                    or isinstance(completed, bool) or not isinstance(completed, int)
+                    or completed != len(samples) or completed > requested
+                    or not isinstance(pending, list)
+                    or any(isinstance(index, bool) or not isinstance(index, int) or not 0 <= index < requested for index in pending)
+                    or len(set(pending)) != len(pending) or len(pending) != requested - completed):
+                raise ValueError("sampling counts and pending indexes must match the independent samples")
+            if (data.get("metadata") or {}).get("run_status") == "completed" and pending:
+                raise ValueError("Completed sampling collections cannot contain pending samples")
+            active_sample = sampling.get("active_sample")
+            if active_sample is not None and (isinstance(active_sample, bool) or not isinstance(active_sample, int)
+                                              or active_sample not in pending):
+                raise ValueError("Active sample must identify a pending sample")
+            pass_k = sampling.get("pass_k", [1])
+            if (not isinstance(pass_k, list) or any(isinstance(k, bool) or not isinstance(k, int) or not 1 <= k <= requested for k in pass_k)
+                    or len(set(pass_k)) != len(pass_k)):
+                raise ValueError("sampling pass_k must contain distinct valid sample counts")
+            sample_ids = [(sample.get("metadata") or {}).get("run_id") for sample in samples]
+            if (any(not isinstance(run_id, str) or not run_id.strip() for run_id in sample_ids)
+                    or len(set(sample_ids)) != len(sample_ids)
+                    or (data.get("metadata") or {}).get("run_id") in sample_ids):
+                raise ValueError("Independent samples require distinct recorded run IDs")
+            task_ids = {item["task_id"] for item in data["tasks"] if isinstance(item, dict) and isinstance(item.get("task_id"), str)}
+            for sample in samples:
+                if ((sample.get("metadata") or {}).get("run_status") != "completed"
+                        or sample.get("model_name") != data.get("model_name")
+                        or {item["task_id"] for item in sample["tasks"]} != task_ids):
+                    raise ValueError("Independent samples must be completed reports with the same model and task set")
+            if "statistics" in sampling:
+                from aibenchmark_esw.sampling import sampling_statistics
+                expected_statistics = sampling_statistics(samples, pass_k)
+                if sampling["statistics"] != expected_statistics:
+                    raise ValueError("Sampling statistics disagree with the independent sample results")
         policy = (data.get("metadata") or {}).get("scoring_policy")
+        local_loader = None
         if policy is not None:
             from aibenchmark_esw.metrics.scorer import SCORING_FORMULA_VERSION, SAFETY_ERROR_PENALTY, SAFETY_WARNING_PENALTY
             if (not isinstance(policy, dict) or policy.get("formula_version") != SCORING_FORMULA_VERSION
@@ -66,6 +127,11 @@ class BenchmarkReporter:
                     or policy.get("safety_warning_penalty") != SAFETY_WARNING_PENALTY
                     or not isinstance(policy.get("tasks"), dict)):
                 raise ValueError("Unknown or invalid scoring_policy")
+            from aibenchmark_esw.dataset import DatasetLoader
+            try:
+                local_loader = DatasetLoader()
+            except (OSError, ValueError):
+                pass  # Optional local corroboration must not prevent portable reads.
         for item in data["tasks"]:
             if not isinstance(item, dict):
                 raise ValueError("Each task result must be an object")
@@ -81,7 +147,7 @@ class BenchmarkReporter:
                 from aibenchmark_esw.dataset import DatasetLoader
                 from aibenchmark_esw.provenance import task_sha256
                 from aibenchmark_esw.resources import data_root
-                local = DatasetLoader().get_task(item["task_id"])
+                local = local_loader.get_task(item["task_id"]) if local_loader is not None else None
                 if local is not None and item.get("footprint_target", "host") != "host":
                     target = item["footprint_target"]
                     effective_limits = local.target_limits.get(target) or local.target_limits.get(target.split(":")[-1])
@@ -131,6 +197,8 @@ class BenchmarkReporter:
         if len({result.task_id for result in results}) != len(results):
             raise ValueError("Duplicate task IDs in a report")
         validate_run_state(data.get("metadata") or {}, results)
+        from aibenchmark_esw.metrics.measurements import measurement_summary
+        measurement_summary(results)  # Validate optional measurements before consumers.
         return results
 
     @staticmethod
@@ -150,6 +218,7 @@ class BenchmarkReporter:
 
         md = []
         md.append(f"# AIBenchMark-ESW Benchmark Report: `{model_name}`\n")
+        md += BenchmarkReporter.sampling_lines(metadata)
         warning = BenchmarkReporter.run_warning(metadata)
         if warning:
             md.append(f"**{warning}**\n")
@@ -158,14 +227,17 @@ class BenchmarkReporter:
         md.append("### Summary Overview")
         md.append(f"- **Total Tasks**: {total_tasks}")
         md.append(f"- **Compilation Rate**: {compiled_tasks}/{total_tasks} ({compiled_tasks/total_tasks*100:.1f}%)")
-        md.append(f"- **Pass@1 (All Tests Passed)**: {all_passed_tasks}/{total_tasks} ({all_passed_tasks/total_tasks*100:.1f}%)")
-        md.append(f"- **Overall AIBenchMark-ESW Score**: **{avg_total:.2f} / 100.0**\n")
+        qualifier = " (first sample)" if (metadata or {}).get('sampling') else ""
+        md.append(f"- **Pass@1 (All Tests Passed){qualifier}**: {all_passed_tasks}/{total_tasks} ({all_passed_tasks/total_tasks*100:.1f}%)")
+        md.append(f"- **Overall AIBenchMark-ESW Score{qualifier}**: **{avg_total:.2f} / 100.0**\n")
 
         if metadata:
             compiler = metadata.get("compiler") or {}
             md.append("### Reproducibility")
             md.append(f"- **Run (UTC)**: {metadata.get('created_at_utc', 'Unknown')}")
             md.append(f"- **Run status**: {metadata.get('run_status', 'Unknown (legacy report)')}")
+            if metadata.get('run_mode') == 'replay':
+                md.append(f"- **Evaluation mode**: offline replay; origin run `{metadata.get('origin_run_id', 'Unknown')}`; fixed sources, no new generation or spend")
             md.append(f"- **Benchmark / Python**: {metadata.get('benchmark_version', 'Unknown')} / {metadata.get('python_version', 'Unknown')}")
             md.append(f"- **Compiler**: {compiler.get('name', 'Unknown')} / {compiler.get('version') or 'Unknown'} ({compiler.get('optimization', 'Unknown')})")
             analysis = metadata.get("static_analysis") or {}
@@ -205,6 +277,11 @@ class BenchmarkReporter:
                 md.append(f"\nFootprint target: {r.footprint_target}; {r.task_id} budget Flash/RAM="
                           f"{r.limits.max_flash_bytes}/{r.limits.max_ram_bytes}B\n")
 
+        from aibenchmark_esw.metrics.measurements import render_measurements
+        measurements = render_measurements(results, (metadata or {}).get('collection_generation_summary'))
+        if measurements:
+            md += ["", "### Generation measurements", "", *measurements]
+
         warnings = BenchmarkReporter.analysis_warnings(results) + BenchmarkReporter.scoring_warnings(results)
         if not (metadata or {}).get("scoring_policy"):
             warnings.append("Legacy scoring policy is unverifiable; limits and weights are report-supplied.")
@@ -217,7 +294,7 @@ class BenchmarkReporter:
             for task_id, finding in findings:
                 message = finding["message"].replace("|", "\\|").replace("\n", " ")
                 md.append(f"- `{task_id}` [{finding['engine']} / {finding['rule_id']} / {finding['severity']}] "
-                          f"{finding['file']}:{finding['line'] or '?'}: {message}")
+                          f"{finding['file']}:{finding.get('line') or '?'}: {message}")
 
         return "\n".join(md)
 
@@ -227,6 +304,7 @@ class BenchmarkReporter:
         lines = []
         lines.append("=" * 110)
         lines.append(f" AIBenchMark-ESW Benchmark Results - Model: {model_name}")
+        lines += BenchmarkReporter.sampling_lines(metadata)
         lines.append("=" * 110)
         header = f"{'Tier':<5} {'Task ID':<22} {'Standard':<14} {'Weights F/M/S':<16} {'Comp':<6} {'Tests':<8} {'Flash/RAM':<14} {'Score':<8}"
         lines.append(header)
@@ -248,13 +326,16 @@ class BenchmarkReporter:
         lines.append("-" * 110)
         avg_total = sum(r.scores.total_score for r in results) / max(1, len(results))
         pass_at_1 = sum(1 for r in results if BenchmarkReporter._all_tests_passed(r)) / max(1, len(results)) * 100.0
-        lines.append(f"Final Score: {avg_total:.2f}/100.0 | Pass@1: {pass_at_1:.1f}%")
+        qualifier = " (first sample)" if (metadata or {}).get('sampling') else ""
+        lines.append(f"Final Score{qualifier}: {avg_total:.2f}/100.0 | Pass@1{qualifier}: {pass_at_1:.1f}%")
         lines.append("=" * 110)
         lines += [f"Warning: {warning}" for warning in
                   BenchmarkReporter.analysis_warnings(results) + BenchmarkReporter.scoring_warnings(results)]
         warning = BenchmarkReporter.run_warning(metadata)
         if warning:
             lines.append(warning)
+        if (metadata or {}).get('run_mode') == 'replay':
+            lines.append(f"Offline replay; origin run {(metadata or {}).get('origin_run_id')}; fixed sources, no new generation or spend.")
         if (metadata or {}).get("unreadable_assets"):
             lines.append("Dataset provenance is incomplete because some input assets were unreadable.")
         if not (metadata or {}).get("scoring_policy"):
@@ -262,13 +343,34 @@ class BenchmarkReporter:
         for result in results:
             for finding in result.safety_metrics.findings:
                 lines.append(f"[{result.task_id}] {finding['engine']} / {finding['rule_id']} / {finding['severity']}: "
-                             f"{finding['file']}:{finding['line'] or '?'}: {finding['message']}")
+                             f"{finding['file']}:{finding.get('line') or '?'}: {finding['message']}")
+        from aibenchmark_esw.metrics.measurements import render_measurements
+        lines += render_measurements(results, (metadata or {}).get('collection_generation_summary'))
         return "\n".join(lines)
+
+    @staticmethod
+    def sampling_lines(metadata):
+        sampling = (metadata or {}).get('sampling')
+        if not sampling:
+            return []
+        import json
+        lines = ['', 'Independent sample estimates',
+                 f"Samples: {sampling['completed']}/{sampling['requested']} completed; pending {len(sampling['pending'])}.",
+                 'Task dimensions below describe the first sample. Collection estimates use completed independent samples.']
+        for task_id, stats in sampling.get('statistics', {}).items():
+            pass_k = {key: value * 100 if value is not None else None for key, value in stats['pass_at_k'].items()}
+            lines.append(f"{task_id}: {stats['attempts']} samples; {stats['passed']} passes; mean score {stats['mean_score']}; "
+                         f"sample SD {stats.get('sample_stddev')}; approximate 95% mean interval {stats.get('approximate_95pct_mean_interval')}; "
+                         f"Pass@k (%) {json.dumps(pass_k, sort_keys=True)}")
+        lines.append('Intervals use a normal approximation; descriptive and especially unreliable for small samples.')
+        return lines + ['']
 
     @staticmethod
     def run_warning(metadata):
         metadata = metadata or {}
         if metadata.get("run_status") in ("running", "interrupted", "aborted"):
+            if metadata.get('sampling'):
+                return f"Run status: {metadata['run_status']}; {len(metadata['sampling']['pending'])} samples pending. This collection is unfinished."
             return (f"Run status: {metadata['run_status']}; {len(metadata.get('pending_tasks', []))} "
                     "tasks pending (included as zero). This run is unfinished.")
         return None
@@ -277,9 +379,12 @@ class BenchmarkReporter:
     def analysis_warnings(results: List[TaskEvaluationResult]) -> List[str]:
         warnings = []
         for result in results:
+            similarity = (result.generation or {}).get('reference_similarity_warning')
+            if isinstance(similarity, str) and similarity.strip():
+                warnings.append(result.task_id + ': ' + similarity)
             status = result.safety_metrics.cppcheck_status
-            if status == "failed":
-                warnings.append(f"{result.task_id}: cppcheck failed; safety score uses built-in rules only.")
+            if status in ("failed", "timeout"):
+                warnings.append(f"{result.task_id}: cppcheck {status}; safety score uses built-in rules only.")
             elif result.compiled and result.test_result.completed and status in (None, "not_run"):
                 warnings.append(f"{result.task_id}: static-analysis coverage was not recorded or did not run.")
         return warnings
@@ -295,6 +400,7 @@ class BenchmarkReporter:
     @staticmethod
     def to_json_dict(results: List[TaskEvaluationResult], model_name: str,
                      metadata: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+        from aibenchmark_esw.metrics.measurements import measurement_summary
         return {
             "schema_version": 2,
             "metadata": metadata,
@@ -302,4 +408,5 @@ class BenchmarkReporter:
             "overall_score": round(sum(r.scores.total_score for r in results) / max(1, len(results)), 2),
             "pass_at_1_pct": round(sum(1 for r in results if BenchmarkReporter._all_tests_passed(r)) / max(1, len(results)) * 100.0, 2),
             "tasks": [r.to_dict() for r in results],
+            "generation_summary": measurement_summary(results),
         }

@@ -34,6 +34,12 @@ def _atomic_write(path, write):
         for attempt in range(6):
             try:
                 os.replace(temporary, path)
+                if os.name == "posix" and hasattr(os, "O_DIRECTORY"):
+                    directory_fd = os.open(path.parent, os.O_RDONLY | os.O_DIRECTORY)
+                    try:
+                        os.fsync(directory_fd)
+                    finally:
+                        os.close(directory_fd)
                 break
             except PermissionError as error:
                 # Windows readers/AV scanners can briefly deny replacement.

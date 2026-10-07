@@ -1,3 +1,4 @@
+/* AIBENCHMARK_ESW_CANARY_V1_tier1_ring_buffer */
 #include "unity.h"
 #include "ring_buffer.h"
 
@@ -125,6 +126,43 @@ void test_capacity_one(void) {
     }
 }
 
+void test_forbidden_upper_capacities_preserve_storage(void) {
+    const size_t capacities[] = {SIZE_MAX / 2U + 1U, SIZE_MAX / 2U + 2U, SIZE_MAX - 1U};
+    uint8_t storage[1] = {0xA5};
+    uint8_t output = 0xC3;
+    for (size_t i = 0; i < sizeof(capacities) / sizeof(capacities[0]); ++i) {
+        ring_buffer_init(&rb, storage, capacities[i]);
+        TEST_ASSERT_FALSE(ring_buffer_push(&rb, 42));
+        TEST_ASSERT_FALSE(ring_buffer_pop(&rb, &output));
+        TEST_ASSERT_EQUAL_HEX8(0xC3, output);
+        TEST_ASSERT_EQUAL_HEX8(0xA5, storage[0]);
+        TEST_ASSERT_EQUAL_UINT(0, ring_buffer_count(&rb));
+        TEST_ASSERT_TRUE(ring_buffer_is_empty(&rb));
+        TEST_ASSERT_FALSE(ring_buffer_is_full(&rb));
+    }
+}
+
+void test_capacity_300_fill_drain_and_wrap(void) {
+    uint8_t storage[300];
+    ring_buffer_t local;
+    ring_buffer_init(&local, storage, sizeof(storage));
+    for (size_t cycle = 0; cycle < 4; ++cycle) {
+        for (size_t i = 0; i < sizeof(storage); ++i) {
+            TEST_ASSERT_TRUE(ring_buffer_push(&local, (uint8_t)(i + cycle * 31U)));
+            TEST_ASSERT_EQUAL_UINT(i + 1U, ring_buffer_count(&local));
+        }
+        TEST_ASSERT_TRUE(ring_buffer_is_full(&local));
+        TEST_ASSERT_FALSE(ring_buffer_push(&local, 0xFF));
+        for (size_t i = 0; i < sizeof(storage); ++i) {
+            uint8_t output = 0;
+            TEST_ASSERT_TRUE(ring_buffer_pop(&local, &output));
+            TEST_ASSERT_EQUAL_HEX8((uint8_t)(i + cycle * 31U), output);
+            TEST_ASSERT_EQUAL_UINT(sizeof(storage) - i - 1U, ring_buffer_count(&local));
+        }
+        TEST_ASSERT_TRUE(ring_buffer_is_empty(&local));
+    }
+}
+
 int main(void) {
     UNITY_BEGIN();
     RUN_TEST(test_init_and_empty);
@@ -136,5 +174,7 @@ int main(void) {
     RUN_TEST(test_non_power_of_two_capacity_rollover);
     RUN_TEST(test_invalid_storage_and_capacity);
     RUN_TEST(test_capacity_one);
+    RUN_TEST(test_forbidden_upper_capacities_preserve_storage);
+    RUN_TEST(test_capacity_300_fill_drain_and_wrap);
     return UNITY_END();
 }

@@ -1,0 +1,92 @@
+name: AIBenchMark ESW
+description: Evaluate embedded C candidates and upload portable JSON and JUnit evidence
+author: AIBenchMark ESW contributors
+branding:
+  icon: cpu
+  color: blue
+inputs:
+  command:
+    description: run for a model candidate set, or eval for one local/reference implementation
+    default: run
+  model:
+    description: Requested model for run; baseline evaluates golden references offline
+    default: baseline
+  tasks:
+    description: Comma separated task IDs for run, or exactly one task ID for eval
+    default: tier1_crc16
+  solution:
+    description: Local C source pathname for eval; omission selects the golden reference
+    default: ''
+  compiler:
+    description: Installed host C compiler command or pathname
+    default: ''
+  jobs:
+    description: Maximum concurrent tasks for run
+    default: '1'
+  package-version:
+    description: Optional exact PyPI version; omission installs this action revision
+    default: ''
+  python-version:
+    description: Python version configured for the benchmark
+    default: '3.11'
+  output-directory:
+    description: Destination for benchmark JSON and JUnit artifacts
+    default: .aibenchmark-artifacts
+  artifact-name:
+    description: Uploaded JSON and JUnit artifact name
+    default: aibenchmark-esw-results
+  extra-arguments:
+    description: JSON array of additional CLI argument strings; artifact paths and resume cannot be overridden
+    default: '[]'
+outputs:
+  json:
+    description: Absolute JSON checkpoint pathname
+    value: ${{ steps.benchmark.outputs.json }}
+  junit:
+    description: Absolute JUnit XML pathname
+    value: ${{ steps.benchmark.outputs.junit }}
+  exit-code:
+    description: Benchmark command exit code
+    value: ${{ steps.benchmark.outputs.exit-code }}
+runs:
+  using: composite
+  steps:
+    - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+      with:
+        python-version: ${{ inputs.python-version }}
+    - name: Install benchmark
+      shell: bash
+      env:
+        INPUT_COMMAND: ${{ inputs.command }}
+        INPUT_MODEL: ${{ inputs.model }}
+        INPUT_PACKAGE_VERSION: ${{ inputs.package-version }}
+      run: python "$GITHUB_ACTION_PATH/.github/scripts/action_runner.py" install
+    - name: Evaluate candidates
+      id: benchmark
+      continue-on-error: true
+      shell: bash
+      env:
+        INPUT_COMMAND: ${{ inputs.command }}
+        INPUT_MODEL: ${{ inputs.model }}
+        INPUT_TASKS: ${{ inputs.tasks }}
+        INPUT_SOLUTION: ${{ inputs.solution }}
+        INPUT_COMPILER: ${{ inputs.compiler }}
+        INPUT_JOBS: ${{ inputs.jobs }}
+        INPUT_OUTPUT_DIRECTORY: ${{ inputs.output-directory }}
+        INPUT_EXTRA_ARGUMENTS: ${{ inputs.extra-arguments }}
+      run: python "$GITHUB_ACTION_PATH/.github/scripts/action_runner.py" benchmark
+    - name: Upload evaluation artifacts
+      if: always()
+      uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+      with:
+        name: ${{ inputs.artifact-name }}
+        path: |
+          ${{ steps.benchmark.outputs.json }}
+          ${{ steps.benchmark.outputs.junit }}
+        if-no-files-found: warn
+    - name: Preserve benchmark exit status
+      if: always()
+      shell: bash
+      env:
+        BENCHMARK_EXIT_CODE: ${{ steps.benchmark.outputs.exit-code }}
+      run: python "$GITHUB_ACTION_PATH/.github/scripts/action_runner.py" check

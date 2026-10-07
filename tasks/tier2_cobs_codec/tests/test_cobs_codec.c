@@ -1,3 +1,4 @@
+/* AIBENCHMARK_ESW_CANARY_V1_tier2_cobs_codec */
 #include "unity.h"
 #include "cobs_codec.h"
 #include <string.h>

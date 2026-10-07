@@ -1,0 +1,6 @@
+<!-- AIBENCHMARK_ESW_CANARY_V1_tier3_spi_flash -->
+# Task: Bounded SPI NOR Flash Driver
+
+HAL transaction is one complete chip-select frame: tx then optional rx; zero return means success. Init reads JEDEC 0x9F into temporary storage and only publishes the three bytes on success; failed reinit clears initialized. Reject null callbacks/device/ID and zero poll limit. Program accepts the 24-bit address range including 0xFFFFFF; reject end overflow before HAL calls; zero length is a no-op and permits NULL data. Split payloads at 256-byte boundaries. For each chunk: wait ready via status 0x05 bit0 with at most poll_limit reads, send WREN 0x06, send 0x02 plus 3 big-endian address bytes plus payload, wait ready again. Erase requires 4096-byte alignment and 24-bit address; sequence wait/WREN/0x20+address/wait. Stop immediately on HAL errors (FLASH_IO) or exhausted busy polls (FLASH_TIMEOUT). Errors leave the device initialized so callers can retry. Every mutation is a host HAL protocol fault; actual NOR timing/geometry remain deployment responsibilities.
+
+Implement `src/spi_flash.c` using the public header. No allocation, host I/O, floating point, or unbounded loops. Caller owns all state and storage. The tests are public host fixtures, not hardware certification.

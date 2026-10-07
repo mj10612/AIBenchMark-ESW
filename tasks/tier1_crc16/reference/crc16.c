@@ -1,3 +1,4 @@
+/* AIBENCHMARK_ESW_CANARY_V1_tier1_crc16 */
 #include "crc16.h"
 
 uint16_t crc16_update(uint16_t current_crc, uint8_t byte) {

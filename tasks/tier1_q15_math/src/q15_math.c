@@ -1,3 +1,4 @@
+/* AIBENCHMARK_ESW_CANARY_V1_tier1_q15_math */
 #include "q15_math.h"
 
 int16_t q15_add_sat(int16_t a, int16_t b) {

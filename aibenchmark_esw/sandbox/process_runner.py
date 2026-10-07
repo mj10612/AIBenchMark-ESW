@@ -29,6 +29,23 @@ class ExecutionCancelled(subprocess.SubprocessError):
         super().__init__("Execution cancelled")
 
 
+def _stop_posix_group(process):
+    try:
+        os.killpg(process.pid, signal.SIGKILL)  # type: ignore[attr-defined]
+    except ProcessLookupError:
+        pass
+    except PermissionError:
+        # Darwin can reject signalling a group containing only its unreaped
+        # zombie leader. Reap it and retry, still stopping any live descendants.
+        # A live leader or a second permission denial remains an actual error.
+        if process.poll() is None:
+            raise
+        try:
+            os.killpg(process.pid, signal.SIGKILL)  # type: ignore[attr-defined]
+        except ProcessLookupError:
+            pass
+
+
 class _WindowsJob:
     def __init__(self, cpu_seconds=None, memory_bytes=None):
         import ctypes
@@ -166,16 +183,15 @@ def run_bounded(command, *, timeout, max_output_bytes, cwd=None, env=None,
                     time.sleep(0.01)
             finally:
                 # Cleanup also runs on KeyboardInterrupt and assignment errors.
-                if job is not None:
-                    job.close()
-                else:
-                    try:
-                        os.killpg(process.pid, signal.SIGKILL)  # type: ignore[attr-defined]  # POSIX-only branch; absent in Windows stubs.
-                    except ProcessLookupError:
-                        pass
-                if process.poll() is None:
-                    process.kill()
-                process.wait(timeout=1)
+                try:
+                    if job is not None:
+                        job.close()
+                    else:
+                        _stop_posix_group(process)
+                finally:
+                    if process.poll() is None:
+                        process.kill()
+                    process.wait(timeout=1)
             output.seek(0)
             captured = output.read(max_output_bytes)
             truncated = os.fstat(output.fileno()).st_size > max_output_bytes

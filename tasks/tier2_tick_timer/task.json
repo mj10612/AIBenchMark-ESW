@@ -16,5 +16,6 @@
     "safety": 0.2
   },
   "entry_file": "src/tick_timer.c",
-  "reference_file": "reference/tick_timer.c"
+  "reference_file": "reference/tick_timer.c",
+  "canary": "AIBENCHMARK_ESW_CANARY_V1_tier2_tick_timer"
 }

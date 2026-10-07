@@ -1,3 +1,4 @@
+/* AIBENCHMARK_ESW_CANARY_V1_tier4_bitmask_fix */
 #include "unity.h"
 #include "irq_manager.h"
 
@@ -9,9 +10,9 @@ void setUp(void) {
 
 void tearDown(void) {}
 
-void test_w1c_clears_only_target_bit(void) {
-    /* In a W1C register, the firmware must write (1 << irq_num)
-       and NOT invert/read-modify-write other bits. */
+void test_w1c_drives_only_target_bit(void) {
+    /* This plain-memory fixture records the word driven to the W1C register,
+       not hardware read-back. Real hardware clears pending bits written as 1. */
     ctrl.status_reg = 0x00;
     TEST_ASSERT_TRUE(irq_clear_pending(&ctrl, 3));
     TEST_ASSERT_EQUAL_HEX32((1U << 3), ctrl.status_reg);
@@ -63,11 +64,27 @@ void test_multiple_irq_priorities_independent(void) {
 }
 
 void test_out_of_bounds_handling(void) {
+    ctrl.status_reg = UINT32_C(0xA5);
+    ctrl.priority_reg = UINT32_C(0xE8888888);
     TEST_ASSERT_FALSE(irq_clear_pending(&ctrl, MAX_IRQS));
+    TEST_ASSERT_EQUAL_HEX32(0xA5, ctrl.status_reg);
+    TEST_ASSERT_EQUAL_HEX32(0xE8888888, ctrl.priority_reg);
     TEST_ASSERT_FALSE(irq_clear_pending(&ctrl, 100));
+    TEST_ASSERT_EQUAL_HEX32(0xA5, ctrl.status_reg);
+    TEST_ASSERT_EQUAL_HEX32(0xE8888888, ctrl.priority_reg);
 
     TEST_ASSERT_FALSE(irq_set_priority(&ctrl, MAX_IRQS, 1));
+    TEST_ASSERT_EQUAL_HEX32(0xA5, ctrl.status_reg);
+    TEST_ASSERT_EQUAL_HEX32(0xE8888888, ctrl.priority_reg);
+    TEST_ASSERT_FALSE(irq_set_priority(&ctrl, 100, 1));
+    TEST_ASSERT_EQUAL_HEX32(0xA5, ctrl.status_reg);
+    TEST_ASSERT_EQUAL_HEX32(0xE8888888, ctrl.priority_reg);
     TEST_ASSERT_FALSE(irq_set_priority(&ctrl, 0, 8)); /* Priority > 7 */
+    TEST_ASSERT_EQUAL_HEX32(0xA5, ctrl.status_reg);
+    TEST_ASSERT_EQUAL_HEX32(0xE8888888, ctrl.priority_reg);
+    TEST_ASSERT_FALSE(irq_set_priority(&ctrl, 7, 255));
+    TEST_ASSERT_EQUAL_HEX32(0xA5, ctrl.status_reg);
+    TEST_ASSERT_EQUAL_HEX32(0xE8888888, ctrl.priority_reg);
 
     TEST_ASSERT_EQUAL_UINT(0, irq_get_priority(&ctrl, MAX_IRQS));
 }
@@ -80,7 +97,7 @@ void test_null_pointer_safety(void) {
 
 int main(void) {
     UNITY_BEGIN();
-    RUN_TEST(test_w1c_clears_only_target_bit);
+    RUN_TEST(test_w1c_drives_only_target_bit);
     RUN_TEST(test_priority_overwrite_no_corruption);
     RUN_TEST(test_multiple_irq_priorities_independent);
     RUN_TEST(test_out_of_bounds_handling);

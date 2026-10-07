@@ -1,3 +1,4 @@
+# AIBENCHMARK_ESW_CANARY_V1_tier2_debounce_fsm
 cmake_minimum_required(VERSION 3.12)
 project(test_tier2_debounce_fsm C)
 

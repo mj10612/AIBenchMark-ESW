@@ -8,7 +8,7 @@
 
 > A host-based benchmark for evaluating AI-generated embedded C using functional tests, resource budgets, and selected static safety rules.
 
-The project is in early development: eight tasks and 77 C test cases provide a reproducible reference baseline. The published [100-point baseline](results/baseline.md) measures the bundled golden implementations; it is not an OpenAI or Claude model score. See [reproducibility](docs/REPRODUCIBILITY.md), the [roadmap](docs/ROADMAP.md), and [contributor guidance](CONTRIBUTING.md).
+The project is in early development: 13 tasks and 113 C test cases provide a reproducible reference baseline. The published [100-point baseline](results/baseline.md) measures the bundled golden implementations; it is not an OpenAI or Claude model score. See [reproducibility](docs/REPRODUCIBILITY.md), the [roadmap](docs/ROADMAP.md), and [contributor guidance](CONTRIBUTING.md).
 
 ---
 
@@ -50,6 +50,11 @@ However, **embedded systems software (firmware)** operates under fundamentally d
 | **2** | FSM & Protocols | `tier2_tick_timer` | Rollover-Safe Tick Timer | One-shot/periodic deadlines, missed expirations, phase retention, full-width intervals |
 | **3** | Device Drivers | `tier3_i2c_sensor` | I2C Temperature Sensor Driver with Mock HAL | Register verification, error/timeout propagation, fixed-point math |
 | **4** | Bug Fix & Safety | `tier4_bitmask_fix` | W1C Interrupt Status Register & Priority Bitmask Fix | Write-1-to-Clear race condition, bitfield isolation |
+| **2** | Fixed-point Control | `tier2_fixed_control` | Q8 PID and low-pass filter | Wide products, saturation, truncation, anti-windup |
+| **3** | Device Drivers | `tier3_spi_flash` | SPI NOR flash driver | JEDEC, 24-bit addresses, page splitting, WIP timeout |
+| **3** | Flash Update | `tier3_flash_update` | Dual-slot update state machine | CRC read-back, atomic commit, power-cut recovery |
+| **4** | DMA Ownership | `tier4_dma_buffer` | C11 double-buffer ownership | Alignment, critical sections, cache hooks, overrun |
+| **4** | Bug Fix & Recovery | `tier4_uart_frame_fix` | UART frame receiver repair | Global poll budget, checksum, recovery, output preservation |
 
 ---
 
@@ -150,7 +155,7 @@ aibenchmark-esw compare --results results/openai.json results/claude.json \
 aibenchmark-esw eval --task tier1_crc16 --solution results/openai_sources/tier1_crc16.c
 ```
 
-Comparison requires identical task sets, weights, standards, and compatible recorded evaluator, dataset, and toolchain settings. Failed tasks remain in the denominator. Legacy files can be compared with explicit missing-provenance warnings. Token usage and generation duration are reported only where available; no API price or dollar cost is inferred.
+Comparison requires identical task sets, weights, standards, and compatible recorded evaluator, dataset, and toolchain settings. Failed tasks remain in the denominator. Legacy files can be compared with explicit missing-provenance warnings. Token usage, generation duration, and provider cost are reported with measurement coverage; unknown costs remain unknown. Explicit input/output token prices can supplement provider pricing, and an optional spend guard records its reservations and charged amount.
 
 For cross-toolchain validation, set `AIBENCHMARK_ESW_COMPILER` to a compiler executable (for example, `clang`); an explicit `--compiler` argument takes precedence. Provider settings must be supported by the selected model. A token-limit-truncated response is recorded as a generation failure.
 
@@ -192,7 +197,7 @@ The combined size ($\text{Flash} + \text{RAM}$) is compared to the measured refe
 * Missing or unreadable measurements are reported as unavailable and receive no memory points.
 * References that fail to compile, do not complete and pass every test, or exceed either resource budget produce an explicit reference-validation error and receive no memory points.
 
-Reference implementations must pass all functional tests and fit the budgets with the compiler used for comparisons. The refreshed TCC baseline scores 100/100 and passes all 77 tests. The ring buffer's Flash budget is 2048 bytes, accommodating its measured 1474-byte TCC object footprint. Its RAM footprint is legitimately zero because it uses caller-owned storage. The Q1.15 task has 16 cases, including a sweep of all 65,536 raw values for selected arithmetic identities and scaling checks; it does not exhaust all input pairs. The tick timer has 16 cases for wrap, deadline boundaries, phase retention, and missed-expiration counts; real elapsed time from its stored origin must remain below 2^32 ticks. Other compilers may produce different footprints; resource limits remain enforced for both candidates and references.
+Reference implementations must pass all functional tests and fit the budgets with the compiler used for comparisons. The refreshed TCC baseline scores 100/100 and passes all 113 tests. The ring buffer's Flash budget is 2048 bytes, accommodating its measured 1474-byte TCC object footprint. Its RAM footprint is legitimately zero because it uses caller-owned storage. The Q1.15 task has 16 cases, including a sweep of all 65,536 raw values for selected arithmetic identities and scaling checks; it does not exhaust all input pairs. The tick timer has 16 cases for wrap, deadline boundaries, phase retention, and missed-expiration counts; real elapsed time from its stored origin must remain below 2^32 ticks. Other compilers may produce different footprints; resource limits remain enforced for both candidates and references.
 
 ### 3. Static Code Safety ($S_{\text{safety}}$, 20%)
 Checks selected embedded safety rules using built-in heuristics and, when installed, `cppcheck`. These checks are not full MISRA-C certification. Penalizes:
@@ -227,6 +232,12 @@ AIBenchMark-ESW/
 │   ├── tier2_debounce_fsm/     # Tier 2: Button Debounce FSM
 │   ├── tier2_tick_timer/       # Tier 2: Rollover-Safe Tick Timer
 │   ├── tier3_i2c_sensor/       # Tier 3: I2C Sensor Driver (Mock HAL)
+│   ├── tier2_cobs_codec/       # Tier 2: Bounded COBS Codec
+│   ├── tier2_fixed_control/    # Tier 2: Q8 PID & Filter
+│   ├── tier3_spi_flash/        # Tier 3: SPI NOR Flash
+│   ├── tier3_flash_update/     # Tier 3: Power-Safe Flash Update
+│   ├── tier4_dma_buffer/       # Tier 4: C11 DMA Ownership
+│   ├── tier4_uart_frame_fix/   # Tier 4: UART Recovery Bug Fix
 │   └── tier4_bitmask_fix/      # Tier 4: Interrupt W1C Bug Fix
 ├── third_party/
 │   └── unity/                  # Unity C unit test framework
@@ -278,7 +289,7 @@ aibenchmark-esw aggregate --results results/run1.json results/run2.json --format
 aibenchmark-esw compare --results results/model_a.json results/model_b.json --format markdown
 # Stable long-form columns: model,task_id,total,functional,memory,safety,measured,pass_at_1.
 aibenchmark-esw compare --results results/model_a.json results/model_b.json --format csv-long
-# Test adequacy against 22 reviewed faulty candidates across all eight tasks.
+# Test adequacy against 47 reviewed faulty candidates across all 13 tasks.
 aibenchmark-esw mutations
 # Verify the published evidence corresponds to the current code and dataset.
 python -m aibenchmark_esw.baseline_check results/baseline.json
@@ -320,8 +331,9 @@ Target, compiler, effective budgets and flags are recorded; mixed-target compari
 are rejected. Allocated non-NOBITS ELF sections count toward Flash, writable/NOBITS
 sections toward RAM (including AVR progmem/vectors and ARM unwind/array sections
 when allocated). This excludes linker layout, startup libraries, stack and heap;
-a target object is not a final MCU image or proof of deployment fit. Mach-O is
-explicitly unsupported rather than estimated from ambiguous segment totals.
+a target object is not a final MCU image or proof of deployment fit. Mach-O
+relocatable objects are measured from sections and common symbols; universal
+objects use conservative componentwise maxima across their architecture slices.
 
 Built-in analysis records rule IDs, severity, file/line, rule configuration and
 safety penalties (15/error, 3/warning). Long/short and signed/unsigned integer/char
@@ -339,6 +351,8 @@ provenance. Report files and hashes are not digital signatures.
 
 The draft 2020-12 [report schema](aibenchmark_esw/schemas/report-v2.schema.json) is
 shipped in distributions. `aibenchmark-esw validate-report --schema` prints it;
-`pip install -e ".[schema]"` enables `validate-report results/run.json` for offline
+`pip install -e ".[schema]"` enables `aibenchmark-esw validate-report results/run.json` for offline
 structure and Python consistency checks. See [reproducibility](docs/REPRODUCIBILITY.md)
 for which checks cannot be expressed in JSON Schema.
+
+Task authoring, deterministic variants, private suite overlays, public canary strings, and optional automatic mutation probes are documented in [TASK_VARIANTS.md](docs/TASK_VARIANTS.md).

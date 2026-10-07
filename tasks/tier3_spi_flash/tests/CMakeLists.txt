@@ -1,0 +1,19 @@
+# AIBENCHMARK_ESW_CANARY_V1_tier3_spi_flash
+cmake_minimum_required(VERSION 3.12)
+project(test_tier3_spi_flash C)
+
+set(CMAKE_C_STANDARD 99)
+set(CMAKE_C_STANDARD_REQUIRED ON)
+set(TARGET_SRC "${CMAKE_CURRENT_SOURCE_DIR}/../src/spi_flash.c" CACHE FILEPATH "Source file to test")
+
+add_executable(test_runner
+    test_spi_flash.c
+    ${TARGET_SRC}
+    ${CMAKE_CURRENT_SOURCE_DIR}/../../../third_party/unity/unity.c
+)
+target_include_directories(test_runner PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/../include
+    ${CMAKE_CURRENT_SOURCE_DIR}/../../../third_party/unity
+)
+enable_testing()
+add_test(NAME spi_flash_test COMMAND test_runner)

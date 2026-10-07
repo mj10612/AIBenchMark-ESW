@@ -40,7 +40,9 @@ class TestAggregation(unittest.TestCase):
         summary = aggregate_runs([fixture_report(score, str(i)) for i, score in enumerate((100, 0, 50))])
         group = summary["groups"][0]
         self.assertEqual(group["runs"], 3)
-        self.assertEqual(group["statistics"]["score"], {"mean": 50, "sample_stddev": 50})
+        self.assertEqual(group["statistics"]["score"]["mean"], 50)
+        self.assertEqual(group["statistics"]["score"]["sample_stddev"], 50)
+        self.assertIsNotNone(group["statistics"]["score"]["mean_ci95_approx"])
         self.assertEqual(group["task_success"][0]["passed_runs"], 1)
         self.assertAlmostEqual(group["task_success"][0]["pass_rate_pct"], 100/3, places=5)
         self.assertIsNone(group["total_tokens"])

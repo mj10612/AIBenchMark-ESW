@@ -1,6 +1,7 @@
 """Validate saved result data before it participates in scoring summaries."""
 
 import math
+from dataclasses import fields
 
 from aibenchmark_esw.metrics.scorer import BenchmarkScorer
 
@@ -40,6 +41,18 @@ def _name(value, name):
 
 
 def validate_task_result(item, default_model):
+    from aibenchmark_esw.models import SizeMetrics, StaticSafetyMetrics, TaskWeights, TaskLimits
+    for name, model in (("size_metrics", SizeMetrics), ("safety_metrics", StaticSafetyMetrics),
+                        ("weights", TaskWeights), ("limits", TaskLimits)):
+        value = item.get(name)
+        if value is not None:
+            _object(value, name)
+            unknown = set(value) - {field.name for field in fields(model)}
+            if unknown:
+                raise ValueError(f"Unknown {name} fields: {', '.join(sorted(unknown))}")
+    for name in ("generation", "provenance"):
+        if item.get(name) is not None:
+            _object(item[name], "Task " + name)
     _name(item.get("task_id"), "task_id")
     _name(item.get("model_name", default_model), "model_name")
     if isinstance(item.get("tier"), bool) or not isinstance(item.get("tier"), int) or item["tier"] not in (1, 2, 3, 4):
@@ -58,7 +71,8 @@ def validate_task_result(item, default_model):
     if completed:
         if not compiled or total == 0 or passed + failed + ignored != total:
             raise ValueError("Completed tests require compilation and consistent nonempty test counts")
-        if returncode is not None and returncode != failed:
+        # Reports are portable: accept Windows counts and POSIX wrapped exits.
+        if returncode is not None and returncode not in (failed, failed % 256):
             raise ValueError("Completed test returncode must match the failure count")
     # Incomplete output can contain contradictory diagnostic counts, but must
     # never claim success or contribute points.
@@ -76,7 +90,7 @@ def validate_task_result(item, default_model):
     violations = safety.get("violations", [])
     if not isinstance(violations, list) or any(not isinstance(value, str) for value in violations):
         raise ValueError("safety_metrics.violations must be an array of strings")
-    if safety.get("cppcheck_status") not in (None, "disabled", "not_run", "completed", "failed"):
+    if safety.get("cppcheck_status") not in (None, "disabled", "not_run", "completed", "failed", "timeout"):
         raise ValueError("Unknown cppcheck status")
     findings = safety.get("findings", [])
     if not isinstance(findings, list):
@@ -85,13 +99,17 @@ def validate_task_result(item, default_model):
         _object(finding, "finding")
         for field in ("rule_id", "message", "file"):
             _name(finding.get(field), "finding." + field)
-        if finding.get("engine") not in ("builtin", "cppcheck") or finding.get("severity") not in (
+        if finding.get("engine") not in ("builtin", "cppcheck", "compiler") or finding.get("severity") not in (
                 "error", "warning", "style", "performance", "portability"):
             raise ValueError("Unknown finding engine or severity")
         if finding.get("line") is not None:
             _count(finding["line"], "finding.line")
             if finding["line"] == 0:
                 raise ValueError("finding.line must be positive")
+    errors = sum(finding["severity"] == "error" for finding in findings)
+    warnings = len(findings) - errors
+    if errors > safety.get("error_count", 0) or warnings > safety.get("warning_count", 0):
+        raise ValueError("Static-analysis findings exceed the corresponding scored counters")
     if safety.get("cppcheck_diagnostic") is not None and not isinstance(safety["cppcheck_diagnostic"], str):
         raise ValueError("cppcheck_diagnostic must be a string or null")
     _number(item.get("execution_time_sec"), "execution_time_sec")

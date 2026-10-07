@@ -1,10 +1,10 @@
 {
   "schema_version": 2,
   "metadata": {
-    "run_id": "45b6693127f649d1b7161898944ed236",
-    "created_at_utc": "2026-10-06T14:34:09.148619+00:00",
+    "run_id": "0dbe328f210144d8b8078d81509faaea",
+    "created_at_utc": "2026-10-07T13:13:08.412447+00:00",
     "benchmark_version": "0.1.0",
-    "evaluator_sha256": "0252b55751695a93abbd94e00c38daee98d6b729e968502a04d8ec92bca901d1",
+    "evaluator_sha256": "5f3a5a8f71588afc5d166238325fe8b6f8b2368c0e4def4ec8a78f94d9f034df",
     "python_version": "3.11.15",
     "platform": {
       "system": "Windows",
@@ -24,6 +24,7 @@
       "engine": "builtin",
       "cppcheck_version": null,
       "configuration": {
+        "version": 2,
         "builtin_rules": [
           "allocation-reference",
           "misra.15.1",
@@ -33,6 +34,8 @@
           "host-network",
           "host-filesystem"
         ],
+        "extended_rules": false,
+        "timeout_seconds": 30.0,
         "basic_type_exceptions": [
           "plain int (status/main APIs)",
           "plain char (character data)"
@@ -58,27 +61,53 @@
     },
     "source_revision": null,
     "source_dirty": null,
+    "source_revision_status": "published-artifact",
     "selected_tasks": [
       "tier1_crc16",
       "tier1_q15_math",
       "tier1_ring_buffer",
       "tier2_cobs_codec",
       "tier2_debounce_fsm",
+      "tier2_fixed_control",
       "tier2_tick_timer",
+      "tier3_flash_update",
       "tier3_i2c_sensor",
-      "tier4_bitmask_fix"
+      "tier3_spi_flash",
+      "tier4_bitmask_fix",
+      "tier4_dma_buffer",
+      "tier4_uart_frame_fix"
     ],
-    "task_fingerprints": {
-      "tier1_crc16": "2305e3e65b1ac04ef8b9b4a066ff1ca53313b1de8ff181ae891a059c3d5b81fd",
-      "tier1_q15_math": "18310898e6843f8ed3a3accbff6839c3b70db316febb4b7a73482061e2cfa8f7",
-      "tier1_ring_buffer": "d76eeddd101c31cabc7817cab27011226efb36b2c8594bed121d66c54d2a3a18",
-      "tier2_cobs_codec": "37cbbae63ade560e083d9d4e576d7560d2147bb851e14d821edb17b4f507c9d9",
-      "tier2_debounce_fsm": "1887d3b314b45dcac68e81b994a4eed01965152752a7a8d54dedae1e4432ec48",
-      "tier2_tick_timer": "0b698a42acca7a861cfd5398205698d68dd91c7cdb16fdda8416a260f1c3cbc0",
-      "tier3_i2c_sensor": "6a78c585499f682e9ee61cc2795310e183b89ab53001c7ddc1d816965086c1ce",
-      "tier4_bitmask_fix": "fea84fe73fa0529a29af6435eb2f37d6396a215f11b500af79d9abbb2e9a19ed"
+    "task_categories": {
+      "tier1_crc16": "core_fundamentals",
+      "tier1_q15_math": "core_fundamentals",
+      "tier1_ring_buffer": "core_fundamentals",
+      "tier2_cobs_codec": "fsm_and_protocols",
+      "tier2_debounce_fsm": "fsm_and_protocols",
+      "tier2_fixed_control": "firmware",
+      "tier2_tick_timer": "fsm_and_protocols",
+      "tier3_flash_update": "firmware",
+      "tier3_i2c_sensor": "device_drivers",
+      "tier3_spi_flash": "firmware",
+      "tier4_bitmask_fix": "bug_fix_and_safety",
+      "tier4_dma_buffer": "concurrency",
+      "tier4_uart_frame_fix": "concurrency"
     },
-    "dataset_sha256": "7560070a1f197ce704b41ad2114ce060af0bf89a932ea7349606bb56b8c8f765",
+    "task_fingerprints": {
+      "tier1_crc16": "0b66c3354cbc19fd8155b69da63eb9821cdb2fb7dfe5c24fc4d9990944733cb7",
+      "tier1_q15_math": "a88b7483f4a4597257a67603969be48b51fdc8078f104cd5c1033626c22d0cc3",
+      "tier1_ring_buffer": "856b96a8a663b0c046bf59c31b4421581ad90efe8ea5f9c63b9842f4b3dd96ac",
+      "tier2_cobs_codec": "efdbd5d326bbc196336fbbfc3dae21e7ac07a17edc48352fe4e6af107583fdf5",
+      "tier2_debounce_fsm": "d6f9b9f4d0a25916bcf3ea9a9cef24e64ff4e4acd71f1bf7ba5df4d2a254aab8",
+      "tier2_fixed_control": "66ca1dac6481cc2d181ef1936cd29f1933f2b200f45478ac8fda21e852468883",
+      "tier2_tick_timer": "c92675411f25130458734eb3e4dae5fdeaadf4331d1130decc2b6809e3c74a52",
+      "tier3_flash_update": "d68809e34cabe5ede7bd737c1d75533e86b17e1a57b8194be163f33c5cf9a8aa",
+      "tier3_i2c_sensor": "272a44630d07b7599c299809c873774f87f7e604bb9a6dfacb33bd41c5fbed96",
+      "tier3_spi_flash": "0568d1fc0b5eceeab990fbe912ec4bc4449e02dc90983fef915d46d80bdeb15a",
+      "tier4_bitmask_fix": "bccf133f78892143865fa673a9b9565f43505e39859e21dc472d5501ea03b365",
+      "tier4_dma_buffer": "b76b8c6983ab6c9c5be021eceea5ce8e5314e75471e3619516be0d2e507574e4",
+      "tier4_uart_frame_fix": "bbe6f7c60b4a575905fef1e381f8977371da6bca5a377ee7efe54fbf35eef436"
+    },
+    "dataset_sha256": "4bf4901e0db7d114619431a8f2ed815f0069d6c89fc6baa5acf6d8a8e587d9e9",
     "unreadable_assets": {},
     "generation_settings": null,
     "scoring_policy": {
@@ -146,6 +175,18 @@
             "timeout_seconds": 5
           }
         },
+        "tier2_fixed_control": {
+          "weights": {
+            "functional": 0.6,
+            "memory": 0.2,
+            "safety": 0.2
+          },
+          "limits": {
+            "max_flash_bytes": 2048,
+            "max_ram_bytes": 128,
+            "timeout_seconds": 5
+          }
+        },
         "tier2_tick_timer": {
           "weights": {
             "functional": 0.6,
@@ -155,6 +196,18 @@
           "limits": {
             "max_flash_bytes": 1536,
             "max_ram_bytes": 0,
+            "timeout_seconds": 5
+          }
+        },
+        "tier3_flash_update": {
+          "weights": {
+            "functional": 0.6,
+            "memory": 0.2,
+            "safety": 0.2
+          },
+          "limits": {
+            "max_flash_bytes": 3072,
+            "max_ram_bytes": 128,
             "timeout_seconds": 5
           }
         },
@@ -170,6 +223,18 @@
             "timeout_seconds": 5
           }
         },
+        "tier3_spi_flash": {
+          "weights": {
+            "functional": 0.6,
+            "memory": 0.2,
+            "safety": 0.2
+          },
+          "limits": {
+            "max_flash_bytes": 3072,
+            "max_ram_bytes": 128,
+            "timeout_seconds": 5
+          }
+        },
         "tier4_bitmask_fix": {
           "weights": {
             "functional": 0.6,
@@ -178,6 +243,30 @@
           },
           "limits": {
             "max_flash_bytes": 1024,
+            "max_ram_bytes": 128,
+            "timeout_seconds": 5
+          }
+        },
+        "tier4_dma_buffer": {
+          "weights": {
+            "functional": 0.6,
+            "memory": 0.2,
+            "safety": 0.2
+          },
+          "limits": {
+            "max_flash_bytes": 2048,
+            "max_ram_bytes": 128,
+            "timeout_seconds": 5
+          }
+        },
+        "tier4_uart_frame_fix": {
+          "weights": {
+            "functional": 0.6,
+            "memory": 0.2,
+            "safety": 0.2
+          },
+          "limits": {
+            "max_flash_bytes": 2048,
             "max_ram_bytes": 128,
             "timeout_seconds": 5
           }
@@ -190,6 +279,9 @@
       "isolation": "native",
       "memory_limit_bytes": null,
       "sanitizers": [],
+      "compiler_warnings": false,
+      "warning_flags": [],
+      "containment": null,
       "process_backend": "windows-job",
       "cpu_limit": null,
       "footprint": {
@@ -209,11 +301,20 @@
       "tasks_root": null,
       "system_prompt_file": null,
       "target": null,
-      "cross_compiler": null
+      "cross_compiler": null,
+      "warnings": false,
+      "container_engine": null,
+      "container_image": "gcc:14",
+      "static_analysis_timeout": 30.0,
+      "extended_safety_rules": false,
+      "max_cost_usd": null,
+      "input_cost_per_million": null,
+      "output_cost_per_million": null,
+      "variant_seed": null,
+      "heldout_tests": null
     },
     "run_status": "completed",
-    "pending_tasks": [],
-    "source_revision_status": "published-artifact"
+    "pending_tasks": []
   },
   "model_name": "baseline",
   "overall_score": 100.0,
@@ -225,8 +326,8 @@
       "model_name": "baseline",
       "compiled": true,
       "test_result": {
-        "total": 6,
-        "passed": 6,
+        "total": 7,
+        "passed": 7,
         "failed": 0,
         "ignored": 0,
         "all_passed": true,
@@ -254,7 +355,7 @@
         "safety": 100.0,
         "total": 100.0
       },
-      "execution_time_sec": 0.179,
+      "execution_time_sec": 0.894,
       "error_log": null,
       "weights": {
         "functional": 0.6,
@@ -266,8 +367,8 @@
       "generation": null,
       "provenance": {
         "reference_cache_hit": false,
-        "task_sha256": "2305e3e65b1ac04ef8b9b4a066ff1ca53313b1de8ff181ae891a059c3d5b81fd",
-        "candidate_sha256": "dc86b51824ee6720d2e976308cb11acd0e436490b0c8b44d99615029c334e667",
+        "task_sha256": "0b66c3354cbc19fd8155b69da63eb9821cdb2fb7dfe5c24fc4d9990944733cb7",
+        "candidate_sha256": "90f8ff90c7858bfe4637ab3430e82370c79949f4aedc6ef9dd0bd189b20dc5a7",
         "prompt_sha256": null
       },
       "limits": {
@@ -275,8 +376,8 @@
         "max_ram_bytes": 128,
         "timeout_seconds": 5
       },
-      "candidate_time_sec": 0.17893780000122206,
-      "reference_validation_time_sec": 0.03489369999988412,
+      "candidate_time_sec": 0.8935206999994989,
+      "reference_validation_time_sec": 0.08168669999940903,
       "footprint_target": "host"
     },
     {
@@ -314,7 +415,7 @@
         "safety": 100.0,
         "total": 100.0
       },
-      "execution_time_sec": 0.177,
+      "execution_time_sec": 0.842,
       "error_log": null,
       "weights": {
         "functional": 0.6,
@@ -326,8 +427,8 @@
       "generation": null,
       "provenance": {
         "reference_cache_hit": false,
-        "task_sha256": "18310898e6843f8ed3a3accbff6839c3b70db316febb4b7a73482061e2cfa8f7",
-        "candidate_sha256": "7031ddca96f3d8cd496fdb3f8829115c402d2c8acb6afb3012fe072f4a5971f6",
+        "task_sha256": "a88b7483f4a4597257a67603969be48b51fdc8078f104cd5c1033626c22d0cc3",
+        "candidate_sha256": "77d1452e3053e02bda883205d268005d490f938b02f7be2696386e100923bae6",
         "prompt_sha256": null
       },
       "limits": {
@@ -335,8 +436,8 @@
         "max_ram_bytes": 0,
         "timeout_seconds": 5
       },
-      "candidate_time_sec": 0.17654790000051435,
-      "reference_validation_time_sec": 0.035850899999786634,
+      "candidate_time_sec": 0.8419899000000441,
+      "reference_validation_time_sec": 0.07216589999916323,
       "footprint_target": "host"
     },
     {
@@ -345,8 +446,8 @@
       "model_name": "baseline",
       "compiled": true,
       "test_result": {
-        "total": 9,
-        "passed": 9,
+        "total": 11,
+        "passed": 11,
         "failed": 0,
         "ignored": 0,
         "all_passed": true,
@@ -374,7 +475,7 @@
         "safety": 100.0,
         "total": 100.0
       },
-      "execution_time_sec": 0.178,
+      "execution_time_sec": 0.809,
       "error_log": null,
       "weights": {
         "functional": 0.6,
@@ -386,8 +487,8 @@
       "generation": null,
       "provenance": {
         "reference_cache_hit": false,
-        "task_sha256": "d76eeddd101c31cabc7817cab27011226efb36b2c8594bed121d66c54d2a3a18",
-        "candidate_sha256": "915422a09ac1a34ddb89b99e0927f43d510fe3d50ea7922041d2802bbbf1a833",
+        "task_sha256": "856b96a8a663b0c046bf59c31b4421581ad90efe8ea5f9c63b9842f4b3dd96ac",
+        "candidate_sha256": "fb3a5b2b6042401d1e9e830334b67bd6283e361380feb453cd4fee2387d14164",
         "prompt_sha256": null
       },
       "limits": {
@@ -395,8 +496,8 @@
         "max_ram_bytes": 128,
         "timeout_seconds": 5
       },
-      "candidate_time_sec": 0.1780551000010746,
-      "reference_validation_time_sec": 0.03530239999963669,
+      "candidate_time_sec": 0.8087173999992956,
+      "reference_validation_time_sec": 0.07192249999934575,
       "footprint_target": "host"
     },
     {
@@ -434,7 +535,7 @@
         "safety": 100.0,
         "total": 100.0
       },
-      "execution_time_sec": 0.197,
+      "execution_time_sec": 0.858,
       "error_log": null,
       "weights": {
         "functional": 0.6,
@@ -446,8 +547,8 @@
       "generation": null,
       "provenance": {
         "reference_cache_hit": false,
-        "task_sha256": "37cbbae63ade560e083d9d4e576d7560d2147bb851e14d821edb17b4f507c9d9",
-        "candidate_sha256": "3cf92331d34af279f25f0624f1883b12182f9fcd526d6a6997192330e54f6dad",
+        "task_sha256": "efdbd5d326bbc196336fbbfc3dae21e7ac07a17edc48352fe4e6af107583fdf5",
+        "candidate_sha256": "75fe4540625a980305994bbb1c47da690c72819b2531f3e72379e6571d98b560",
         "prompt_sha256": null
       },
       "limits": {
@@ -455,8 +556,8 @@
         "max_ram_bytes": 0,
         "timeout_seconds": 5
       },
-      "candidate_time_sec": 0.19686950000141223,
-      "reference_validation_time_sec": 0.03494959999989078,
+      "candidate_time_sec": 0.8578145999999833,
+      "reference_validation_time_sec": 0.08733209999991232,
       "footprint_target": "host"
     },
     {
@@ -465,8 +566,8 @@
       "model_name": "baseline",
       "compiled": true,
       "test_result": {
-        "total": 5,
-        "passed": 5,
+        "total": 7,
+        "passed": 7,
         "failed": 0,
         "ignored": 0,
         "all_passed": true,
@@ -494,7 +595,7 @@
         "safety": 100.0,
         "total": 100.0
       },
-      "execution_time_sec": 0.182,
+      "execution_time_sec": 0.779,
       "error_log": null,
       "weights": {
         "functional": 0.6,
@@ -506,8 +607,8 @@
       "generation": null,
       "provenance": {
         "reference_cache_hit": false,
-        "task_sha256": "1887d3b314b45dcac68e81b994a4eed01965152752a7a8d54dedae1e4432ec48",
-        "candidate_sha256": "80aded9420a1c7fc5b24425a06641a32c2ff0957310388805372cfa4881a65f3",
+        "task_sha256": "d6f9b9f4d0a25916bcf3ea9a9cef24e64ff4e4acd71f1bf7ba5df4d2a254aab8",
+        "candidate_sha256": "2f2623c7abfec0ce13c3d1f3502e843ef7253e4962e798056d52306bf8e9c730",
         "prompt_sha256": null
       },
       "limits": {
@@ -515,8 +616,68 @@
         "max_ram_bytes": 128,
         "timeout_seconds": 5
       },
-      "candidate_time_sec": 0.18219710000084888,
-      "reference_validation_time_sec": 0.034045599999444676,
+      "candidate_time_sec": 0.7793836000000738,
+      "reference_validation_time_sec": 0.07760550000057265,
+      "footprint_target": "host"
+    },
+    {
+      "task_id": "tier2_fixed_control",
+      "tier": 2,
+      "model_name": "baseline",
+      "compiled": true,
+      "test_result": {
+        "total": 7,
+        "passed": 7,
+        "failed": 0,
+        "ignored": 0,
+        "all_passed": true,
+        "completed": true,
+        "returncode": 0
+      },
+      "size_metrics": {
+        "flash_bytes": 941,
+        "ram_bytes": 0,
+        "ref_flash_bytes": 941,
+        "ref_ram_bytes": 0,
+        "measured": true
+      },
+      "safety_metrics": {
+        "error_count": 0,
+        "warning_count": 0,
+        "violations": [],
+        "cppcheck_status": "disabled",
+        "cppcheck_diagnostic": null,
+        "findings": []
+      },
+      "scores": {
+        "functional": 100.0,
+        "memory": 100.0,
+        "safety": 100.0,
+        "total": 100.0
+      },
+      "execution_time_sec": 0.738,
+      "error_log": null,
+      "weights": {
+        "functional": 0.6,
+        "memory": 0.2,
+        "safety": 0.2
+      },
+      "target_standard": "c99",
+      "effective_standard": "c99",
+      "generation": null,
+      "provenance": {
+        "reference_cache_hit": false,
+        "task_sha256": "66ca1dac6481cc2d181ef1936cd29f1933f2b200f45478ac8fda21e852468883",
+        "candidate_sha256": "8817a58885053fc9c2572d3ab5a5c55d1cbf1316308933152c99acc5c8a2c158",
+        "prompt_sha256": null
+      },
+      "limits": {
+        "max_flash_bytes": 2048,
+        "max_ram_bytes": 128,
+        "timeout_seconds": 5
+      },
+      "candidate_time_sec": 0.7380522000003111,
+      "reference_validation_time_sec": 0.08428559999993013,
       "footprint_target": "host"
     },
     {
@@ -554,7 +715,7 @@
         "safety": 100.0,
         "total": 100.0
       },
-      "execution_time_sec": 0.19,
+      "execution_time_sec": 0.628,
       "error_log": null,
       "weights": {
         "functional": 0.6,
@@ -566,8 +727,8 @@
       "generation": null,
       "provenance": {
         "reference_cache_hit": false,
-        "task_sha256": "0b698a42acca7a861cfd5398205698d68dd91c7cdb16fdda8416a260f1c3cbc0",
-        "candidate_sha256": "569d0432b3073150cbabda7a724c32e799e7cbb5079d083c65c4e1b89458aef6",
+        "task_sha256": "c92675411f25130458734eb3e4dae5fdeaadf4331d1130decc2b6809e3c74a52",
+        "candidate_sha256": "625cd1ffd8a746042c6e624a1190cab21ede00ef9efdd94e4ed1fcdd1bd29e6c",
         "prompt_sha256": null
       },
       "limits": {
@@ -575,8 +736,68 @@
         "max_ram_bytes": 0,
         "timeout_seconds": 5
       },
-      "candidate_time_sec": 0.19030630000088422,
-      "reference_validation_time_sec": 0.03415339999992284,
+      "candidate_time_sec": 0.6284187999990536,
+      "reference_validation_time_sec": 0.06813280000096711,
+      "footprint_target": "host"
+    },
+    {
+      "task_id": "tier3_flash_update",
+      "tier": 3,
+      "model_name": "baseline",
+      "compiled": true,
+      "test_result": {
+        "total": 6,
+        "passed": 6,
+        "failed": 0,
+        "ignored": 0,
+        "all_passed": true,
+        "completed": true,
+        "returncode": 0
+      },
+      "size_metrics": {
+        "flash_bytes": 1980,
+        "ram_bytes": 0,
+        "ref_flash_bytes": 1980,
+        "ref_ram_bytes": 0,
+        "measured": true
+      },
+      "safety_metrics": {
+        "error_count": 0,
+        "warning_count": 0,
+        "violations": [],
+        "cppcheck_status": "disabled",
+        "cppcheck_diagnostic": null,
+        "findings": []
+      },
+      "scores": {
+        "functional": 100.0,
+        "memory": 100.0,
+        "safety": 100.0,
+        "total": 100.0
+      },
+      "execution_time_sec": 0.691,
+      "error_log": null,
+      "weights": {
+        "functional": 0.6,
+        "memory": 0.2,
+        "safety": 0.2
+      },
+      "target_standard": "c99",
+      "effective_standard": "c99",
+      "generation": null,
+      "provenance": {
+        "reference_cache_hit": false,
+        "task_sha256": "d68809e34cabe5ede7bd737c1d75533e86b17e1a57b8194be163f33c5cf9a8aa",
+        "candidate_sha256": "464da4ba144a0dd641297fe5ae14d4e0c2b8efa90d83ecdb52752046527e79cc",
+        "prompt_sha256": null
+      },
+      "limits": {
+        "max_flash_bytes": 3072,
+        "max_ram_bytes": 128,
+        "timeout_seconds": 5
+      },
+      "candidate_time_sec": 0.6907987000013236,
+      "reference_validation_time_sec": 0.06596229999922798,
       "footprint_target": "host"
     },
     {
@@ -614,7 +835,7 @@
         "safety": 100.0,
         "total": 100.0
       },
-      "execution_time_sec": 0.186,
+      "execution_time_sec": 0.786,
       "error_log": null,
       "weights": {
         "functional": 0.6,
@@ -626,8 +847,8 @@
       "generation": null,
       "provenance": {
         "reference_cache_hit": false,
-        "task_sha256": "6a78c585499f682e9ee61cc2795310e183b89ab53001c7ddc1d816965086c1ce",
-        "candidate_sha256": "577024c15480ce7155d3ae2ebb9bd87c5ce3de8b75b65307b2b583499eb022eb",
+        "task_sha256": "272a44630d07b7599c299809c873774f87f7e604bb9a6dfacb33bd41c5fbed96",
+        "candidate_sha256": "522d72a16e27ad8d6a62d1ab61ab00fbd576fc70d479305f425410118592b231",
         "prompt_sha256": null
       },
       "limits": {
@@ -635,8 +856,68 @@
         "max_ram_bytes": 256,
         "timeout_seconds": 5
       },
-      "candidate_time_sec": 0.1857166000008874,
-      "reference_validation_time_sec": 0.034984300000360236,
+      "candidate_time_sec": 0.7860997999996471,
+      "reference_validation_time_sec": 0.08257140000023355,
+      "footprint_target": "host"
+    },
+    {
+      "task_id": "tier3_spi_flash",
+      "tier": 3,
+      "model_name": "baseline",
+      "compiled": true,
+      "test_result": {
+        "total": 6,
+        "passed": 6,
+        "failed": 0,
+        "ignored": 0,
+        "all_passed": true,
+        "completed": true,
+        "returncode": 0
+      },
+      "size_metrics": {
+        "flash_bytes": 1913,
+        "ram_bytes": 0,
+        "ref_flash_bytes": 1913,
+        "ref_ram_bytes": 0,
+        "measured": true
+      },
+      "safety_metrics": {
+        "error_count": 0,
+        "warning_count": 0,
+        "violations": [],
+        "cppcheck_status": "disabled",
+        "cppcheck_diagnostic": null,
+        "findings": []
+      },
+      "scores": {
+        "functional": 100.0,
+        "memory": 100.0,
+        "safety": 100.0,
+        "total": 100.0
+      },
+      "execution_time_sec": 0.625,
+      "error_log": null,
+      "weights": {
+        "functional": 0.6,
+        "memory": 0.2,
+        "safety": 0.2
+      },
+      "target_standard": "c99",
+      "effective_standard": "c99",
+      "generation": null,
+      "provenance": {
+        "reference_cache_hit": false,
+        "task_sha256": "0568d1fc0b5eceeab990fbe912ec4bc4449e02dc90983fef915d46d80bdeb15a",
+        "candidate_sha256": "66901088376968950f34a9b6f4056caad735df20fd89fb819c5e90af892879cb",
+        "prompt_sha256": null
+      },
+      "limits": {
+        "max_flash_bytes": 3072,
+        "max_ram_bytes": 128,
+        "timeout_seconds": 5
+      },
+      "candidate_time_sec": 0.6254902000000584,
+      "reference_validation_time_sec": 0.06683320000047388,
       "footprint_target": "host"
     },
     {
@@ -674,7 +955,7 @@
         "safety": 100.0,
         "total": 100.0
       },
-      "execution_time_sec": 0.182,
+      "execution_time_sec": 0.727,
       "error_log": null,
       "weights": {
         "functional": 0.6,
@@ -686,8 +967,8 @@
       "generation": null,
       "provenance": {
         "reference_cache_hit": false,
-        "task_sha256": "fea84fe73fa0529a29af6435eb2f37d6396a215f11b500af79d9abbb2e9a19ed",
-        "candidate_sha256": "37f9c84348ef76f44e07416d60f2cc871d96e240889b0e80e62e12d7f96b1d63",
+        "task_sha256": "bccf133f78892143865fa673a9b9565f43505e39859e21dc472d5501ea03b365",
+        "candidate_sha256": "172cac8a83c198ca44c2bb1cf01cc86555c57cf47559130f0f0ec4694c10f59b",
         "prompt_sha256": null
       },
       "limits": {
@@ -695,9 +976,149 @@
         "max_ram_bytes": 128,
         "timeout_seconds": 5
       },
-      "candidate_time_sec": 0.18222029999924416,
-      "reference_validation_time_sec": 0.03379560000030324,
+      "candidate_time_sec": 0.7268743000004179,
+      "reference_validation_time_sec": 0.06736599999931059,
+      "footprint_target": "host"
+    },
+    {
+      "task_id": "tier4_dma_buffer",
+      "tier": 4,
+      "model_name": "baseline",
+      "compiled": true,
+      "test_result": {
+        "total": 5,
+        "passed": 5,
+        "failed": 0,
+        "ignored": 0,
+        "all_passed": true,
+        "completed": true,
+        "returncode": 0
+      },
+      "size_metrics": {
+        "flash_bytes": 1590,
+        "ram_bytes": 0,
+        "ref_flash_bytes": 1590,
+        "ref_ram_bytes": 0,
+        "measured": true
+      },
+      "safety_metrics": {
+        "error_count": 0,
+        "warning_count": 0,
+        "violations": [],
+        "cppcheck_status": "disabled",
+        "cppcheck_diagnostic": null,
+        "findings": []
+      },
+      "scores": {
+        "functional": 100.0,
+        "memory": 100.0,
+        "safety": 100.0,
+        "total": 100.0
+      },
+      "execution_time_sec": 0.73,
+      "error_log": null,
+      "weights": {
+        "functional": 0.6,
+        "memory": 0.2,
+        "safety": 0.2
+      },
+      "target_standard": "c11",
+      "effective_standard": "c11",
+      "generation": null,
+      "provenance": {
+        "reference_cache_hit": false,
+        "task_sha256": "b76b8c6983ab6c9c5be021eceea5ce8e5314e75471e3619516be0d2e507574e4",
+        "candidate_sha256": "855696ea82661c4392e6790ddecf965065c3cd6898d7fdd91611e9f3cf21cd63",
+        "prompt_sha256": null
+      },
+      "limits": {
+        "max_flash_bytes": 2048,
+        "max_ram_bytes": 128,
+        "timeout_seconds": 5
+      },
+      "candidate_time_sec": 0.730197799999587,
+      "reference_validation_time_sec": 0.06432630000017525,
+      "footprint_target": "host"
+    },
+    {
+      "task_id": "tier4_uart_frame_fix",
+      "tier": 4,
+      "model_name": "baseline",
+      "compiled": true,
+      "test_result": {
+        "total": 7,
+        "passed": 7,
+        "failed": 0,
+        "ignored": 0,
+        "all_passed": true,
+        "completed": true,
+        "returncode": 0
+      },
+      "size_metrics": {
+        "flash_bytes": 760,
+        "ram_bytes": 0,
+        "ref_flash_bytes": 760,
+        "ref_ram_bytes": 0,
+        "measured": true
+      },
+      "safety_metrics": {
+        "error_count": 0,
+        "warning_count": 0,
+        "violations": [],
+        "cppcheck_status": "disabled",
+        "cppcheck_diagnostic": null,
+        "findings": []
+      },
+      "scores": {
+        "functional": 100.0,
+        "memory": 100.0,
+        "safety": 100.0,
+        "total": 100.0
+      },
+      "execution_time_sec": 0.607,
+      "error_log": null,
+      "weights": {
+        "functional": 0.6,
+        "memory": 0.2,
+        "safety": 0.2
+      },
+      "target_standard": "c99",
+      "effective_standard": "c99",
+      "generation": null,
+      "provenance": {
+        "reference_cache_hit": false,
+        "task_sha256": "bbe6f7c60b4a575905fef1e381f8977371da6bca5a377ee7efe54fbf35eef436",
+        "candidate_sha256": "11ebb3048975ffd971039384cb6c5ba85274a0597a54ca8388d730577fb873ab",
+        "prompt_sha256": null
+      },
+      "limits": {
+        "max_flash_bytes": 2048,
+        "max_ram_bytes": 128,
+        "timeout_seconds": 5
+      },
+      "candidate_time_sec": 0.6073500000002241,
+      "reference_validation_time_sec": 0.06658419999985199,
       "footprint_target": "host"
     }
-  ]
+  ],
+  "generation_summary": {
+    "task_attempts": 13,
+    "total_tokens": null,
+    "known_total_tokens": null,
+    "usage_tasks": 0,
+    "usage_partial_tasks": 0,
+    "usage_known_attempts": null,
+    "usage_total_attempts": null,
+    "usage_attempt_coverage_tasks": 0,
+    "usage_known_turns": null,
+    "usage_total_turns": null,
+    "usage_turn_coverage_tasks": 0,
+    "total_cost_usd": null,
+    "known_cost_usd": null,
+    "cost_tasks": 0,
+    "cost_partial_tasks": 0,
+    "cost_per_passed_task": null,
+    "generation_seconds": null,
+    "duration_tasks": 0
+  }
 }

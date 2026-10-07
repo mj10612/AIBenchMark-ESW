@@ -1,3 +1,4 @@
+/* AIBENCHMARK_ESW_CANARY_V1_tier1_q15_math */
 #include "q15_math.h"
 
 static int16_t clamp_q15(int32_t value) {

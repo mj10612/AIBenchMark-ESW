@@ -1,3 +1,4 @@
+/* AIBENCHMARK_ESW_CANARY_V1_tier2_cobs_codec */
 #include "cobs_codec.h"
 
 cobs_status_t cobs_encode(const uint8_t *src, size_t src_len,

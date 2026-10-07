@@ -1,3 +1,4 @@
+/* AIBENCHMARK_ESW_CANARY_V1_tier2_debounce_fsm */
 #include "unity.h"
 #include "debounce_fsm.h"
 
@@ -101,6 +102,34 @@ void test_null_safety(void) {
     TEST_ASSERT_EQUAL(BUTTON_STATE_RELEASED, debounce_fsm_get_state(NULL));
 }
 
+void test_hold_occurs_at_exact_confirmed_press_tick(void) {
+    for (uint8_t tick = 0; tick < 3; ++tick) {
+        TEST_ASSERT_EQUAL(BUTTON_EVENT_NONE, debounce_fsm_update(&btn, 1));
+    }
+    for (uint8_t tick = 1; tick < 10; ++tick) {
+        TEST_ASSERT_EQUAL(BUTTON_EVENT_NONE, debounce_fsm_update(&btn, 1));
+    }
+    TEST_ASSERT_EQUAL(BUTTON_EVENT_HOLD, debounce_fsm_update(&btn, 1));
+    TEST_ASSERT_EQUAL(BUTTON_EVENT_NONE, debounce_fsm_update(&btn, 1));
+}
+
+void test_zero_and_one_thresholds_and_nonzero_input(void) {
+    for (uint16_t threshold = 0; threshold <= 1; ++threshold) {
+        debounce_fsm_init(&btn, threshold, 1);
+        TEST_ASSERT_EQUAL(BUTTON_EVENT_NONE, debounce_fsm_update(&btn, 0xFF));
+        TEST_ASSERT_EQUAL(BUTTON_STATE_PRESSED, debounce_fsm_get_state(&btn));
+        TEST_ASSERT_EQUAL(BUTTON_EVENT_HOLD, debounce_fsm_update(&btn, 2));
+        TEST_ASSERT_EQUAL(BUTTON_EVENT_NONE, debounce_fsm_update(&btn, 128));
+        TEST_ASSERT_EQUAL(BUTTON_EVENT_RELEASE, debounce_fsm_update(&btn, 0));
+        debounce_fsm_init(&btn, threshold, 0);
+        TEST_ASSERT_EQUAL(BUTTON_EVENT_NONE, debounce_fsm_update(&btn, 2));
+        for (uint32_t tick = 0; tick < UINT32_C(65540); ++tick) {
+            TEST_ASSERT_EQUAL(BUTTON_EVENT_NONE, debounce_fsm_update(&btn, 0xFF));
+        }
+        TEST_ASSERT_EQUAL(BUTTON_EVENT_CLICK, debounce_fsm_update(&btn, 0));
+    }
+}
+
 int main(void) {
     UNITY_BEGIN();
     RUN_TEST(test_initial_state);
@@ -108,5 +137,7 @@ int main(void) {
     RUN_TEST(test_clean_click_event);
     RUN_TEST(test_hold_and_release_event);
     RUN_TEST(test_null_safety);
+    RUN_TEST(test_hold_occurs_at_exact_confirmed_press_tick);
+    RUN_TEST(test_zero_and_one_thresholds_and_nonzero_input);
     return UNITY_END();
 }

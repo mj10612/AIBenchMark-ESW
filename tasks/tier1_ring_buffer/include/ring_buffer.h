@@ -1,3 +1,4 @@
+/* AIBENCHMARK_ESW_CANARY_V1_tier1_ring_buffer */
 #ifndef RING_BUFFER_H
 #define RING_BUFFER_H
 

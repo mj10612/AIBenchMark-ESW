@@ -1,3 +1,4 @@
+/* AIBENCHMARK_ESW_CANARY_V1_tier3_i2c_sensor */
 #include "unity.h"
 #include "i2c_sensor.h"
 #include <string.h>

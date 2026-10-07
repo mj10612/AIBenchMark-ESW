@@ -1,3 +1,4 @@
+<!-- AIBENCHMARK_ESW_CANARY_V1_tier2_debounce_fsm -->
 # Task: Digital Input Debounce & Button Event FSM
 
 You are an embedded software engineer. Implement a robust button debouncing Finite State Machine in C99.
@@ -12,7 +13,9 @@ Mechanical buttons experience contact bouncing (noise) when pressed or released.
 - `BUTTON_EVENT_RELEASE`: Triggered upon button release if it was previously held.
 
 ### Logic:
-- Button is considered active/pressed when `raw_pin_level == 1`, released when `raw_pin_level == 0`.
+- Button is considered active/pressed when `raw_pin_level != 0`, released when `raw_pin_level == 0`.
+- A zero debounce threshold is coerced to one tick; zero hold threshold disables HOLD.
+- The press-confirmation tick starts duration at zero. During uninterrupted active samples, HOLD occurs exactly on the `hold_threshold`-th subsequent update in confirmed PRESSED state, once per press. A release glitch does not re-arm HOLD.
 - Transition to pressed state requires `debounce_threshold` consecutive ticks of active level.
 - Transition to released state requires `debounce_threshold` consecutive ticks of inactive level.
 - If raw level flips before reaching `debounce_threshold`, counter resets (glitch rejection).

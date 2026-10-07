@@ -1,3 +1,4 @@
+<!-- AIBENCHMARK_ESW_CANARY_V1_tier1_crc16 -->
 # Task: CRC-16/CCITT-FALSE Checksum Engine
 
 You are an embedded software engineer. Implement the CRC-16/CCITT-FALSE algorithm in C99.

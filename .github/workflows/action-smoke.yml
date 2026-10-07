@@ -1,0 +1,32 @@
+name: Consumer action offline smoke
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  offline-reference:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    env:
+      AIBENCHMARK_ESW_CPPCHECK: 'off'
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - uses: ./
+        id: benchmark
+        with:
+          model: baseline
+          tasks: tier1_crc16,tier1_ring_buffer
+          compiler: gcc
+          jobs: '2'
+          artifact-name: consumer-action-smoke
+      - name: Validate exported evidence
+        env:
+          REPORT_PATH: ${{ steps.benchmark.outputs.json }}
+          JUNIT_PATH: ${{ steps.benchmark.outputs.junit }}
+        run: |
+          python -c "import json,os; from xml.etree import ElementTree as E; report=json.load(open(os.environ['REPORT_PATH'])); assert report['model_name']=='baseline'; assert len(report['tasks'])==2; assert report['pass_at_1_pct']==100; E.parse(os.environ['JUNIT_PATH'])"

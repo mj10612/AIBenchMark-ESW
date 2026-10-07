@@ -1,3 +1,4 @@
+/* AIBENCHMARK_ESW_CANARY_V1_tier3_i2c_sensor */
 #include "i2c_sensor.h"
 
 sensor_status_t sensor_init(sensor_device_t* dev, const i2c_bus_t* bus) {
