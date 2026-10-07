@@ -89,9 +89,11 @@ class ContainmentBackend:
         # A non-root container needs to create compiler artifacts and receipt.
         # Permissions apply solely to this ephemeral workspace.
         for path in workspace.rglob("*"):
+            if path.is_symlink():
+                continue
             if path.is_dir():
                 path.chmod(0o777)
-            elif not path.is_symlink():
+            else:
                 path.chmod(0o777 if os.access(path, os.X_OK) else 0o666)
         container_cwd = "/workspace" + ("/scratch" if cwd != workspace else "")
         return workspace, container_cwd, translated

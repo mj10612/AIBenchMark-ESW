@@ -70,6 +70,24 @@ class TestContainment(unittest.TestCase):
         self.assertEqual(settings['network'], 'none')
         self.assertEqual(settings['mount_scope'], 'ephemeral-workspace')
 
+    @unittest.skipIf(os.name == 'nt', 'POSIX symlink permission boundary')
+    def test_workspace_permissions_never_follow_links_to_host_directories(self):
+        import stat
+        with TemporaryDirectory() as directory:
+            root = Path(directory)
+            workspace, protected = root / 'workspace', root / 'protected'
+            workspace.mkdir()
+            protected.mkdir(mode=0o700)
+            secret = protected / 'secret'
+            secret.write_text('private')
+            secret.chmod(0o600)
+            (workspace / 'host-directory').symlink_to(protected, target_is_directory=True)
+            (workspace / 'host-file').symlink_to(secret)
+            self.backend()._workspace_command(['gcc', '--version'], workspace)
+            self.assertEqual(stat.S_IMODE(protected.stat().st_mode), 0o700)
+            self.assertEqual(stat.S_IMODE(secret.stat().st_mode), 0o600)
+            self.assertEqual(secret.read_text(), 'private')
+
     def test_container_matches_nonroot_workspace_owner_and_never_uses_root(self):
         with patch('aibenchmark_esw.sandbox.containment.os.getuid', return_value=1001, create=True), patch(
                 'aibenchmark_esw.sandbox.containment.os.getgid', return_value=1002, create=True):

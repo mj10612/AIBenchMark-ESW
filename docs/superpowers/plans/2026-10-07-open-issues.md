@@ -86,8 +86,10 @@ fingerprints pass. CI provides remaining GCC/macOS/AVR/container evidence.
 Follow-up CI review fixes bind-mount file ownership by matching a non-root
 host UID/GID, reaps a Darwin zombie group before retrying its termination,
 and compares Unity object sections rather than unsupported linked Mach-O images.
-The 63 targeted runtime, evaluation and containment tests pass locally with
-4 explicit tool/platform skips; three new regression tests bring the suite to 353.
+Container workspace permission preparation also skips symlinks before inspecting
+their targets, so candidate-created links cannot chmod host directories.
+The 64 targeted runtime, evaluation and containment tests pass locally with
+5 explicit tool/platform skips; four new regression tests bring the suite to 354.
 Final coordinator review additionally corrected sampling output-root restoration,
 completed-resume compatibility, collection checkpoints/statistics validation and
 the existing csv-long column contract. Paid providers were mocked throughout.
