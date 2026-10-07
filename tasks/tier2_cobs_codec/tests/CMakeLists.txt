@@ -1,3 +1,4 @@
+# AIBENCHMARK_ESW_CANARY_V1_tier2_cobs_codec
 cmake_minimum_required(VERSION 3.12)
 project(test_tier2_cobs_codec C)
 set(CMAKE_C_STANDARD 99)

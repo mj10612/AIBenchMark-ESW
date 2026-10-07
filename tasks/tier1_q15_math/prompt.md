@@ -1,3 +1,4 @@
+<!-- AIBENCHMARK_ESW_CANARY_V1_tier1_q15_math -->
 # Saturating Q1.15 Arithmetic
 
 Implement the three functions declared in `q15_math.h` using portable C99.

@@ -215,7 +215,7 @@ void normal(void) {}
             with patch("aibenchmark_esw.sandbox.static_analyzer.subprocess.run",
                        side_effect=subprocess.TimeoutExpired("cppcheck", 10)):
                 metrics = StaticAnalyzer("cppcheck").analyze(source)
-            self.assertEqual(metrics.cppcheck_status, "failed")
+            self.assertEqual(metrics.cppcheck_status, "timeout")
             self.assertEqual(metrics.warning_count, 1)
             self.assertIn("timed out", metrics.cppcheck_diagnostic)
 

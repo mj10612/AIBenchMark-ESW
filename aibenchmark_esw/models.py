@@ -147,6 +147,8 @@ class CompilationResult:
     binary_path: Optional[Path] = None
     error_message: Optional[str] = None
     effective_standard: Optional[str] = None
+    findings: List[Dict[str, Any]] = field(default_factory=list)
+    warning_flags: List[str] = field(default_factory=list)
     _workspace: Optional[Any] = field(default=None, repr=False, compare=False)
 
     def cleanup(self) -> None:

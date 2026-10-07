@@ -5,6 +5,22 @@
   "description": "Structural contract. Python additionally validates scoring, task policy, suite consistency and run state.",
   "type": "object",
   "properties": {
+    "generation_summary": {"type": "object"},
+    "samples": {
+      "type": "array",
+      "items": {"allOf": [{"$ref": "#"}, {"not": {"required": ["samples"]}}]}
+    },
+    "sampling": {
+      "type": "object",
+      "properties": {
+        "requested": {"type": "integer", "minimum": 1},
+        "completed": {"type": "integer", "minimum": 0},
+        "pending": {"type": "array", "items": {"type": "integer", "minimum": 0}, "uniqueItems": true},
+        "pass_k": {"type": "array", "items": {"type": "integer", "minimum": 1}, "uniqueItems": true},
+        "statistics": {"type": "object"}
+      },
+      "required": ["requested", "completed", "pending"]
+    },
     "schema_version": {
       "const": 2
     },
@@ -287,7 +303,8 @@
                   "disabled",
                   "not_run",
                   "completed",
-                  "failed"
+                  "failed",
+                  "timeout"
                 ]
               },
               "cppcheck_diagnostic": {
@@ -309,7 +326,8 @@
                     "engine": {
                       "enum": [
                         "builtin",
-                        "cppcheck"
+                        "cppcheck",
+                        "compiler"
                       ]
                     },
                     "severity": {

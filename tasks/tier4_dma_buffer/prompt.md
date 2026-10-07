@@ -1,0 +1,6 @@
+<!-- AIBENCHMARK_ESW_CANARY_V1_tier4_dma_buffer -->
+# Task: DMA Double-Buffer Ownership
+
+Implement a C11 double-buffer descriptor. Storage and each half must be 4-byte aligned: nonzero length divisible by 8. Require all four HAL callbacks. Initialization invalidates stale state before validation. Use a C11 `_Static_assert` for 8-bit bytes. ISR `complete(half)` changes DMA_OWNED to DMA_READY after invalidate; acquire changes READY to READING and publishes pointer/half length; release cleans then transfers READING to OWNED. Perform state checks, cache hooks and ownership transitions inside balanced enter/leave critical sections; invalid arguments perform no hooks and preserve outputs. Repeated completion of READY/READING increments overruns and preserves ownership without cache invalidation. Volatile state plus HAL critical sections model ISR/main synchronization; volatile alone does not create atomicity. HAL must stop DMA from writing a half while application owns it; cache callbacks provide platform barriers. This fixture tests serialized ISR interleavings, not arbitrary C threads or physical cache coherency.
+
+Implement `src/dma_buffer.c` using the public header. No allocation, host I/O, floating point, or unbounded loops. Caller owns all state and storage. The tests are public host fixtures, not hardware certification.

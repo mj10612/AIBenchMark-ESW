@@ -68,6 +68,10 @@ def evaluate_task(task: TaskConfig, solution_code: str, reference_code: Optional
         source = test_dir / Path(task.entry_file).name
         safety = (analyzer or StaticAnalyzer()).analyze(source, [task.task_dir / "include"],
                                                        comp.effective_standard or task.target_standard)
+        if executor.warnings:
+            safety.findings.extend(comp.findings)
+            safety.warning_count += sum(finding["severity"] == "warning" for finding in comp.findings)
+            safety.violations.extend(finding["message"] for finding in comp.findings)
         scores = BenchmarkScorer.calculate_scores(task, comp, tests, size, safety)
 
     candidate_elapsed = max(0.0, time.perf_counter() - start - reference_elapsed)

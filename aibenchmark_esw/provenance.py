@@ -22,13 +22,14 @@ def text_sha256(text):
 def _digest_records(records):
     digest = hashlib.sha256()
     for name, content in sorted(records):
+        suffix = Path(name).suffix.lower()
         # Length-prefix names and data so distinct records cannot concatenate
         # into the same byte stream. Ignore checkout-specific line endings.
         name = name.encode("utf-8")
         # Text inputs are checkout-independent; binary fixtures retain every byte.
         try:
             content.decode("utf-8")
-            if b"\x00" not in content:
+            if suffix in {".c", ".h", ".inc", ".py", ".md", ".rst", ".txt", ".json", ".toml", ".yaml", ".yml", ".cmake"} and b"\x00" not in content:
                 content = content.replace(b"\r\n", b"\n")
         except UnicodeDecodeError:
             pass
@@ -102,8 +103,12 @@ def _checkout_provenance(package_dir):
 
 def collect_run_metadata(tasks, executor, generation_settings=None, static_analyzer=None):
     compiler = Path(executor.compiler_path).stem.lower()
-    version = _command_output([executor.compiler_path, "/?" if compiler == "cl" else
-                               "-v" if compiler == "tcc" else "--version"])
+    if callable(getattr(executor, "compiler_identity", None)):
+        identity = executor.compiler_identity()
+        compiler, version = identity["name"], identity["version"]
+    else:
+        version = _command_output([executor.compiler_path, "/?" if compiler == "cl" else
+                                   "-v" if compiler == "tcc" else "--version"])
     fingerprints, unreadable_assets = {}, {}
     for task in tasks:
         errors: list = []
@@ -133,6 +138,7 @@ def collect_run_metadata(tasks, executor, generation_settings=None, static_analy
                             "cppcheck_version": cppcheck_version, "configuration": analyzer.configuration()},
         "source_revision": revision, "source_dirty": dirty,
         "selected_tasks": [task.id for task in tasks],
+        "task_categories": {task.id: task.category for task in tasks},
         "task_fingerprints": fingerprints,
         "dataset_sha256": (None if unreadable_assets else
                            _digest_records([(name, value.encode("ascii")) for name, value in fingerprints.items()])),

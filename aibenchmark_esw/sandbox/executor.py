@@ -37,8 +37,10 @@ class ExecutionSandbox:
     def __init__(self, compiler_path: Optional[str] = None, allow_standard_fallback: bool = False,
                  compile_timeout_seconds: float = 30, max_output_bytes: int = 1048576,
                  isolation: str = "native", memory_limit_bytes: Optional[int] = None,
-                 sanitizers=(), target=None, cross_compiler=None):
-        self.compiler_path = compiler_path or os.environ.get("AIBENCHMARK_ESW_COMPILER") or self._find_c_compiler()
+                 sanitizers=(), target=None, cross_compiler=None, warnings=False,
+                 container_engine=None, container_image="gcc:14", container_runtime=None):
+        self.compiler_path = compiler_path or os.environ.get("AIBENCHMARK_ESW_COMPILER") or (
+            "gcc" if isolation == "container" else self._find_c_compiler())
         if Path(self.compiler_path).is_file():
             self.compiler_path = str(Path(self.compiler_path).resolve())
         self.unity_dir = data_root() / "third_party" / "unity"
@@ -48,13 +50,13 @@ class ExecutionSandbox:
             raise ValueError("compile_timeout_seconds must be a finite positive number")
         if isinstance(max_output_bytes, bool) or not isinstance(max_output_bytes, int) or max_output_bytes <= 0:
             raise ValueError("max_output_bytes must be a positive integer")
-        if isolation not in ("native", "process"):
-            raise ValueError("isolation must be native or process")
+        if isolation not in ("native", "process", "container", "bwrap"):
+            raise ValueError("isolation must be native, process, container or bwrap")
         if memory_limit_bytes is not None:
             if isinstance(memory_limit_bytes, bool) or not isinstance(memory_limit_bytes, int) or memory_limit_bytes <= 0:
                 raise ValueError("memory_limit_bytes must be a positive integer")
-            if isolation != "process":
-                raise ValueError("memory_limit_bytes requires process isolation")
+            if isolation == "native":
+                raise ValueError("memory_limit_bytes requires process or external isolation")
         if isinstance(sanitizers, str):
             sanitizers = sanitizers.split(",") if sanitizers else ()
         self.sanitizers = tuple(sorted(set(sanitizers)))
@@ -65,15 +67,51 @@ class ExecutionSandbox:
         self.isolation = isolation
         self.memory_limit_bytes = memory_limit_bytes
         self.cancel_event = None
+        self.warnings = bool(warnings)
+        self.containment = None
+        if isolation in ("container", "bwrap"):
+            from aibenchmark_esw.sandbox.containment import ContainmentBackend
+            self.containment = ContainmentBackend(isolation, container_engine, container_image, container_runtime)
         self.cross = None
         if target is not None:
             from aibenchmark_esw.sandbox.cross_compiler import CrossCompiler
-            self.cross = CrossCompiler(target, cross_compiler, compile_timeout_seconds)
+            self.cross = CrossCompiler(target, cross_compiler, compile_timeout_seconds,
+                                       max_output_bytes, isolation, memory_limit_bytes,
+                                       self._run_contained if self.containment else None)
+
+    def warning_flags(self):
+        if not self.warnings:
+            return []
+        name = Path(self.compiler_path).stem.lower()
+        return ["/W4"] if name in ("cl", "clang-cl") else ["-Wall", "-Wextra", "-Wconversion", "-Wshadow"] if name != "tcc" else ["-Wall"]
+
+    def _run_contained(self, command, **options):
+        assert self.containment is not None
+        return self.containment.run(command, **options)
+
+    def compiler_identity(self):
+        """Return identity for the compiler actually executed, including images."""
+        command = [self.compiler_path, "/?" if Path(self.compiler_path).stem.lower() == "cl" else
+                   "-v" if Path(self.compiler_path).stem.lower() == "tcc" else "--version"]
+        try:
+            with tempfile.TemporaryDirectory(prefix="aibenchmark_compiler_probe_") as directory:
+                runner = self._run_contained if self.containment else run_bounded
+                result = runner(command, cwd=directory, timeout=10, max_output_bytes=65536)
+                output = result.stdout.decode(locale.getpreferredencoding(False), errors="backslashreplace")
+                lines = output.strip().splitlines()
+                version = lines[0] if result.returncode == 0 and lines else None
+        except (OSError, ValueError, subprocess.SubprocessError):
+            version = None
+        return {"name": Path(self.compiler_path).stem.lower(), "version": version,
+                "path": self.compiler_path, "allow_standard_fallback": self.allow_standard_fallback,
+                "target": self.cross.settings() if self.cross else None}
 
     def execution_settings(self):
         return {"compile_timeout_seconds": self.compile_timeout_seconds,
                 "max_output_bytes": self.max_output_bytes, "isolation": self.isolation,
                 "memory_limit_bytes": self.memory_limit_bytes, "sanitizers": list(self.sanitizers),
+                "compiler_warnings": self.warnings, "warning_flags": self.warning_flags(),
+                "containment": self.containment.settings() if self.containment else None,
                 "process_backend": "windows-job" if os.name == "nt" else "posix-session",
                 "cpu_limit": "task-timeout" if self.isolation == "process" else None,
                 "footprint": self.cross.settings() if self.cross else {"target": "host", "measurement": "host-object"}}
@@ -97,6 +135,7 @@ class ExecutionSandbox:
         compiler_name = Path(self.compiler_path).stem.lower()
         includes = [task.task_dir.resolve() / "include", self.unity_dir.resolve()]
         includes += [Path(directory).resolve() for directory in extra_includes]
+        includes = [directory for directory in includes if directory.is_dir()]
         sources = [str(Path(source).resolve()) for source in sources]
         standard = task.target_standard
         if self.sanitizers and not object_only and (compiler_name in ("tcc", "cl", "clang-cl")):
@@ -129,19 +168,52 @@ class ExecutionSandbox:
                 cmd += ["-fsanitize=" + ",".join(self.sanitizers), "-fno-sanitize-recover=all",
                         "-fno-omit-frame-pointer", "-g"]
         try:
-            proc = subprocess.run(cmd, capture_output=True, text=True, errors="backslashreplace", timeout=self.compile_timeout_seconds,
-                                  cwd=str(output.parent))
-            log = proc.stdout + proc.stderr
+            cmd += self.warning_flags()
+            runner = self._run_contained if self.containment else run_bounded
+            proc = runner(cmd, timeout=self.compile_timeout_seconds, max_output_bytes=self.max_output_bytes,
+                          cwd=str(output.parent), isolation=self.isolation,
+                          memory_limit_bytes=self.memory_limit_bytes, cancel_event=self.cancel_event)
+            log = proc.stdout.decode(locale.getpreferredencoding(False), errors="backslashreplace")
+            findings = self._warning_findings(log, sources)
             if proc.returncode != 0 or not output.is_file():
                 return CompilationResult(False, log, error_message="Compilation failed",
-                                         effective_standard=standard)
-            return CompilationResult(True, log, binary_path=output, effective_standard=standard)
+                                         effective_standard=standard, findings=findings, warning_flags=self.warning_flags())
+            return CompilationResult(True, log, binary_path=output, effective_standard=standard,
+                                     findings=findings, warning_flags=self.warning_flags())
         except subprocess.TimeoutExpired as error:
             return CompilationResult(False, _timeout_output(error), error_message="Compilation timed out",
                                      effective_standard=standard)
-        except OSError as error:
+        except (OutputLimitExceeded, ExecutionCancelled) as error:
+            log = error.output.decode(locale.getpreferredencoding(False), errors="backslashreplace")
+            return CompilationResult(False, log + "\n" + str(error), error_message=str(error),
+                                     effective_standard=standard)
+        except (OSError, ValueError) as error:
             return CompilationResult(False, str(error), error_message="Compiler unavailable or timed out",
                                      effective_standard=standard)
+
+    def _warning_findings(self, log, sources):
+        if not self.warnings:
+            return []
+        owned = {Path(source).name for source in sources
+                 if not Path(source).name.startswith("aibenchmark_tests_") and Path(source).name != "unity.c"}
+        findings = []
+        for diagnostic in log.splitlines():
+            match = re.match(r"^(.*?):(\d+)(?::\d+)?:\s*warning:\s*(.*)", diagnostic)
+            msvc = re.match(r"^(.*?)\((\d+)(?:,\d+)?\):\s*warning\s+(C\d+):\s*(.*)", diagnostic)
+            if match:
+                file, line, message = match.groups()
+                flag = re.search(r"\[(-W[^\]]+)\]\s*$", message)
+                rule = flag.group(1) if flag else "warning"
+            elif msvc:
+                file, line, rule, message = msvc.groups()
+            else:
+                continue
+            file = Path(file).name
+            if file not in owned:
+                continue
+            findings.append({"rule_id": "compiler." + rule, "engine": "compiler", "severity": "warning",
+                             "message": message, "file": file, "line": int(line)})
+        return findings
 
     def compile_object(self, task: TaskConfig, solution_code: str,
                        workspace: Path, name: str = "candidate") -> CompilationResult:
@@ -151,6 +223,7 @@ class ExecutionSandbox:
         source = workspace / f"{name}.c"
         source.write_text(solution_code, encoding="utf-8")
         if self.cross:
+            self.cross.cancel_event = self.cancel_event
             return self.cross.compile(task, source, workspace / f"{name}.o")
         return self._compile(task, [source], workspace / f"{name}.o", object_only=True)
 
@@ -166,6 +239,9 @@ class ExecutionSandbox:
             work_dir = Path(custom_workspace).resolve()
             work_dir.mkdir(parents=True, exist_ok=True)
         try:
+            if re.search(r"\bmain\s*\([^;{}]*\)\s*\{", mask_noncode(solution_code)):
+                message = "Candidate source defines a main() function, conflicting with the separate test harness runner. Return only the implementation."
+                return CompilationResult(False, message, error_message=message), TestResult(output=message, completed=False)
             tests = sorted((task.task_dir / "tests").glob("test_*.c"))
             if not tests:
                 message = f"No test_*.c found in {task.task_dir / 'tests'}"
@@ -190,14 +266,17 @@ class ExecutionSandbox:
                 else:
                     message = "Test runner main must take void or argc/argv parameters"
                     return CompilationResult(False, message), TestResult(output=message)
-                wrapped = work_dir / f"aibenchmark_tests_{completion_token}_{index}.c"
+                wrapped = work_dir / f"aibenchmark_tests_{index}.c"
                 wrapped.write_text(
                     '#include <stdio.h>\n#define main aibenchmark_suite_main\n'
                     + f"#line 1 {json.dumps(test.resolve().as_posix())}\n" + source
                     + '\n#undef main\n#line 1 "aibenchmark_harness.c"\n'
                     + "int main(int argc, char **argv) {\n"
+                    + '    FILE *aibenchmark_channel = argc > 1 ? fopen(argv[1], "wb") : NULL;\n'
+                    + '    if (!aibenchmark_channel) return 125;\n'
                     + f"    int result = aibenchmark_suite_main({arguments});\n"
-                    + f'    printf("AIBenchMark-ESW:{completion_token}:END\\n");\n'
+                    + f'    fputs("AIBenchMark-ESW:{completion_token}:END\\n", aibenchmark_channel);\n'
+                    + '    if (fclose(aibenchmark_channel) != 0) return 125;\n'
                     + "    return result;\n}\n", encoding="utf-8",
                 )
                 wrapped_tests.append(wrapped)
@@ -221,12 +300,28 @@ class ExecutionSandbox:
                     # inherited host sanitizer configuration.
                     environment["ASAN_OPTIONS"] = "halt_on_error=1:abort_on_error=1:detect_leaks=0"
                     environment["UBSAN_OPTIONS"] = "halt_on_error=1:print_stacktrace=1"
-                proc = run_bounded([str(binary_path)], timeout=task.limits.timeout_seconds,
-                                   max_output_bytes=self.max_output_bytes, cwd=str(work_dir), env=environment,
+                scratch = work_dir / "scratch"
+                scratch.mkdir(exist_ok=True)
+                receipt = work_dir / "harness.receipt"
+                runner = self._run_contained if self.containment else run_bounded
+                proc = runner([str(binary_path), str(receipt)], timeout=task.limits.timeout_seconds,
+                                   max_output_bytes=self.max_output_bytes, cwd=str(scratch), env=environment,
                                    isolation=self.isolation, memory_limit_bytes=self.memory_limit_bytes,
                                    cancel_event=self.cancel_event)
                 output = proc.stdout.decode(locale.getpreferredencoding(False), errors="backslashreplace")
-                test_result = self._parse_unity_output(output, proc.returncode, completion_token)
+                # Receipt is produced only after the trusted suite returns.
+                # Native code still shares the address space and filesystem;
+                # this separate channel prevents the cwd/stdout exploit, not
+                # arbitrary hostile native code from forging the verdict.
+                expected = f"AIBenchMark-ESW:{completion_token}:END\n".encode()
+                completed_channel = False
+                if receipt.is_file():
+                    with receipt.open("rb") as channel:
+                        completed_channel = channel.read(len(expected) + 1) == expected
+                if completed_channel:
+                    output += "\n" + expected.decode()
+                test_result = self._parse_unity_output(output, proc.returncode,
+                                                       completion_token if completed_channel else None)
                 if self.sanitizers and re.search(r"AddressSanitizer|UndefinedBehaviorSanitizer|runtime error:", output):
                     test_result.completed = test_result.passed = False
             except subprocess.TimeoutExpired as error:

@@ -1,3 +1,4 @@
+/* AIBENCHMARK_ESW_CANARY_V1_tier2_tick_timer */
 #include "tick_timer.h"
 
 void esw_timer_init(esw_timer_t *timer) {

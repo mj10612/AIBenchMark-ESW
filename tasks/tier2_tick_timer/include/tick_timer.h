@@ -1,3 +1,4 @@
+/* AIBENCHMARK_ESW_CANARY_V1_tier2_tick_timer */
 #ifndef TICK_TIMER_H
 #define TICK_TIMER_H
 

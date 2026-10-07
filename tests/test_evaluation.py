@@ -220,7 +220,7 @@ uint16_t crc16_ccitt(const uint8_t *data, size_t length) {
         comp, result = self.executor.compile_and_test(task, ref)
         self.addCleanup(comp.cleanup)
         self.assertTrue(result.passed, result.output)
-        self.assertEqual(result.total_tests, 9)
+        self.assertEqual(result.total_tests, 11)
 
     def test_debounce_with_only_confirmed_states_satisfies_the_contract(self):
         task = self.loader.get_task("tier2_debounce_fsm")
@@ -228,7 +228,7 @@ uint16_t crc16_ccitt(const uint8_t *data, size_t length) {
         result = evaluate_task(task, candidate, self.loader.get_reference_solution(task.id),
                                "confirmed-states", self.executor)
         self.assertTrue(result.test_result.passed, result.error_log)
-        self.assertEqual(result.test_result.total_tests, 5)
+        self.assertEqual(result.test_result.total_tests, 7)
         self.assertEqual(result.scores.total_score, 100)
         self.assertIsNone(result.error_log)
 

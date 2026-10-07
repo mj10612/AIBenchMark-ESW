@@ -158,7 +158,7 @@ int main(void){UNITY_BEGIN();RUN_TEST(test_ok);return UNITY_END();}
         task = DatasetLoader().get_task("tier1_crc16")
         executor = ExecutionSandbox(compile_timeout_seconds=0.125)
         with TemporaryDirectory() as directory, patch(
-                "aibenchmark_esw.sandbox.executor.subprocess.run",
+                "aibenchmark_esw.sandbox.executor.run_bounded",
                 side_effect=subprocess.TimeoutExpired("compiler", 0.125, output=b"partial")) as run:
             result = executor.compile_object(task, "int answer(void){return 1;}", Path(directory))
         self.assertEqual(run.call_args.kwargs["timeout"], 0.125)
@@ -200,9 +200,9 @@ int main(void){UNITY_BEGIN();RUN_TEST(test_ok);return UNITY_END();}
         def compile_fixture(command, **kwargs):
             commands.append(command)
             Path(command[command.index("-o") + 1]).write_bytes(b"object")
-            return subprocess.CompletedProcess(command, 0, "", "")
+            return subprocess.CompletedProcess(command, 0, b"", b"")
         with TemporaryDirectory() as directory, patch(
-                "aibenchmark_esw.sandbox.executor.subprocess.run", side_effect=compile_fixture):
+                "aibenchmark_esw.sandbox.executor.run_bounded", side_effect=compile_fixture):
             source = Path(directory) / "source.c"
             source.write_text("int value;")
             executor._compile(task, [source], Path(directory) / "test.exe")
@@ -221,7 +221,8 @@ int main(void){UNITY_BEGIN();RUN_TEST(test_ok);return UNITY_END();}
             wrapper = next(Path(command[0]).parent.glob("aibenchmark_tests_*.c")).read_text()
             token = wrapper.split("AIBenchMark-ESW:", 1)[1].split(":END", 1)[0]
             output = ("file.c:1:test:PASS\n1 Tests 0 Failures 0 Ignored\n"
-                      f"AIBenchMark-ESW:{token}:END\nfile.c:2: runtime error: overflow\n")
+                      "file.c:2: runtime error: overflow\n")
+            Path(command[1]).write_text(f"AIBenchMark-ESW:{token}:END\n")
             return subprocess.CompletedProcess(command, 0, output.encode(), b"")
         with patch.object(executor, "_compile", side_effect=compile_fixture), patch(
                 "aibenchmark_esw.sandbox.executor.run_bounded", side_effect=execute_fixture):

@@ -52,7 +52,8 @@ class TestWorkflowFeatures(unittest.TestCase):
             self.assertEqual(client.generate_solution([{"role": "user", "content": "implement"}]), self.code.strip())
         self.assertEqual(provider.completion.call_count, 2)
         self.assertEqual([attempt["error"] for attempt in client.last_generation["attempts"]], ["TimeoutError", None])
-        self.assertEqual(client.last_generation["usage"]["total_tokens"], 5)
+        self.assertIsNone(client.last_generation["usage"]["total_tokens"])
+        self.assertEqual(client.last_generation["known_usage"]["total_tokens"], 5)
         error = RuntimeError("invalid credentials")
         error.status_code = 401
         provider.completion.side_effect = error
@@ -194,7 +195,14 @@ class TestWorkflowFeatures(unittest.TestCase):
             metrics = StaticAnalyzer("off").analyze(path)
             self.assertEqual(metrics.findings[0]["line"], 2)
         result = evaluate_task(self.task, self.code, self.code, "m", ExecutionSandbox())
-        result.safety_metrics.findings = metrics.findings
+        # Replace the complete scored evidence; findings alone cannot contradict
+        # the clean candidate's original counters under the report contract.
+        result.safety_metrics = metrics
+        from aibenchmark_esw.metrics.scorer import BenchmarkScorer
+        result.scores.safety_score = BenchmarkScorer.safety_score(metrics)
+        result.scores.total_score = round(result.weights.functional * result.scores.functional_score +
+            result.scores.functional_score / 100 * (result.weights.memory * result.scores.memory_score +
+                                                   result.weights.safety * result.scores.safety_score), 2)
         report = BenchmarkReporter.to_json_dict([result], "m")
         self.assertEqual(BenchmarkReporter.from_json_dict(report)[0].safety_metrics.findings, metrics.findings)
         report["tasks"][0]["safety_metrics"]["findings"][0]["severity"] = "unknown"

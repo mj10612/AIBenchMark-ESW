@@ -5,14 +5,17 @@ import re
 import time
 from typing import Optional, List, Dict, Any, Set
 from aibenchmark_esw.sandbox.c_source import mask_noncode
+from aibenchmark_esw.llm.costs import BudgetExceededError, pricing, token_upper_bound, usage_cost, valid_cost
 
 
 def is_fatal_provider_error(error):
+    if type(error).__name__ in {"ContextWindowExceededError", "ContentPolicyViolationError", "BadRequestError"}:
+        return False
     status = getattr(error, "status_code", None)
-    return (isinstance(error, ImportError)
+    return (isinstance(error, (ImportError, BudgetExceededError))
             or type(error).__name__ in {"AuthenticationError", "PermissionDeniedError",
-                                       "NotFoundError", "UnsupportedParamsError", "BadRequestError"}
-            or (isinstance(status, int) and status in (400, 401, 403, 404, 422)))
+                                       "NotFoundError", "UnsupportedParamsError"}
+            or (isinstance(status, int) and status in (401, 403, 404)))
 
 
 def _transient(error):
@@ -28,7 +31,8 @@ class LLMClient:
                  temperature: Optional[float] = None, max_tokens: Optional[int] = None,
                  request_timeout: float = 60.0, max_retries: int = 0,
                  retry_backoff_seconds: float = 1.0, prompt_strategy: str = "single",
-                 review_turn: bool = False):
+                 review_turn: bool = False, input_cost_per_million=None,
+                 output_cost_per_million=None, budget=None):
         if temperature is not None and (isinstance(temperature, bool)
                 or not isinstance(temperature, (int, float))
                 or not math.isfinite(temperature) or not 0 <= temperature <= 2):
@@ -54,6 +58,9 @@ class LLMClient:
         self.request_timeout = request_timeout
         self.max_retries, self.retry_backoff_seconds = max_retries, retry_backoff_seconds
         self.prompt_strategy, self.review_turn = prompt_strategy, review_turn
+        pricing(None, model_name, input_cost_per_million, output_cost_per_million)
+        self.input_cost_per_million, self.output_cost_per_million = input_cost_per_million, output_cost_per_million
+        self.budget = budget
         self.last_generation: Any = None
         self.expected_functions: Set[str] = set()
         self.cancel_event = None
@@ -62,7 +69,9 @@ class LLMClient:
         return {"temperature": self.temperature, "max_tokens": self.max_tokens,
                 "request_timeout_seconds": self.request_timeout,
                 "max_retries": self.max_retries, "retry_backoff_seconds": self.retry_backoff_seconds,
-                "prompt_strategy": self.prompt_strategy, "review_turn": self.review_turn}
+                "prompt_strategy": self.prompt_strategy, "review_turn": self.review_turn,
+                "input_cost_per_million": self.input_cost_per_million,
+                "output_cost_per_million": self.output_cost_per_million}
 
     def build_prompt(self, task_prompt: str, header_code: str, starter_code: str,
                      target_standard: str = "c99", prompt_overrides=None,
@@ -81,6 +90,7 @@ class LLMClient:
         if not overrides.get("allow_dynamic_memory", False):
             rules.append("Do NOT use dynamic memory allocation (no malloc/calloc/realloc/free).")
         rules += ["Always check pointers for NULL.",
+                  "Do not define main(), setUp(), tearDown(), or a test runner; the evaluator supplies them.",
                   "Follow MISRA-C principles: use fixed-width integers (<stdint.h>).",
                   "Return ONLY the complete implementation code for the requested C file inside a ```c ... ``` code block."]
         rules.extend(extra)
@@ -108,15 +118,42 @@ class LLMClient:
             kwargs["max_tokens"] = self.max_tokens
         if self.api_key:
             kwargs["api_key"] = self.api_key
+        prices = pricing(provider, self.model_name, self.input_cost_per_million, self.output_cost_per_million)
         self.last_generation["request_messages"].append(copy.deepcopy(messages))
         for attempt in range(self.max_retries + 1):
             self._check_cancelled()
+            reservation = 0.0
+            if self.budget is not None:
+                if self.max_tokens is None:
+                    raise BudgetExceededError("--max-cost-usd requires --max-tokens to reserve output costs")
+                estimate = (token_upper_bound(messages) * prices["input_per_token"]
+                            + self.max_tokens * prices["output_per_token"]) if prices else None
+                reservation = self.budget.reserve(estimate)
             record: Dict[str, Any] = {"turn": len(self.last_generation["request_messages"]),
-                      "attempt": attempt + 1, "latency_seconds": None, "error": None}
+                      "attempt": attempt + 1, "latency_seconds": None, "error": None,
+                      "cost_usd": None, "budget_charge_usd": reservation, "usage": None}
             self.last_generation["attempts"].append(record)
             start = time.perf_counter()
             try:
                 response = provider.completion(**kwargs)
+                usage = getattr(response, "usage", None)
+                record["usage"] = {name: getattr(usage, name, None) for name in
+                    ("prompt_tokens", "completion_tokens", "total_tokens")} if usage is not None else None
+                if record["usage"] is not None:
+                    for key in ("prompt_tokens_details", "completion_tokens_details"):
+                        detail = getattr(usage, key, None)
+                        if not isinstance(detail, dict):
+                            detail = {name: getattr(detail, name, None) for name in
+                                ("cached_tokens", "reasoning_tokens", "audio_tokens", "accepted_prediction_tokens", "rejected_prediction_tokens")}
+                        detail = {name: value for name, value in detail.items()
+                                  if isinstance(value, int) and not isinstance(value, bool) and value >= 0}
+                        if detail:
+                            record["usage"][key] = detail
+                hidden = getattr(response, "_hidden_params", {})
+                measured = hidden.get("response_cost") if isinstance(hidden, dict) else None
+                record["cost_usd"] = measured if valid_cost(measured) else usage_cost(record["usage"], prices)
+                if prices is not None:
+                    record["pricing"] = prices
                 break
             except Exception as error:
                 record["error"] = type(error).__name__
@@ -130,6 +167,9 @@ class LLMClient:
                     raise InterruptedError("Generation cancelled")
             finally:
                 record["latency_seconds"] = round(time.perf_counter() - start, 6)
+                if self.budget is not None:
+                    self.budget.settle(reservation, record["cost_usd"])
+                    record["budget_charge_usd"] = record["cost_usd"] if record["cost_usd"] is not None else reservation
         if not response.choices:
             raise ValueError("Model returned no completion choices")
         choice = response.choices[0]
@@ -137,25 +177,36 @@ class LLMClient:
         if not isinstance(raw_text, str):
             raise ValueError("Model completion content must be text")
         usage = getattr(response, "usage", None)
-        tokens = {name: getattr(usage, name, None) for name in
-                  ("prompt_tokens", "completion_tokens", "total_tokens")} if usage is not None else None
+        tokens = copy.deepcopy(record["usage"])
         turn = {"resolved_model": getattr(response, "model", None),
                 "finish_reason": getattr(choice, "finish_reason", None),
-                "usage": tokens, "response_text": raw_text}
+                "usage": tokens, "response_text": raw_text, "cost_usd": record["cost_usd"]}
         self.last_generation["turns"].append(turn)
         self.last_generation.update(resolved_model=turn["resolved_model"], finish_reason=turn["finish_reason"])
-        known = [item["usage"] for item in self.last_generation["turns"] if item["usage"] is not None]
-        self.last_generation["usage"] = ({name: sum(item[name] for item in known)
-            if all(isinstance(item.get(name), int) and not isinstance(item[name], bool) for item in known)
-            else None for name in ("prompt_tokens", "completion_tokens", "total_tokens")} if known else None)
-        self.last_generation["usage_complete"] = (len(known) == len(self.last_generation["turns"])
-                                                     and all(item["error"] is None for item in self.last_generation["attempts"]))
+        self._summarize_measurements()
         messages.append({"role": "assistant", "content": raw_text})
         self.last_generation["messages"] = copy.deepcopy(messages)
         if turn["finish_reason"] == "length":
             self.last_generation["partial_response"] = raw_text
             raise ValueError("Model output was truncated at the token limit; increase --max-tokens")
         return raw_text
+
+    def _summarize_measurements(self):
+        attempts = self.last_generation["attempts"]
+        known, usage, coverage = {}, {}, {}
+        for name in ("prompt_tokens", "completion_tokens", "total_tokens"):
+            values = [(item.get("usage") or {}).get(name) for item in attempts]
+            measured = [value for value in values if isinstance(value, int) and not isinstance(value, bool) and value >= 0]
+            known[name] = sum(measured) if measured else None
+            usage[name] = sum(measured) if attempts and len(measured) == len(attempts) else None
+            coverage[name] = {"known_attempts": len(measured), "total_attempts": len(attempts)}
+        costs = [item["cost_usd"] for item in attempts if valid_cost(item.get("cost_usd"))]
+        complete = bool(attempts) and len(costs) == len(attempts)
+        self.last_generation.update(usage=usage if any(value is not None for value in known.values()) else None,
+            known_usage=known, usage_complete=bool(attempts) and all(value is not None for value in usage.values()),
+            usage_coverage=coverage, cost_usd=sum(costs) if complete else None,
+            known_cost_usd=sum(costs) if costs else None, cost_complete=complete,
+            budget_charge_usd=sum(item.get("budget_charge_usd", 0) for item in attempts))
 
     def generate_solution(self, messages: List[Dict[str, str]]) -> str:
         self.last_generation = {"requested_model": self.model_name, "resolved_model": None,
@@ -182,6 +233,7 @@ class LLMClient:
                 raw_text = self._complete(litellm, conversation)
             return self.extract_c_code(raw_text, self.expected_functions)
         finally:
+            self._summarize_measurements()
             self.last_generation["latency_seconds"] = round(time.perf_counter() - start, 6)
 
     @staticmethod

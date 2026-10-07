@@ -1,3 +1,4 @@
+# AIBENCHMARK_ESW_CANARY_V1_tier3_i2c_sensor
 cmake_minimum_required(VERSION 3.12)
 project(test_tier3_i2c_sensor C)
 

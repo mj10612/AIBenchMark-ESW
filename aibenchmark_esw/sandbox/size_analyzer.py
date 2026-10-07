@@ -60,7 +60,7 @@ class SizeAnalyzer:
                         b"\xfe\xed\xfa\xcf", b"\xcf\xfa\xed\xfe",
                         b"\xca\xfe\xba\xbe", b"\xbe\xba\xfe\xca",
                         b"\xca\xfe\xba\xbf", b"\xbf\xba\xfe\xca"):
-            raise ValueError("Mach-O memory measurement is unsupported: segment totals do not distinguish zero-filled RAM from Flash")
+            return self._parse_macho(data)
         if data.startswith(b"\x7fELF"):
             return self._parse_elf(data)
         if data.startswith(b"MZ"):
@@ -71,6 +71,108 @@ class SizeAnalyzer:
         if len(data) >= 20 and struct.unpack_from("<H", data)[0] in (0x014C, 0x8664, 0xAA64):
             return self._parse_coff(data, 0)
         raise UnsupportedBinaryFormat("Unsupported binary format; memory usage cannot be estimated reliably")
+
+    def _parse_macho(self, data: bytes) -> Tuple[int, int]:
+        """Account relocatable Mach-O sections and common symbols, never segments.
+
+        Universal objects have no single deployment footprint: return the
+        componentwise maximum over slices, a conservative portable budget.
+        Debug sections are excluded; allocated unwind sections consume Flash
+        just as allocated ELF unwind sections do.
+        """
+        magic = data[:4]
+        fat = magic in (b"\xca\xfe\xba\xbe", b"\xbe\xba\xfe\xca", b"\xca\xfe\xba\xbf", b"\xbf\xba\xfe\xca")
+        if fat:
+            endian = ">" if magic[:1] == b"\xca" else "<"
+            wide = magic in (b"\xca\xfe\xba\xbf", b"\xbf\xba\xfe\xca")
+            count = struct.unpack_from(endian + "I", data, 4)[0]
+            stride, fmt = (32, endian + "IIQQII") if wide else (20, endian + "IIIII")
+            if not count or count > (len(data) - 8) // stride:
+                raise ValueError("Invalid Mach-O fat architecture table")
+            footprints = []
+            intervals: list = []
+            for index in range(count):
+                entry = struct.unpack_from(fmt, data, 8 + index * stride)
+                offset, size = entry[2:4]
+                if offset < 8 + count * stride or not size or offset + size > len(data):
+                    raise ValueError("Invalid Mach-O fat slice bounds")
+                if any(offset < end and offset + size > start for start, end in intervals):
+                    raise ValueError("Overlapping Mach-O fat slices")
+                intervals.append((offset, offset + size))
+                if data[offset:offset + 4] in (b"\xca\xfe\xba\xbe", b"\xbe\xba\xfe\xca", b"\xca\xfe\xba\xbf", b"\xbf\xba\xfe\xca"):
+                    raise ValueError("Nested Mach-O fat object")
+                footprints.append(self._parse_macho(data[offset:offset + size]))
+            return max(x[0] for x in footprints), max(x[1] for x in footprints)
+        if magic not in (b"\xfe\xed\xfa\xce", b"\xce\xfa\xed\xfe", b"\xfe\xed\xfa\xcf", b"\xcf\xfa\xed\xfe"):
+            raise ValueError("Invalid Mach-O object magic")
+        endian = ">" if magic[:1] == b"\xfe" else "<"
+        wide = magic in (b"\xfe\xed\xfa\xcf", b"\xcf\xfa\xed\xfe")
+        _, _, _, filetype, count, commands_size, _ = struct.unpack_from(endian + "7I", data)
+        if filetype != 1:
+            raise ValueError("Mach-O footprint requires MH_OBJECT, not a linked image")
+        header_size = 32 if wide else 28
+        limit = header_size + commands_size
+        if limit > len(data) or count > commands_size // 8:
+            raise ValueError("Invalid Mach-O load command bounds")
+        position = header_size
+        flash = ram = 0
+        symbols = []
+        for _ in range(count):
+            command, length = struct.unpack_from(endian + "II", data, position)
+            if length < 8 or position + length > limit:
+                raise ValueError("Invalid Mach-O load command size")
+            if command in (1, 0x19):  # LC_SEGMENT / LC_SEGMENT_64
+                segment_wide = command == 0x19
+                segment_size, section_size = (72, 80) if segment_wide else (56, 68)
+                if length < segment_size:
+                    raise ValueError("Truncated Mach-O segment")
+                nsections = struct.unpack_from(endian + "I", data, position + (64 if segment_wide else 48))[0]
+                if segment_size + nsections * section_size > length:
+                    raise ValueError("Invalid Mach-O section table")
+                for index in range(nsections):
+                    section = position + segment_size + index * section_size
+                    name, segment = struct.unpack_from("16s16s", data, section)
+                    name, segment = name.rstrip(b"\0"), segment.rstrip(b"\0")
+                    size = struct.unpack_from(endian + ("Q" if segment_wide else "I"), data,
+                                              section + (40 if segment_wide else 36))[0]
+                    offset = struct.unpack_from(endian + "I", data, section + (48 if segment_wide else 40))[0]
+                    flags = struct.unpack_from(endian + "I", data, section + (64 if segment_wide else 56))[0]
+                    kind = flags & 0xff
+                    zerofill = kind in (1, 0xc, 0x12)
+                    if not zerofill and offset + size > len(data):
+                        raise ValueError("Invalid Mach-O section data bounds")
+                    if flags & 0x02000000 or segment == b"__DWARF":
+                        continue
+                    if zerofill:
+                        ram += size
+                    else:
+                        flash += size
+                        # Instructions and __TEXT constants consume Flash only;
+                        # object __DATA/__DATA_CONST needs initialization RAM.
+                        if segment != b"__TEXT" and not flags & (0x80000000 | 0x400):
+                            ram += size
+            elif command == 2:  # LC_SYMTAB
+                if length < 24:
+                    raise ValueError("Truncated Mach-O symbol command")
+                symbols.append(struct.unpack_from(endian + "IIII", data, position + 8))
+            position += length
+        if position != limit:
+            raise ValueError("Inconsistent Mach-O load command count")
+        common: dict = {}
+        stride, fmt = (16, endian + "IBBHQ") if wide else (12, endian + "IBBHI")
+        for offset, count, strings_offset, strings_size in symbols:
+            if offset + count * stride > len(data) or strings_offset + strings_size > len(data):
+                raise ValueError("Invalid Mach-O symbol table bounds")
+            names = data[strings_offset:strings_offset + strings_size]
+            for index in range(count):
+                name, kind, section, _, value = struct.unpack_from(fmt, data, offset + index * stride)
+                if kind & 0xe0 or kind & 0x0e or not kind & 1 or section or not value:
+                    continue
+                if name >= len(names) or names.find(b"\0", name) < 0:
+                    raise ValueError("Invalid Mach-O common symbol name")
+                key = names[name:names.find(b"\0", name)]
+                common[key] = max(common.get(key, 0), value)
+        return flash, ram + sum(common.values())
 
     def _parse_coff(self, data: bytes, header: int, image: bool = False) -> Tuple[int, int]:
         count = struct.unpack_from("<H", data, header + 2)[0]

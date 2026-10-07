@@ -1,0 +1,21 @@
+{
+  "id": "tier4_uart_frame_fix",
+  "name": "UART Framing and Recovery Bug Fix",
+  "tier": 4,
+  "category": "concurrency",
+  "target_standard": "c99",
+  "description": "UART Framing and Recovery Bug Fix",
+  "limits": {
+    "max_flash_bytes": 2048,
+    "max_ram_bytes": 128,
+    "timeout_seconds": 5
+  },
+  "weights": {
+    "functional": 0.6,
+    "memory": 0.2,
+    "safety": 0.2
+  },
+  "entry_file": "src/uart_frame_fix.c",
+  "reference_file": "reference/uart_frame_fix.c",
+  "canary": "AIBENCHMARK_ESW_CANARY_V1_tier4_uart_frame_fix"
+}

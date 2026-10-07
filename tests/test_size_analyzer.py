@@ -21,7 +21,7 @@ class TestSizeAnalyzer(unittest.TestCase):
             with self.assertRaises(FileNotFoundError):
                 self.analyzer.analyze(Path(directory) / "missing.o")
 
-    def test_real_macho_is_explicitly_unavailable_instead_of_miscounted(self):
+    def test_real_macho_measures_sections_without_external_tool_totals(self):
         compiler = find_clang()
         if compiler is None:
             self.skipTest("Clang is required for Darwin object validation")
@@ -35,8 +35,9 @@ class TestSizeAnalyzer(unittest.TestCase):
             self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
             self.analyzer.size_tool = "size"
             with patch("aibenchmark_esw.sandbox.size_analyzer.subprocess.run") as size_run:
-                with self.assertRaisesRegex(ValueError, "Mach-O memory measurement is unsupported"):
-                    self.analyzer._measure_file(obj)
+                flash, ram = self.analyzer._measure_file(obj)
+                self.assertGreater(flash, 256)
+                self.assertEqual(ram, 2304)
                 size_run.assert_not_called()
 
     def test_unknown_external_column_layout_is_rejected(self):

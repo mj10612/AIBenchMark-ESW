@@ -1,3 +1,4 @@
+<!-- AIBENCHMARK_ESW_CANARY_V1_tier1_ring_buffer -->
 # Task: Lock-free SPSC Ring Buffer
 
 You are an expert embedded software engineer. Implement a Single-Producer Single-Consumer (SPSC) circular byte ring buffer in C99.

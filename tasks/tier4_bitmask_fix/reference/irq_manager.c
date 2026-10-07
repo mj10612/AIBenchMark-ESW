@@ -1,3 +1,4 @@
+/* AIBENCHMARK_ESW_CANARY_V1_tier4_bitmask_fix */
 #include "irq_manager.h"
 #include <stddef.h>
 

@@ -49,7 +49,7 @@ def _constant_condition(expression):
     return None
 
 
-def mask_noncode(source: str) -> str:
+def mask_noncode(source: str, keep_includes: bool = False) -> str:
     # Translation phase 2 precedes comment recognition.
     logical = re.sub(r"\\\r?\n", "", source)
     output, stack = [], []
@@ -74,7 +74,9 @@ def mask_noncode(source: str) -> str:
             elif name == "endif" and stack:
                 active = bool(stack.pop()[0])
             # Macro definitions stay visible for named API alias checks.
-            if name != "define" or not active:
+            if name == "include" and keep_includes and active:
+                masked = line
+            elif name != "define" or not active:
                 masked = re.sub(r"[^\r\n]", " ", masked)
         elif not active:
             masked = re.sub(r"[^\r\n]", " ", masked)
@@ -85,3 +87,16 @@ def mask_noncode(source: str) -> str:
 def code_tokens(source: str):
     """Return identifiers and punctuation, excluding comments and literals."""
     return re.findall(r"[A-Za-z_]\w*|->|[^\s]", mask_noncode(source))
+
+
+def original_line(source: str, logical_offset: int) -> int:
+    """Map a phase-2 logical offset back to the original physical source line."""
+    position = logical = 0
+    while position < len(source) and logical < logical_offset:
+        splice = re.match(r"\\\r?\n", source[position:position + 3])
+        if splice:
+            position += len(splice.group())
+        else:
+            position += 1
+            logical += 1
+    return source.count("\n", 0, position) + 1

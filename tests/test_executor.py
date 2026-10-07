@@ -7,6 +7,7 @@ from unittest.mock import patch
 from dataclasses import replace
 from aibenchmark_esw.dataset import DatasetLoader
 from aibenchmark_esw.sandbox.executor import ExecutionSandbox
+from aibenchmark_esw.sandbox.process_runner import run_bounded
 
 
 class TestExecutionSandbox(unittest.TestCase):
@@ -195,7 +196,7 @@ int main(void) {
                                ("compiler output\n", "compiler error\n"), (None, None)):
             with self.subTest(stdout=stdout), TemporaryDirectory() as directory:
                 error = subprocess.TimeoutExpired("compiler", 30, output=stdout, stderr=stderr)
-                with patch("aibenchmark_esw.sandbox.executor.subprocess.run", side_effect=error):
+                with patch("aibenchmark_esw.sandbox.executor.run_bounded", side_effect=error):
                     result = self.sandbox.compile_object(task, self.loader.get_reference_solution(task.id),
                                                          Path(directory))
                 self.assertFalse(result.success)
@@ -209,6 +210,8 @@ int main(void) {
         task = self.loader.get_task("tier1_crc16")
         for as_bytes in (False, True):
             def timeout_after_compile(command, **kwargs):
+                if len(command) != 2:
+                    return run_bounded(command, **kwargs)
                 token = Path(command[0]).parent.glob("aibenchmark_tests_*.c")
                 wrapper = next(token).read_text(encoding="utf-8")
                 marker = wrapper.split("AIBenchMark-ESW:")[1].split(":END")[0]
@@ -231,7 +234,7 @@ int main(void) {
     def test_msvc_rejects_c99_without_explicit_opt_in(self):
         task = self.loader.get_task("tier1_crc16")
         with TemporaryDirectory() as directory:
-            with patch("aibenchmark_esw.sandbox.executor.subprocess.run") as run:
+            with patch("aibenchmark_esw.sandbox.executor.run_bounded") as run:
                 result = ExecutionSandbox("cl").compile_object(
                     task, self.loader.get_reference_solution(task.id), Path(directory))
                 run.assert_not_called()
@@ -246,8 +249,8 @@ int main(void) {
                 self.assertIn("/std:c11", command)
                 output = next(argument[3:] for argument in command if argument.startswith("/Fo"))
                 Path(output).write_bytes(b"fixture object")
-                return subprocess.CompletedProcess(command, 0, "", "")
-            with patch("aibenchmark_esw.sandbox.executor.subprocess.run", side_effect=compile_fixture):
+                return subprocess.CompletedProcess(command, 0, b"", b"")
+            with patch("aibenchmark_esw.sandbox.executor.run_bounded", side_effect=compile_fixture):
                 result = ExecutionSandbox("cl", allow_standard_fallback=True).compile_object(
                     task, self.loader.get_reference_solution(task.id), Path(directory))
         self.assertTrue(result.success)
@@ -255,15 +258,13 @@ int main(void) {
 
     def test_compiler_output_with_invalid_encoding_remains_a_failed_result(self):
         task = self.loader.get_task("tier1_crc16")
-        real_run = subprocess.run
         def failing_compiler(command, **kwargs):
             # Exercise decoding rather than mocking a decoded CompletedProcess.
-            kwargs["encoding"] = "utf-8"
-            return real_run([sys.executable, "-c",
+            return run_bounded([sys.executable, "-c",
                              "import sys; sys.stdout.buffer.write(b'bad byte: \\xff'); sys.exit(1)"],
                             **kwargs)
         with TemporaryDirectory() as directory:
-            with patch("aibenchmark_esw.sandbox.executor.subprocess.run", side_effect=failing_compiler):
+            with patch("aibenchmark_esw.sandbox.executor.run_bounded", side_effect=failing_compiler):
                 result = self.sandbox.compile_object(task, "invalid C", Path(directory))
         self.assertFalse(result.success)
         self.assertIn("bad byte:", result.output)

@@ -1,3 +1,4 @@
+/* AIBENCHMARK_ESW_CANARY_V1_tier2_debounce_fsm */
 #include "debounce_fsm.h"
 #include <stddef.h>
 

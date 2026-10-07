@@ -16,5 +16,6 @@
     "safety": 0.2
   },
   "entry_file": "src/q15_math.c",
-  "reference_file": "reference/q15_math.c"
+  "reference_file": "reference/q15_math.c",
+  "canary": "AIBENCHMARK_ESW_CANARY_V1_tier1_q15_math"
 }

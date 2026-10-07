@@ -5,9 +5,22 @@ from unittest.mock import patch
 from aibenchmark_esw.dataset import DatasetLoader
 from aibenchmark_esw.mutations import MUTATIONS, Mutation, run_mutations
 from aibenchmark_esw.sandbox.executor import ExecutionSandbox
+from dataclasses import replace
 
 
 class TestMutationAdequacy(unittest.TestCase):
+    def test_compile_failures_and_timeouts_are_invalid_never_killed(self):
+        loader = DatasetLoader()
+        original = loader.get_task("tier1_crc16")
+        task = replace(original, limits=replace(original.limits, timeout_seconds=1))
+        invalid = Mutation("compile-error", "Non-C fixture", (("return crc;", "INVALID_SOURCE!!! return crc;"),))
+        timeout = Mutation("timeout", "Incomplete suite", (("return crc;", "while (1) {} return crc;"),))
+        with patch.dict(MUTATIONS, {task.id: (invalid, timeout)}):
+            report = run_mutations([task], loader)
+        self.assertFalse(report["passed"])
+        self.assertEqual(report["tasks"][0]["invalid"], 2)
+        self.assertEqual(report["tasks"][0]["killed"], 0)
+
     def test_every_bundled_task_kills_reviewed_faults_without_modifying_sources(self):
         loader = DatasetLoader()
         tasks = loader.list_tasks()

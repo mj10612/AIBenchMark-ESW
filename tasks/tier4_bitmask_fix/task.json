@@ -16,5 +16,6 @@
     "safety": 0.2
   },
   "entry_file": "src/irq_manager.c",
-  "reference_file": "reference/irq_manager.c"
+  "reference_file": "reference/irq_manager.c",
+  "canary": "AIBENCHMARK_ESW_CANARY_V1_tier4_bitmask_fix"
 }

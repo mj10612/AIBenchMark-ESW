@@ -16,5 +16,6 @@
     "safety": 0.2
   },
   "entry_file": "src/debounce_fsm.c",
-  "reference_file": "reference/debounce_fsm.c"
+  "reference_file": "reference/debounce_fsm.c",
+  "canary": "AIBENCHMARK_ESW_CANARY_V1_tier2_debounce_fsm"
 }

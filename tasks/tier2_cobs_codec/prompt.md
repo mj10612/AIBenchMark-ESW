@@ -1,3 +1,4 @@
+<!-- AIBENCHMARK_ESW_CANARY_V1_tier2_cobs_codec -->
 # Bounded COBS Packet Codec
 
 Implement `cobs_encode` and `cobs_decode` in portable C99 using `cobs_codec.h`.

@@ -27,6 +27,10 @@ from aibenchmark_esw.metrics.junit import render_junit
 
 
 class _Parser(argparse.ArgumentParser):
+    def __init__(self, *args, **kwargs):
+        kwargs.setdefault("allow_abbrev", False)
+        super().__init__(*args, **kwargs)
+
     def parse_args(self, args=None, namespace=None):
         tokens = sys.argv[1:] if args is None else args
         parsed = super().parse_args(tokens, namespace)
@@ -45,6 +49,13 @@ def _positive_float(value: str) -> float:
     number = float(value)
     if not math.isfinite(number) or number <= 0:
         raise argparse.ArgumentTypeError("must be a finite positive number")
+    return number
+
+
+def _nonnegative_float(value):
+    number = float(value)
+    if not math.isfinite(number) or number < 0:
+        raise argparse.ArgumentTypeError("must be a finite nonnegative number")
     return number
 
 
@@ -120,24 +131,45 @@ def build_parser() -> argparse.ArgumentParser:
     run_p.add_argument("--multi-turn", dest="prompt_strategy", action="store_const", const="plan")
     run_p.add_argument("--review-turn", action="store_true")
     run_p.add_argument("--system-prompt-file", type=Path, help="UTF-8 system prompt override")
+    run_p.add_argument("--dry-run", action="store_true", help="Validate inputs and estimate token/cost bounds without requests or compilation")
+    run_p.add_argument("--input-cost-per-million", type=_nonnegative_float, help="Custom input token price in USD per million")
+    run_p.add_argument("--output-cost-per-million", type=_nonnegative_float, help="Custom output token price in USD per million")
+    run_p.add_argument("--max-cost-usd", type=_nonnegative_float, help="Shared conservative request budget; requires --max-tokens and known pricing")
+    run_p.add_argument("--samples", type=_positive_int, default=1, help="Independent full runs per task")
+    run_p.add_argument("--pass-k", type=str, help="Comma-separated pass@k values, each <= --samples")
+    run_p.add_argument("--variant-seed", type=int, help="Deterministic task variant seed")
+    run_p.add_argument("--heldout-tests", type=Path, help="Private per-task tests root; excluded from prompts")
 
     # Command: report
     report_p = subparsers.add_parser("report", help="Generate report from evaluation JSON")
     report_p.add_argument("--results", type=str, required=True, help="Path to results JSON file")
-    report_p.add_argument("--format", choices=["cli", "markdown", "junit"], default="cli", help="Output format")
+    report_p.add_argument("--format", choices=["cli", "markdown", "junit", "html", "sarif"], default="cli", help="Output format")
+    report_p.add_argument("--output", type=Path)
     schema_p = subparsers.add_parser("validate-report", help="Validate report structure and cross-field consistency offline")
     schema_p.add_argument("results", type=Path, nargs="?")
     schema_p.add_argument("--schema", action="store_true", help="Print the portable JSON Schema")
 
     compare_p = subparsers.add_parser("compare", help="Compare saved model runs without API calls")
     compare_p.add_argument("--results", nargs="+", type=Path, required=True, help="Two or more saved JSON reports")
-    compare_p.add_argument("--format", choices=["cli", "markdown", "csv", "csv-long"], default="markdown")
+    compare_p.add_argument("--format", choices=["cli", "markdown", "csv", "csv-long", "html", "junit"], default="markdown")
     compare_p.add_argument("--output", type=Path, help="Save the comparison to a file")
+    compare_p.add_argument("--baseline-model", help="Baseline model for JUnit regression assertions")
+    compare_p.add_argument("--regression-threshold", type=_nonnegative_float, default=0.0)
 
     aggregate_p = subparsers.add_parser("aggregate", help="Summarize independent repeated runs offline")
     aggregate_p.add_argument("--results", nargs="+", type=Path, required=True)
-    aggregate_p.add_argument("--format", choices=["cli", "markdown", "json", "csv"], default="markdown")
+    aggregate_p.add_argument("--format", choices=["cli", "markdown", "json", "csv", "html"], default="markdown")
     aggregate_p.add_argument("--output", type=Path)
+    trend_p = subparsers.add_parser("trend", help="Track chronological saved runs within compatible fingerprint groups")
+    trend_p.add_argument("--results", nargs="+", type=Path, required=True)
+    trend_p.add_argument("--format", choices=["cli", "markdown", "json", "csv", "html"], default="markdown")
+    trend_p.add_argument("--regression-threshold", type=_nonnegative_float, default=0.0)
+    trend_p.add_argument("--output", type=Path)
+    replay_p = subparsers.add_parser("replay", help="Re-evaluate saved candidates offline with fresh evaluator provenance")
+    replay_p.add_argument("--results", type=Path, required=True)
+    replay_p.add_argument("--solutions", "--solutions-dir", dest="solutions", type=Path, required=True)
+    replay_p.add_argument("--output", type=Path, required=True)
+    replay_p.add_argument("--jobs", type=_positive_int, default=1)
     doctor_p = subparsers.add_parser("doctor", help="Check local tools without provider requests")
     doctor_p.add_argument("--check-references", action="store_true")
     doctor_p.add_argument("--tier", type=int, choices=[1, 2, 3, 4])
@@ -146,18 +178,27 @@ def build_parser() -> argparse.ArgumentParser:
     mutation_p.add_argument("--tier", type=int, choices=[1, 2, 3, 4])
     mutation_p.add_argument("--tasks", type=str)
     mutation_p.add_argument("--output", type=Path)
-    for command in (doctor_p, mutation_p):
+    mutation_p.add_argument("--auto", action="store_true", help="Generate bounded operator mutants in addition to reviewed faults")
+    mutation_p.add_argument("--max-mutants", type=_positive_int, default=20)
+    mutation_p.add_argument("--jobs", type=_positive_int, default=1)
+    mutation_p.add_argument("--min-score", type=_nonnegative_float, default=1.0)
+    for command in (doctor_p, mutation_p, replay_p):
         command.add_argument("--compiler", type=str)
         command.add_argument("--allow-standard-fallback", action="store_true")
-    for command in (run_p, eval_p, doctor_p, mutation_p):
-        command.add_argument("--target", help="Additional avr:atmega328p or arm:cortex-m0 target object")
+    for command in (run_p, eval_p, doctor_p, mutation_p, replay_p):
+        command.add_argument("--target", help="Additional avr, arm, riscv32 or riscv64 target object")
         command.add_argument("--cross-compiler", help="Cross compiler executable (host tests retain --compiler)")
         command.add_argument("--compile-timeout", type=_positive_float, default=30.0)
         command.add_argument("--max-output-bytes", type=_positive_int, default=1048576)
-        command.add_argument("--isolation", choices=["native", "process"], default="native")
+        command.add_argument("--isolation", choices=["native", "process", "container", "bwrap"], default="native")
+        command.add_argument("--container-engine", help="Docker or Podman executable")
+        command.add_argument("--container-image", default="gcc:14", help="Compiler-equipped container image")
+        command.add_argument("--warnings", action="store_true", help="Score compiler warnings as additional safety findings")
+        command.add_argument("--static-analysis-timeout", type=_positive_float, default=30.0)
+        command.add_argument("--extended-safety-rules", action="store_true")
         command.add_argument("--memory-limit-bytes", type=_positive_int)
         command.add_argument("--sanitizers", default="", help="Comma-separated address,undefined; requires GCC/Clang")
-    for command in (run_p, eval_p):
+    for command in (run_p, eval_p, replay_p):
         verbosity = command.add_mutually_exclusive_group()
         verbosity.add_argument("--quiet", action="store_true", help="Show final summary only")
         verbosity.add_argument("--verbose", action="store_true", help="Show full task diagnostics on stderr")
@@ -165,7 +206,7 @@ def build_parser() -> argparse.ArgumentParser:
     for command in (list_p, eval_p, run_p, validate_p, doctor_p, mutation_p):
         command.add_argument("--category", type=str)
 
-    for command in (list_p, eval_p, run_p, validate_p, doctor_p, mutation_p, compare_p, aggregate_p):
+    for command in (list_p, eval_p, run_p, validate_p, doctor_p, mutation_p, compare_p, aggregate_p, replay_p, trend_p):
         command.add_argument("--tasks-root", type=Path,
                              help="Directory containing task folders (defaults to bundled tasks)")
 
@@ -182,7 +223,14 @@ def _new_executor(args):
         max_output_bytes=getattr(args, "max_output_bytes", 1048576),
         isolation=getattr(args, "isolation", "native"),
         memory_limit_bytes=getattr(args, "memory_limit_bytes", None), sanitizers=sanitizers,
-        target=getattr(args, "target", None), cross_compiler=getattr(args, "cross_compiler", None))
+        target=getattr(args, "target", None), cross_compiler=getattr(args, "cross_compiler", None),
+        warnings=getattr(args, "warnings", False), container_engine=getattr(args, "container_engine", None),
+        container_image=getattr(args, "container_image", "gcc:14"))
+
+
+def _new_analyzer(args):
+    return StaticAnalyzer(timeout_seconds=getattr(args, "static_analysis_timeout", 30.0),
+                          extended_rules=getattr(args, "extended_safety_rules", False))
 
 
 def _target_task(task: TaskConfig, args) -> TaskConfig:
@@ -198,13 +246,18 @@ def _new_client(args):
     return LLMClient(model_name=args.model, temperature=getattr(args, "temperature", None),
         max_tokens=getattr(args, "max_tokens", None), request_timeout=getattr(args, "request_timeout", 60),
         max_retries=getattr(args, "max_retries", 0), retry_backoff_seconds=getattr(args, "retry_backoff", 1),
-        prompt_strategy=getattr(args, "prompt_strategy", "single"), review_turn=getattr(args, "review_turn", False))
+        prompt_strategy=getattr(args, "prompt_strategy", "single"), review_turn=getattr(args, "review_turn", False),
+        input_cost_per_million=getattr(args, "input_cost_per_million", None),
+        output_cost_per_million=getattr(args, "output_cost_per_million", None),
+        budget=getattr(args, "_budget_guard", None))
 
 
 def _benchmark_roots(args=None):
     roots = [data_root() / "tasks", data_root() / "third_party" / "unity", Path(__file__).resolve().parent]
     if args is not None and getattr(args, "tasks_root", None) is not None:
         roots.append(Path(args.tasks_root))
+    if args is not None and getattr(args, "heldout_tests", None) is not None:
+        roots.append(Path(args.heldout_tests))
     return roots + [child for root in roots[:1] + roots[3:] if root.is_dir()
                     for child in root.iterdir() if child.is_dir()]
 
@@ -290,7 +343,7 @@ def cmd_eval(args: argparse.Namespace) -> int:
         return 1
 
     executor = _new_executor(args)
-    analyzer = StaticAnalyzer()
+    analyzer = _new_analyzer(args)
     metadata = collect_run_metadata([task], executor, static_analyzer=analyzer) if output or getattr(args, "junit_output", None) else None
     if metadata is not None:
         metadata.update(run_status="running", pending_tasks=[task.id])
@@ -388,10 +441,10 @@ def cmd_validate(args: argparse.Namespace) -> int:
     return 1 if failures or loader.load_errors else 0
 
 
-def cmd_run(args: argparse.Namespace) -> int:
+def _cmd_run_once(args: argparse.Namespace) -> int:
     from aibenchmark_esw.resume import load_resume, validate_resume, merge_generation_history
     saved = load_resume(args) if getattr(args, "resume", None) else None
-    loader = DatasetLoader(getattr(args, "tasks_root", None))
+    loader = getattr(args, "_prepared_loader", None) or DatasetLoader(getattr(args, "tasks_root", None))
     tasks = _select_tasks(loader, args)
     if not tasks:
         return 1
@@ -403,33 +456,42 @@ def cmd_run(args: argparse.Namespace) -> int:
         Path(solution_directory) / f"{task.id}{suffix}" for task in tasks for suffix in (".c", ".truncated.c")]
     system_file = getattr(args, "system_prompt_file", None)
     validate_output_paths([args.output, getattr(args, "junit_output", None), *solution_paths],
-                          protected_files=[system_file] if system_file else [], protected_roots=_input_roots(loader))
+                          protected_files=[system_file] if system_file else [],
+                          protected_roots=_input_roots(loader) + ([args.heldout_tests] if getattr(args, "heldout_tests", None) else []))
     system_prompt = Path(system_file).read_text(encoding="utf-8") if system_file else None
     if system_prompt is not None and not system_prompt.strip():
         raise ValueError("System prompt file must not be empty")
-    executor, analyzer = _new_executor(args), StaticAnalyzer()
+    if getattr(args, "dry_run", False):
+        return _dry_run(args, loader, tasks, system_prompt)
+    executor, analyzer = _new_executor(args), _new_analyzer(args)
     cancelled = threading.Event()
     executor.cancel_event = cancelled
     client = _new_client(args) if args.model != "baseline" else None
     settings = None if client is None else {**client.settings(),
         "system_prompt_sha256": text_sha256(system_prompt) if system_prompt is not None else None}
     metadata = collect_run_metadata(tasks, executor, settings, analyzer)
+    if getattr(args, "_variant_evidence", None) is not None:
+        metadata["contamination_controls"] = args._variant_evidence
     option_names = ("compiler", "allow_standard_fallback", "compile_timeout", "max_output_bytes",
                     "isolation", "memory_limit_bytes", "sanitizers", "save_solutions", "tasks_root", "system_prompt_file",
-                    "target", "cross_compiler")
+                    "target", "cross_compiler", "warnings", "container_engine", "container_image",
+                    "static_analysis_timeout", "extended_safety_rules", "max_cost_usd",
+                    "input_cost_per_million", "output_cost_per_million", "variant_seed", "heldout_tests")
     metadata["run_options"] = {name: getattr(args, name, None) for name in option_names}
     metadata["run_options"]["compiler"] = executor.compiler_path
     metadata["run_options"].update(allow_standard_fallback=executor.allow_standard_fallback,
         compile_timeout=executor.compile_timeout_seconds, max_output_bytes=executor.max_output_bytes,
         isolation=executor.isolation, memory_limit_bytes=executor.memory_limit_bytes, sanitizers=list(executor.sanitizers))
-    for name in ("save_solutions", "tasks_root", "system_prompt_file"):
+    for name in ("save_solutions", "tasks_root", "system_prompt_file", "heldout_tests"):
         if metadata["run_options"][name] is not None:
             metadata["run_options"][name] = str(Path(metadata["run_options"][name]).resolve())
     if saved:
         validate_resume(saved, metadata, tasks)
-        results = BenchmarkReporter.from_json_dict(saved)
+        by_id = {result.task_id: result for result in BenchmarkReporter.from_json_dict(saved)}
+        results = [by_id[task.id] for task in tasks]
         pending = {i for i, task in enumerate(tasks) if task.id in saved["metadata"]["pending_tasks"]}
         metadata = copy.deepcopy(saved["metadata"])
+        metadata.setdefault("run_options", {})["max_cost_usd"] = getattr(args, "max_cost_usd", None)
         metadata.setdefault("resumed_at_utc", []).append(datetime.now(timezone.utc).isoformat())
     else:
         results = [failed_evaluation(task, args.model, "Not evaluated: run has not reached this task") for task in tasks]
@@ -452,7 +514,12 @@ def cmd_run(args: argparse.Namespace) -> int:
         print(f"Starting AIBenchMark-ESW run on {len(tasks)} tasks using model '{args.model}'...")
     def checkpoint(status):
         metadata.update(run_status=status, pending_tasks=[task.id for i, task in enumerate(tasks) if i in pending])
+        if getattr(args, "_budget_guard", None) is not None:
+            metadata["cost_budget"] = args._budget_guard.snapshot()
         _save_checkpoint(args.output, results, args.model, metadata)
+        callback = getattr(args, "_sample_checkpoint_callback", None)
+        if callback is not None:
+            callback(BenchmarkReporter.to_json_dict(results, args.model, metadata))
     checkpoint("running" if pending else "completed")
 
     def work(index):
@@ -487,7 +554,7 @@ def cmd_run(args: argparse.Namespace) -> int:
             if solution_directory is not None:
                 atomic_write_text(Path(solution_directory) / f"{task.id}.c", solution_code)
             result = evaluate_task(task, solution_code, reference, args.model, executor,
-                                   StaticAnalyzer(), reference_cache=cache)
+                                   _new_analyzer(args), reference_cache=cache)
         except (KeyboardInterrupt, InterruptedError):
             result = failed_evaluation(task, args.model, "Evaluation interrupted by user")
             state = "interrupted"
@@ -500,6 +567,10 @@ def cmd_run(args: argparse.Namespace) -> int:
                                   llm.extract_c_code(llm.last_generation["partial_response"]))
         if llm is not None:
             result.generation = merge_generation_history(results[index].generation, llm.last_generation)
+            if solution_code and result.generation:
+                from aibenchmark_esw.task_variants import reference_similarity
+                if reference_similarity(solution_code, reference):
+                    result.generation["reference_similarity_warning"] = "Candidate exactly matches normalized reference tokens; this is not proof of training contamination"
             if llm.last_generation:
                 messages = llm.last_generation.get("request_messages", messages)
         _attach_provenance(result, metadata, task.id, solution_code, messages)
@@ -508,6 +579,7 @@ def cmd_run(args: argparse.Namespace) -> int:
     interrupted = aborted = False
     failure_streak = 0
     generation_failures = attempts = 0
+    retryable_streak = set()
     def accept(outcome):
         nonlocal interrupted, aborted, failure_streak, generation_failures, attempts
         index, result, state = outcome
@@ -516,9 +588,15 @@ def cmd_run(args: argparse.Namespace) -> int:
         results[index] = result
         attempts += 1
         generation_failures += state in ("fatal", "generation_failure")
+        if state == "generation_failure":
+            retryable_streak.add(index)
+        elif state != "fatal":
+            retryable_streak.clear()
         failure_streak = failure_streak + 1 if state == "generation_failure" else 0
         interrupted |= state == "interrupted" and not aborted
         aborted |= state == "fatal" or failure_streak >= 3
+        if aborted:
+            pending.update(retryable_streak)
         if state not in ("interrupted", "fatal") and not (state == "generation_failure" and aborted):
             pending.discard(index)
         if interrupted or aborted:
@@ -575,6 +653,139 @@ def cmd_run(args: argparse.Namespace) -> int:
         result.test_result.passed and not result.error_log for result in results) else 1
 
 
+def _dry_run(args, loader, tasks, system_prompt):
+    from aibenchmark_esw.llm.costs import pricing, token_upper_bound
+    client = _new_client(args)
+    prices = pricing(None, args.model, getattr(args, "input_cost_per_million", None),
+                     getattr(args, "output_cost_per_million", None))
+    turns = 1 + (getattr(args, "prompt_strategy", "single") == "plan") + bool(getattr(args, "review_turn", False))
+    rows = []
+    for task in tasks:
+        errors = validate_task_assets(task)
+        if errors:
+            raise ValueError(f"{task.id}: " + "; ".join(errors))
+        headers = "\n".join(path.read_text(encoding="utf-8") for path in sorted((task.task_dir / "include").glob("*.h")))
+        prompt = client.build_prompt(task.prompt, headers, loader.get_starter_code(task.id) or "",
+            target_standard=task.target_standard, prompt_overrides=task.prompt_overrides, system_prompt=system_prompt)
+        input_bound = token_upper_bound(prompt)
+        maximum = getattr(args, "max_tokens", None)
+        # Later turns include preceding generated text. Bound conservatively by
+        # 16 UTF-8 bytes/token plus instruction/framing overhead per turn.
+        all_input = (sum(input_bound + index * (maximum * 16 + 1024) for index in range(turns))
+                     if maximum is not None else None)
+        attempts = getattr(args, "max_retries", 0) + 1
+        count = getattr(args, "samples", 1)
+        estimate = ((all_input * prices["input_per_token"] + turns * maximum * prices["output_per_token"])
+                    * attempts * count if prices is not None and maximum is not None else None)
+        rows.append({"task_id": task.id, "prompt_token_upper_bound": input_bound,
+                     "maximum_output_tokens_per_turn": maximum, "turns": turns,
+                     "maximum_attempts_per_turn": attempts, "samples": count,
+                     "estimated_cost_upper_usd": estimate})
+    payload = {"mode": "dry-run", "model": args.model, "tasks": rows, "pricing": prices,
+               "estimate_method": "conservative UTF-8 byte bounds; actual provider tokenization and billing may differ",
+               "initial_prompt_token_upper_bound_total": sum(row["prompt_token_upper_bound"] for row in rows),
+               "maximum_completion_tokens_total": sum(row["maximum_output_tokens_per_turn"] * row["turns"] *
+                   row["maximum_attempts_per_turn"] * row["samples"] for row in rows)
+                   if all(row["maximum_output_tokens_per_turn"] is not None for row in rows) else None,
+               "estimated_total_upper_usd": sum(row["estimated_cost_upper_usd"] for row in rows)
+                   if all(row["estimated_cost_upper_usd"] is not None for row in rows) else None}
+    if args.output:
+        atomic_write_json(args.output, payload)
+    print(json.dumps(payload, indent=2))
+    return 0
+
+
+def cmd_run(args):
+    from aibenchmark_esw.llm.costs import CostBudget
+    from aibenchmark_esw.resume import load_resume
+    if not hasattr(args, "samples"):
+        args.samples = 1
+    if getattr(args, "dry_run", False) and getattr(args, "resume", None):
+        raise ValueError("--dry-run cannot replace a resume checkpoint; select tasks directly")
+    saved = load_resume(args) if getattr(args, "resume", None) else None
+    if saved and "sampling" in saved:
+        if "--samples" in args._explicit_options and args.samples != saved["sampling"]["requested"]:
+            raise ValueError("Resume --samples conflicts with saved collection")
+        args.samples = saved["sampling"]["requested"]
+    limit = getattr(args, "max_cost_usd", None)
+    if limit is not None and not getattr(args, "dry_run", False):
+        prior_budget = ((saved or {}).get("metadata") or {}).get("cost_budget") or {}
+        spent = prior_budget.get("charged_usd", 0.0) + prior_budget.get("reserved_usd", 0.0)
+        args._budget_guard = CostBudget(limit, spent)
+    loader = DatasetLoader(getattr(args, "tasks_root", None))
+    tasks = _select_tasks(loader, args)
+    if not tasks:
+        return 1
+    args._sampling_task_ids = [task.id for task in tasks]
+    if getattr(args, "variant_seed", None) is not None or getattr(args, "heldout_tests", None) is not None:
+        from aibenchmark_esw.task_variants import prepare_task_variants
+        with prepare_task_variants(tasks, getattr(args, "variant_seed", None), getattr(args, "heldout_tests", None)) as (prepared, evidence):
+            transformed_loader = copy.copy(loader)
+            transformed_loader._tasks = {task.id: task for task in prepared}
+            args._prepared_loader = transformed_loader
+            args._variant_evidence = evidence
+            return _run_samples(args, saved) if args.samples > 1 and not args.dry_run else _cmd_run_once(args)
+    return _run_samples(args, saved) if args.samples > 1 and not args.dry_run else _cmd_run_once(args)
+
+
+def _run_samples(args, saved):
+    from aibenchmark_esw.sampling import run_samples
+    if saved:
+        from aibenchmark_esw.resume import validate_resume
+        loader = getattr(args, "_prepared_loader", None) or DatasetLoader(getattr(args, "tasks_root", None))
+        tasks = []
+        for task_id in saved["metadata"]["selected_tasks"]:
+            task = loader.get_task(task_id)
+            if task is None:
+                raise ValueError(f"Saved sampling task is unavailable: {task_id}")
+            tasks.append(_target_task(task, args))
+        system_file = getattr(args, "system_prompt_file", None)
+        system_prompt = Path(system_file).read_text(encoding="utf-8") if system_file else None
+        client = _new_client(args) if args.model != "baseline" else None
+        settings = None if client is None else {**client.settings(),
+            "system_prompt_sha256": text_sha256(system_prompt) if system_prompt is not None else None}
+        fresh = collect_run_metadata(tasks, _new_executor(args), settings, _new_analyzer(args))
+        validate_resume(saved, fresh, tasks)
+    return run_samples(args, saved, _cmd_run_once, _benchmark_roots(args))
+
+
+def cmd_trend(args):
+    from aibenchmark_esw.metrics.trend import trend_runs, render_trend
+    directories = [path for path in args.results if path.is_dir()]
+    validate_output_paths([args.output], protected_files=args.results,
+                          protected_roots=_benchmark_roots(args) + directories)
+    from aibenchmark_esw.output_paths import _input_files
+    paths = [file for path in args.results for file in
+             (sorted(_input_files([path])) if path.is_dir() else [path]) if file.suffix.lower() == ".json"]
+    if not paths:
+        raise ValueError("Trend inputs contain no JSON reports")
+    reports = [json.loads(path.read_text(encoding="utf-8")) for path in paths]
+    rendered = render_trend(trend_runs(reports, args.regression_threshold), args.format)
+    if args.output:
+        atomic_write_text(args.output, rendered)
+    print(rendered)
+    return 0
+
+
+def cmd_replay(args):
+    from aibenchmark_esw.replay import replay_candidates
+    origin = json.loads(args.results.read_text(encoding="utf-8"))
+    old_results = BenchmarkReporter.from_json_dict(origin)
+    loader = DatasetLoader(getattr(args, "tasks_root", None))
+    tasks = []
+    for result in old_results:
+        task = loader.get_task(result.task_id)
+        if task is None:
+            raise ValueError(f"Replay task not found: {result.task_id}")
+        tasks.append(_target_task(task, args))
+    report = replay_candidates(origin, args.solutions, tasks, _new_executor(args), _new_analyzer(args),
+        output=args.output, protected_files=[args.results], extra_outputs=[args.junit_output], jobs=args.jobs)
+    results = BenchmarkReporter.from_json_dict(report)
+    _write_junit(args, results, report["model_name"], report["metadata"])
+    print(BenchmarkReporter.generate_cli_table(results, report["model_name"], report["metadata"]))
+    return 0 if all(result.test_result.passed and not result.error_log for result in results) else 1
+
+
 def cmd_report(args: argparse.Namespace) -> int:
     report_file = Path(args.results)
     if not report_file.is_file():
@@ -585,9 +796,26 @@ def cmd_report(args: argparse.Namespace) -> int:
         data = json.loads(report_file.read_text(encoding="utf-8"))
         results = BenchmarkReporter.from_json_dict(data)
         model_name = data.get("model_name", "unknown")
-        rendered = (render_junit(results, model_name, data.get("metadata")) if args.format == "junit" else
-                    BenchmarkReporter.generate_markdown(results, model_name, data.get("metadata")) if args.format == "markdown"
-                    else BenchmarkReporter.generate_cli_table(results, model_name, data.get("metadata")))
+        render_metadata = copy.deepcopy(data.get("metadata") or {})
+        if "sampling" in data:
+            render_metadata.update(sampling=data["sampling"], collection_generation_summary=data.get("generation_summary"))
+        validate_output_paths([getattr(args, "output", None)], protected_files=[report_file], protected_roots=_benchmark_roots())
+        from aibenchmark_esw.metrics.exports import generate_sarif
+        export_results = results
+        if "samples" in data:
+            export_results = []
+            for sample in data["samples"]:
+                child_results = BenchmarkReporter.from_json_dict(sample)
+                for result in child_results:
+                    result.provenance = {**(result.provenance or {}), "sample_run_id": sample["metadata"]["run_id"]}
+                export_results.extend(child_results)
+        rendered = (generate_sarif(export_results, model_name, render_metadata) if args.format == "sarif" else
+                    BenchmarkReporter.generate_html(results, model_name, render_metadata) if args.format == "html" else
+                    render_junit(export_results, model_name, render_metadata) if args.format == "junit" else
+                    BenchmarkReporter.generate_markdown(results, model_name, render_metadata) if args.format == "markdown"
+                    else BenchmarkReporter.generate_cli_table(results, model_name, render_metadata))
+        if getattr(args, "output", None):
+            atomic_write_text(args.output, rendered)
     except (OSError, ValueError, TypeError, KeyError) as error:
         print(f"Error: Invalid results file: {error}", file=sys.stderr)
         return 1
@@ -614,7 +842,8 @@ def cmd_compare(args: argparse.Namespace) -> int:
         validate_output_paths([args.output], protected_files=args.results, protected_roots=_benchmark_roots(args))
         reports = [json.loads(Path(path).read_text(encoding="utf-8")) for path in args.results]
         comparison = compare_runs(reports)
-        rendered = render_comparison(comparison, args.format)
+        rendered = render_comparison(comparison, args.format, baseline_model=getattr(args, "baseline_model", None),
+                                     regression_threshold=getattr(args, "regression_threshold", 0.0))
         if args.output:
             atomic_write_text(args.output, rendered)
     except (OSError, ValueError, TypeError, KeyError, AttributeError) as error:
@@ -659,7 +888,9 @@ def cmd_mutations(args):
     if not tasks:
         return 1
     validate_output_paths([args.output], protected_roots=_input_roots(loader))
-    report = run_mutations([_target_task(task, args) for task in tasks], loader, _new_executor(args))
+    report = run_mutations([_target_task(task, args) for task in tasks], loader, _new_executor(args),
+        auto=getattr(args, "auto", False), max_mutants=getattr(args, "max_mutants", 20),
+        jobs=getattr(args, "jobs", 1), min_score=getattr(args, "min_score", 1.0))
     if args.output:
         atomic_write_json(args.output, report)
     for task in report["tasks"]:
@@ -686,6 +917,8 @@ def main() -> None:
         "aggregate": cmd_aggregate,
         "doctor": cmd_doctor,
         "mutations": cmd_mutations,
+        "trend": cmd_trend,
+        "replay": cmd_replay,
     }
 
     try:

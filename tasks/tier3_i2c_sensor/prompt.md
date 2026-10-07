@@ -1,3 +1,4 @@
+<!-- AIBENCHMARK_ESW_CANARY_V1_tier3_i2c_sensor -->
 # Task: I2C Temperature Sensor Driver with Mock HAL
 
 You are an embedded software engineer. Implement a reliable device driver for an I2C digital temperature sensor.

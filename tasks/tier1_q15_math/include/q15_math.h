@@ -1,3 +1,4 @@
+/* AIBENCHMARK_ESW_CANARY_V1_tier1_q15_math */
 #ifndef Q15_MATH_H
 #define Q15_MATH_H
 

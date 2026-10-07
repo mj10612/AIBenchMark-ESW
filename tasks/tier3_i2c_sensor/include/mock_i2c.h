@@ -1,3 +1,4 @@
+/* AIBENCHMARK_ESW_CANARY_V1_tier3_i2c_sensor */
 #ifndef MOCK_I2C_H
 #define MOCK_I2C_H
 
