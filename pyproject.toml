@@ -29,7 +29,7 @@ Issues = "https://github.com/sentimentalmija-lgtm/AIBenchMark-ESW/issues"
 Documentation = "https://github.com/sentimentalmija-lgtm/AIBenchMark-ESW/blob/main/README.md"
 
 [project.optional-dependencies]
-dev = ["build>=1.0.0", "setuptools>=77.0", "wheel", "ruff>=0.6", "mypy>=1.11,<1.15", "coverage>=7.6", "jsonschema>=4.18"]
+dev = ["build>=1.0.0", "setuptools>=77.0", "wheel", "ruff>=0.6", "mypy>=1.11,<2.5", "coverage>=7.6", "jsonschema>=4.18"]
 llm = ["litellm>=1.0.0"]
 full = ["litellm>=1.0.0"]
 schema = ["jsonschema>=4.18"]
