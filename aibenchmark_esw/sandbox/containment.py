@@ -17,6 +17,10 @@ from aibenchmark_esw.sandbox.process_runner import run_bounded
 class ContainmentBackend:
     def __init__(self, mode, engine=None, image="gcc:14", runtime=None):
         self.mode, self.image, self.image_digest = mode, image, None
+        uid, gid = getattr(os, "getuid", lambda: 0)(), getattr(os, "getgid", lambda: 0)()
+        # Matching the non-root bind-mount owner lets the host inspect/chmod
+        # compiler artifacts on later invocations. Root hosts remain unprivileged.
+        self.user = f"{uid}:{gid}" if uid > 0 else "65534:65534"
         if mode == "bwrap":
             if os.name == "nt":
                 raise ValueError("bwrap containment requires Linux")
@@ -44,7 +48,7 @@ class ContainmentBackend:
         return {"backend": self.mode, "engine": self.engine, "image": self.image if self.mode == "container" else None,
                 "image_digest": self.image_digest, "network": "none", "root_filesystem": "read-only",
                 "mount_scope": "ephemeral-workspace", "capabilities": "none", "no_new_privileges": True,
-                "user": "65534:65534" if self.mode == "container" else "current-user-namespace",
+                "user": self.user if self.mode == "container" else "current-user-namespace",
                 "pids_limit": 64 if self.mode == "container" else None, "cpus": 1 if self.mode == "container" else None}
 
     def _workspace_command(self, command, cwd):
@@ -99,7 +103,7 @@ class ContainmentBackend:
             name = "aibenchmark-" + uuid.uuid4().hex
             invocation = [self.runtime, "run", "--rm", "--pull=never", "--name", name,
                           "--read-only", "--network=none", "--cap-drop=ALL",
-                          "--security-opt=no-new-privileges", "--user=65534:65534", "--pids-limit=64", "--cpus=1",
+                          "--security-opt=no-new-privileges", "--user=" + self.user, "--pids-limit=64", "--cpus=1",
                           "--tmpfs=/tmp:rw,nosuid,nodev,size=64m", "--mount",
                           "type=bind,source=" + str(workspace) + ",target=/workspace",
                           "--workdir", inner_cwd]

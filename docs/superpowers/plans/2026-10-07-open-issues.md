@@ -83,6 +83,11 @@ skips and 89% coverage. All 13 reference tasks pass 113 C cases on TCC, Clang
 and MSVC; all 47 reviewed mutants are killed on TCC and Clang. ARM object
 budgets, Ruff, Windows/Linux mypy, portable JSON Schema and published baseline
 fingerprints pass. CI provides remaining GCC/macOS/AVR/container evidence.
+Follow-up CI review fixes bind-mount file ownership by matching a non-root
+host UID/GID, reaps a Darwin zombie group before retrying its termination,
+and compares Unity object sections rather than unsupported linked Mach-O images.
+The 63 targeted runtime, evaluation and containment tests pass locally with
+4 explicit tool/platform skips; three new regression tests bring the suite to 353.
 Final coordinator review additionally corrected sampling output-root restoration,
 completed-resume compatibility, collection checkpoints/statistics validation and
 the existing csv-long column contract. Paid providers were mocked throughout.

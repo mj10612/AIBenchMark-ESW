@@ -72,13 +72,16 @@ class TestBacklogCoordinator(unittest.TestCase):
 
     def test_directory_symlink_cycle_does_not_hide_protected_inputs(self):
         with tempfile.TemporaryDirectory() as d:
-            root = Path(d) / 'inputs'; root.mkdir()
-            source = root / 'source.c'; source.write_text('keep')
+            root = Path(d) / 'inputs'
+            root.mkdir()
+            source = root / 'source.c'
+            source.write_text('keep')
             try:
                 (root / 'cycle').symlink_to(root, target_is_directory=True)
             except OSError:
                 self.skipTest('directory symlinks unavailable')
-            alias = Path(d) / 'output.json'; os.link(source, alias)
+            alias = Path(d) / 'output.json'
+            os.link(source, alias)
             with self.assertRaises(ValueError):
                 validate_output_paths([alias], protected_roots=[root])
             self.assertEqual(source.read_text(), 'keep')

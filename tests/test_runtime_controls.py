@@ -9,12 +9,12 @@ import unittest
 from dataclasses import replace
 from pathlib import Path
 from tempfile import TemporaryDirectory
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 from aibenchmark_esw.dataset import DatasetLoader
 from aibenchmark_esw.models import CompilationResult
 from aibenchmark_esw.sandbox.executor import ExecutionSandbox
-from aibenchmark_esw.sandbox.process_runner import run_bounded, OutputLimitExceeded, ExecutionCancelled
+from aibenchmark_esw.sandbox.process_runner import run_bounded, OutputLimitExceeded, ExecutionCancelled, _stop_posix_group
 from compiler_tools import find_clang
 
 
@@ -50,6 +50,26 @@ def child_alive(pid):
 
 
 class TestRuntimeControls(unittest.TestCase):
+    @patch("aibenchmark_esw.sandbox.process_runner.signal.SIGKILL", 9, create=True)
+    def test_zombie_group_permission_error_reaps_and_retries_descendant_cleanup(self):
+        process = Mock(pid=123, poll=Mock(return_value=0))
+        for final_result in (None, ProcessLookupError()):
+            with self.subTest(final_result=final_result), patch(
+                    "aibenchmark_esw.sandbox.process_runner.os.killpg", create=True,
+                    side_effect=[PermissionError(), final_result]) as kill:
+                _stop_posix_group(process)
+                self.assertEqual(kill.call_count, 2)
+                process.poll.assert_called()
+
+    @patch("aibenchmark_esw.sandbox.process_runner.signal.SIGKILL", 9, create=True)
+    def test_live_or_persistently_denied_process_group_reports_permission_error(self):
+        for returncode in (None, 0):
+            with self.subTest(returncode=returncode), patch(
+                    "aibenchmark_esw.sandbox.process_runner.os.killpg", create=True,
+                    side_effect=PermissionError()):
+                with self.assertRaises(PermissionError):
+                    _stop_posix_group(Mock(pid=123, poll=Mock(return_value=returncode)))
+
     def test_unity_hex_widths_and_bit_masks(self):
         with TemporaryDirectory() as directory:
             root = Path(directory)

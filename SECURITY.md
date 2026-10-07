@@ -54,7 +54,8 @@ requesting them, and avoid mounting the host checkout or credentials manually.
 
 The backend mounts only the disposable evaluation workspace, after copying
 trusted task headers and Unity into it. Containers use a read-only root, no
-network, dropped capabilities, `no-new-privileges`, uid/gid 65534, a process quota,
+network, dropped capabilities, `no-new-privileges`, the non-root workspace owner's
+uid/gid (65534 when the host runs as root or on Windows), a process quota,
 one CPU, a private bounded `/tmp`, optional memory quota and the task deadline.
 Compiler diagnostics and test output share the configured output cap. The
 named container is forcibly removed after execution, including timeout or

@@ -41,7 +41,7 @@ class TestContainment(unittest.TestCase):
                             cwd=root, timeout=2, max_output_bytes=1000, memory_limit_bytes=123456)
             command = commands[0]
             for flag in ('--read-only', '--network=none', '--cap-drop=ALL', '--security-opt=no-new-privileges',
-                         '--user=65534:65534', '--pids-limit=64', '--memory=123456', '--cpus=1'):
+                         '--user=' + backend.user, '--pids-limit=64', '--memory=123456', '--cpus=1'):
                 self.assertIn(flag, command)
             self.assertEqual(command.count('--mount'), 1)
             self.assertFalse(any(str(include) in value for value in command))
@@ -69,6 +69,14 @@ class TestContainment(unittest.TestCase):
         self.assertEqual(settings['image_digest'], 'sha256:' + 'a'*64)
         self.assertEqual(settings['network'], 'none')
         self.assertEqual(settings['mount_scope'], 'ephemeral-workspace')
+
+    def test_container_matches_nonroot_workspace_owner_and_never_uses_root(self):
+        with patch('aibenchmark_esw.sandbox.containment.os.getuid', return_value=1001, create=True), patch(
+                'aibenchmark_esw.sandbox.containment.os.getgid', return_value=1002, create=True):
+            self.assertEqual(self.backend().settings()['user'], '1001:1002')
+        with patch('aibenchmark_esw.sandbox.containment.os.getuid', return_value=0, create=True), patch(
+                'aibenchmark_esw.sandbox.containment.os.getgid', return_value=0, create=True):
+            self.assertEqual(self.backend().settings()['user'], '65534:65534')
 
     def test_bwrap_command_uses_private_namespaces_and_minimal_system_roots(self):
         from aibenchmark_esw.sandbox.containment import ContainmentBackend
