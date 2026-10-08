@@ -277,3 +277,57 @@ class ExportServiceTests(unittest.TestCase):
         self.assertEqual([run['run_id'] for run in group['runs']],['old','new'])
         self.assertEqual(group['runs'][1]['regressions'][0]['delta'],-50)
         self.assertIn('Regression',render_trend(summary,'markdown'))
+
+    def test_trend_preserves_task_model_mapping_and_ignores_task_order(self):
+        from aibenchmark_esw.metrics.trend import trend_runs
+        old = fixture_report(run_id='old')
+        second = copy.deepcopy(old['tasks'][0])
+        second['task_id'] = 'two'
+        second['provenance']['task_sha256'] = 'task-two'
+        old['tasks'].append(second)
+        old['metadata']['selected_tasks'] = ['one', 'two']
+        old['metadata']['scoring_policy']['tasks']['two'] = copy.deepcopy(
+            old['metadata']['scoring_policy']['tasks']['one'])
+        old['tasks'][0]['generation']['resolved_model'] = 'A'
+        old['tasks'][1]['generation']['resolved_model'] = 'B'
+        new = copy.deepcopy(old)
+        new['metadata']['run_id'] = 'new'
+        failed = fixture_report(0)['tasks'][0]
+        for key in ('test_result', 'scores'):
+            new['tasks'][0][key] = failed[key]
+        for report, day in ((old, 1), (new, 2)):
+            report['metadata']['created_at_utc'] = f'2026-10-0{day}T00:00:00Z'
+        new['tasks'].reverse()
+        rows = trend_runs([old, new])['groups'][0]['runs']
+        self.assertEqual(rows[1]['regressions'], [
+            {'task_id': 'one', 'delta': -100.0, 'previous_run_id': 'old'}])
+        for task in new['tasks']:
+            task['generation']['resolved_model'] = 'B' if task['task_id'] == 'one' else 'A'
+        rows = trend_runs([old, new])['groups'][0]['runs']
+        self.assertEqual(rows[1]['regressions'], [])
+
+    def test_trend_includes_later_sample_identities_and_preserves_multiplicity(self):
+        from aibenchmark_esw.metrics.trend import trend_runs
+        from aibenchmark_esw.sampling import sampling_statistics
+
+        def collection(run_id, scores, models, day):
+            samples = [fixture_report(score, run_id=f'{run_id}-{index}')
+                       for index, score in enumerate(scores)]
+            for sample, model in zip(samples, models):
+                sample['tasks'][0]['generation']['resolved_model'] = model
+            report = copy.deepcopy(samples[0])
+            report['metadata'].update(run_id=run_id, created_at_utc=f'2026-10-0{day}T00:00:00Z')
+            report['samples'] = samples
+            report['sampling'] = {'requested': len(samples), 'completed': len(samples),
+                                  'pending': [], 'pass_k': [1],
+                                  'statistics': sampling_statistics(samples, [1])}
+            return report
+
+        old = collection('old', [100, 100, 100], ['A', 'A', 'B'], 1)
+        reordered = collection('reordered', [100, 0, 0], ['B', 'A', 'A'], 2)
+        changed = collection('changed', [100, 0, 0], ['A', 'B', 'B'], 3)
+        rows = trend_runs([changed, reordered, old])['groups'][0]['runs']
+        self.assertEqual(rows[1]['regressions'][0]['previous_run_id'], 'old')
+        self.assertEqual(rows[2]['regressions'], [])
+        self.assertEqual(rows[0]['resolved_model_sequences_by_task'],
+                         {'one': [['A'], ['A'], ['B']]})
