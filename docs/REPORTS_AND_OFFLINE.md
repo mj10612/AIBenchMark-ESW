@@ -42,6 +42,8 @@ aibenchmark-esw trend --results results/history --regression-threshold 2 \
 
 `trend` accepts saved report files or directories through `--results`. It requires distinct run IDs, timestamps with a timezone, completed runs, and recorded grading provenance. Runs are ordered chronologically within groups defined by task fingerprints, evaluator/dataset identity, compiler/target options, host platform, analyzer configuration, and scoring policy. Compiler install paths and timestamps are informational. For each model and generation condition/identity sequence, a task drop greater than the threshold is flagged against its preceding compatible run. Changes to grading conditions form a separate group rather than a misleading regression comparison.
 
+Generation identity preserves the contributing model sequence for each task across every sample. Task and sample ordering do not affect identity, but changing task-to-model assignments or the number of samples contributed by a sequence prevents regression comparison with that earlier run. JSON and CSV histories expose this mapping in `resolved_model_sequences_by_task`.
+
 ## Coverage and independent samples
 
 `generation_summary` is an optional derived report field. Exact `total_tokens` and `total_cost_usd` are available only when every relevant task attempt has complete measurements. `known_total_tokens` and `known_cost_usd` retain measured subtotals. Complete/partial task counts and known/total request and turn counts distinguish missing coverage from zero use or zero cost. Cost per passing task is unavailable when complete spend or a passing task is unavailable. Original generation in replay provenance is never charged again.

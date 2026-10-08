@@ -11,11 +11,24 @@ NEW_TASKS = {
     "tier3_spi_flash": 6,
     "tier4_uart_frame_fix": 7,
     "tier2_fixed_control": 7,
-    "tier3_flash_update": 6,
+    "tier3_flash_update": 7,
 }
 
 
 class TestFirmwareTasks(unittest.TestCase):
+    def test_flash_update_rejects_mutant_with_truncated_valid_length_range(self):
+        loader = DatasetLoader()
+        task = loader.get_task('tier3_flash_update')
+        reference = loader.get_reference_solution(task.id)
+        mutant = reference.replace('length > 256U', 'length > 130U')
+        self.assertNotEqual(mutant, reference)
+        compiled, result = ExecutionSandbox().compile_and_test(task, mutant)
+        self.addCleanup(compiled.cleanup)
+        self.assertTrue(compiled.success, compiled.output)
+        self.assertTrue(result.completed, result.output)
+        self.assertFalse(result.passed, result.output)
+        self.assertGreater(result.failed_tests, 0)
+
     def test_new_references_fit_measured_static_object_budgets_without_safety_findings(self):
         loader = DatasetLoader()
         executor = ExecutionSandbox()
