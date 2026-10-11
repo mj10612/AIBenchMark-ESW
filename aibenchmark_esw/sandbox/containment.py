@@ -9,6 +9,9 @@ import os
 import shutil
 import subprocess
 import uuid
+import csv
+import io
+import re
 from pathlib import Path
 
 from aibenchmark_esw.sandbox.process_runner import run_bounded
@@ -56,7 +59,7 @@ class ContainmentBackend:
         # Test execution begins in empty scratch below the binary workspace.
         workspace = cwd.parent if cwd.name == "scratch" else cwd
         workspace.mkdir(parents=True, exist_ok=True)
-        workspace.chmod(0o777)
+        workspace.chmod(0o700)
         copies = workspace / ".containment-inputs"
         mapping: dict = {}
         translated = []
@@ -68,8 +71,15 @@ class ContainmentBackend:
             else:
                 prefix = ""
                 path = Path(value)
-                if value.startswith("-I") and len(value) > 2:
-                    prefix, path = "-I", Path(value[2:])
+                for flag in ("--sysroot=", "-I", "-L", "-B", "/FI", "/Fo", "/Fe", "/I"):
+                    if value.startswith(flag) and len(value) > len(flag):
+                        prefix, path = flag, Path(value[len(flag):])
+                        break
+                if value in ("/nologo", "/TC", "/c", "/O1", "/W4") or value.startswith("/std:"):
+                    path = Path(".")
+                if not prefix and value.startswith("-") and re.search(
+                        r"[A-Za-z]:[\\/]|^-+[A-Za-z-]+(?:=)?/", value):
+                    raise ValueError("Unrecognized containment path flag: " + value)
                 if path.is_absolute():
                     resolved = path.resolve()
                     if not resolved.is_relative_to(workspace):
@@ -86,15 +96,17 @@ class ContainmentBackend:
                         resolved = mapping[resolved]
                     value = prefix + "/workspace/" + resolved.relative_to(workspace).as_posix()
             translated.append(value)
-        # A non-root container needs to create compiler artifacts and receipt.
-        # Permissions apply solely to this ephemeral workspace.
-        for path in workspace.rglob("*"):
+        # Keep the tree private. Root container hosts transfer ownership to the
+        # unprivileged container identity instead of opening it to other users.
+        for path in [workspace, *workspace.rglob("*")]:
             if path.is_symlink():
                 continue
             if path.is_dir():
-                path.chmod(0o777)
+                path.chmod(0o700)
             else:
-                path.chmod(0o777 if os.access(path, os.X_OK) else 0o666)
+                path.chmod(0o700 if os.access(path, os.X_OK) else 0o600)
+            if os.name != "nt" and self.mode == "container" and os.getuid() == 0:  # type: ignore[attr-defined]
+                os.chown(path, 65534, 65534)  # type: ignore[attr-defined]  # POSIX ownership boundary.
         container_cwd = "/workspace" + ("/scratch" if cwd != workspace else "")
         return workspace, container_cwd, translated
 
@@ -103,11 +115,14 @@ class ContainmentBackend:
         workspace, inner_cwd, inner = self._workspace_command(command, cwd)
         if self.mode == "container":
             name = "aibenchmark-" + uuid.uuid4().hex
+            mount = io.StringIO()
+            csv.writer(mount, lineterminator="").writerow(
+                ["type=bind", "source=" + str(workspace), "target=/workspace"])
             invocation = [self.runtime, "run", "--rm", "--pull=never", "--name", name,
                           "--read-only", "--network=none", "--cap-drop=ALL",
                           "--security-opt=no-new-privileges", "--user=" + self.user, "--pids-limit=64", "--cpus=1",
                           "--tmpfs=/tmp:rw,nosuid,nodev,size=64m", "--mount",
-                          "type=bind,source=" + str(workspace) + ",target=/workspace",
+                          mount.getvalue(),
                           "--workdir", inner_cwd]
             if memory_limit_bytes is not None:
                 invocation += ["--memory=" + str(memory_limit_bytes), "--memory-swap=" + str(memory_limit_bytes)]

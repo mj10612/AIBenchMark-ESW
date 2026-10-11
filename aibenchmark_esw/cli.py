@@ -3,6 +3,7 @@ import json
 import argparse
 import math
 import copy
+import os
 import threading
 from concurrent.futures import ThreadPoolExecutor, wait, FIRST_COMPLETED
 from datetime import datetime, timezone
@@ -194,8 +195,9 @@ def build_parser() -> argparse.ArgumentParser:
         command.add_argument("--container-engine", help="Docker or Podman executable")
         command.add_argument("--container-image", default="gcc:14", help="Compiler-equipped container image")
         command.add_argument("--warnings", action="store_true", help="Score compiler warnings as additional safety findings")
-        command.add_argument("--static-analysis-timeout", type=_positive_float, default=30.0)
-        command.add_argument("--extended-safety-rules", action="store_true")
+        if command is not mutation_p:
+            command.add_argument("--static-analysis-timeout", type=_positive_float, default=30.0)
+            command.add_argument("--extended-safety-rules", action="store_true")
         command.add_argument("--memory-limit-bytes", type=_positive_int)
         command.add_argument("--sanitizers", default="", help="Comma-separated address,undefined; requires GCC/Clang")
     for command in (run_p, eval_p, replay_p):
@@ -229,8 +231,11 @@ def _new_executor(args):
 
 
 def _new_analyzer(args):
-    return StaticAnalyzer(timeout_seconds=getattr(args, "static_analysis_timeout", 30.0),
-                          extended_rules=getattr(args, "extended_safety_rules", False))
+    return StaticAnalyzer(cppcheck_cmd="cppcheck" if getattr(args, "isolation", "native") == "container"
+                          and os.environ.get("AIBENCHMARK_ESW_CPPCHECK") is None else None,
+                          timeout_seconds=getattr(args, "static_analysis_timeout", 30.0),
+                          extended_rules=getattr(args, "extended_safety_rules", False),
+                          max_output_bytes=getattr(args, "max_output_bytes", 1048576))
 
 
 def _target_task(task: TaskConfig, args) -> TaskConfig:
@@ -501,7 +506,7 @@ def _cmd_run_once(args: argparse.Namespace) -> int:
     cache = ReferenceCache()
     if getattr(args, "preflight", False):
         from aibenchmark_esw.doctor import run_doctor
-        readiness = run_doctor(tasks, loader, executor, True, cache)
+        readiness = run_doctor(tasks, loader, executor, True, cache, analyzer)
         if not readiness["passed"]:
             for check in readiness["checks"]:
                 if not check["passed"]:
@@ -875,7 +880,8 @@ def cmd_doctor(args):
     tasks = _select_tasks(loader, args)
     if not tasks:
         return 1
-    report = run_doctor([_target_task(task, args) for task in tasks], loader, _new_executor(args), args.check_references)
+    report = run_doctor([_target_task(task, args) for task in tasks], loader, _new_executor(args),
+                        args.check_references, analyzer=_new_analyzer(args))
     for check in report["checks"]:
         print(f"[{'PASS' if check['passed'] else 'FAIL'}] {check['name']}: {check['detail']}")
     return 0 if report["passed"] and not loader.load_errors else 1

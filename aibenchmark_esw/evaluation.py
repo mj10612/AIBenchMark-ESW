@@ -35,6 +35,7 @@ def evaluate_task(task: TaskConfig, solution_code: str, reference_code: Optional
     reference_elapsed = 0.0
     cache_hit = False
     with tempfile.TemporaryDirectory(prefix="aibenchmark_eval_") as directory:
+        object_findings = []
         work_dir = Path(directory)
         test_dir = work_dir / "tests"
         comp, tests = executor.compile_and_test(task, solution_code, test_dir)
@@ -46,6 +47,7 @@ def evaluate_task(task: TaskConfig, solution_code: str, reference_code: Optional
         if comp.success:
             try:
                 candidate = executor.compile_object(task, solution_code, work_dir / "candidate", "candidate")
+                object_findings = candidate.findings
                 if not candidate.success:
                     raise ValueError(candidate.output or "Candidate object compilation failed")
                 assert candidate.binary_path is not None
@@ -67,11 +69,13 @@ def evaluate_task(task: TaskConfig, solution_code: str, reference_code: Optional
 
         source = test_dir / Path(task.entry_file).name
         safety = (analyzer or StaticAnalyzer()).analyze(source, [task.task_dir / "include"],
-                                                       comp.effective_standard or task.target_standard)
+                                                       comp.effective_standard or task.target_standard,
+                                                       executor=executor)
         if executor.warnings:
-            safety.findings.extend(comp.findings)
-            safety.warning_count += sum(finding["severity"] == "warning" for finding in comp.findings)
-            safety.violations.extend(finding["message"] for finding in comp.findings)
+            findings = comp.findings + [finding for finding in object_findings if finding not in comp.findings]
+            safety.findings.extend(findings)
+            safety.warning_count += sum(finding["severity"] == "warning" for finding in findings)
+            safety.violations.extend(finding["message"] for finding in findings)
         scores = BenchmarkScorer.calculate_scores(task, comp, tests, size, safety)
 
     candidate_elapsed = max(0.0, time.perf_counter() - start - reference_elapsed)

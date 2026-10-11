@@ -53,7 +53,7 @@ class TestRuntimeIssueRegressions(unittest.TestCase):
             path = Path(directory) / 'candidate.c'
             path.write_text('int x;')
             analyzer = StaticAnalyzer('cppcheck', timeout_seconds=45)
-            with patch('aibenchmark_esw.sandbox.static_analyzer.subprocess.run',
+            with patch('aibenchmark_esw.sandbox.static_analyzer.run_bounded',
                        side_effect=subprocess.TimeoutExpired('cppcheck', 45)) as run:
                 result = analyzer.analyze(path)
             self.assertEqual(run.call_args.kwargs['timeout'], 45)

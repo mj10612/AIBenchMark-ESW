@@ -107,6 +107,12 @@ jobs:
           coverage xml -o artifacts/coverage.xml
       - name: Check mutation adequacy
         run: aibenchmark-esw mutations --output artifacts/mutations.json
+      - name: Check TCC C11 task readiness and preflight
+        if: runner.os == 'Windows'
+        run: |
+          aibenchmark-esw doctor --tasks tier4_dma_buffer --check-references
+          aibenchmark-esw run --model baseline --tasks tier4_dma_buffer --preflight --quiet
+          aibenchmark-esw run --model baseline --preflight --quiet --output artifacts/tcc-preflight.json
       - name: Check cross-target object evidence
         if: runner.os == 'Linux'
         run: |

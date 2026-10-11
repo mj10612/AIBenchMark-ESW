@@ -184,7 +184,7 @@ class SizeAnalyzer:
             virtual_size = struct.unpack_from("<I", data, section + 8)[0]
             raw_size = struct.unpack_from("<I", data, section + 16)[0]
             flags = struct.unpack_from("<I", data, section + 36)[0]
-            size = virtual_size if image else raw_size
+            size = virtual_size if image else (virtual_size or raw_size) if flags & 0x80 else raw_size
             if flags & 0x00000800 or flags & 0x02000000:
                 continue
             if flags & 0x00000020:

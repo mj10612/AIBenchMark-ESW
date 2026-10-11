@@ -45,10 +45,10 @@ class _OutputCapture:
             import ctypes
             import msvcrt
             from ctypes import wintypes
-            self.api = ctypes.WinDLL("kernel32", use_last_error=True)
+            self.api = ctypes.WinDLL("kernel32", use_last_error=True)  # type: ignore[attr-defined]  # Windows-only API.
             self.api.PeekNamedPipe.argtypes = [wintypes.HANDLE, ctypes.c_void_p, wintypes.DWORD,
                                                ctypes.c_void_p, ctypes.POINTER(wintypes.DWORD), ctypes.c_void_p]
-            self.handle = msvcrt.get_osfhandle(stream.fileno())
+            self.handle = msvcrt.get_osfhandle(stream.fileno())  # type: ignore[attr-defined]  # Windows-only API.
         else:
             os.set_blocking(stream.fileno(), False)  # type: ignore[attr-defined]  # POSIX-only branch.
 
@@ -60,9 +60,9 @@ class _OutputCapture:
                 from ctypes import wintypes
                 available = wintypes.DWORD()
                 if not self.api.PeekNamedPipe(self.handle, None, 0, None, ctypes.byref(available), None):
-                    if ctypes.get_last_error() == 109:  # ERROR_BROKEN_PIPE
+                    if ctypes.get_last_error() == 109:  # type: ignore[attr-defined]  # Windows ERROR_BROKEN_PIPE.
                         return
-                    raise ctypes.WinError(ctypes.get_last_error())
+                    raise ctypes.WinError(ctypes.get_last_error())  # type: ignore[attr-defined]  # Windows-only API.
                 if not available.value:
                     return
                 amount = min(amount, available.value)
@@ -212,17 +212,17 @@ class _WindowsJob:
                             if handle:
                                 handles.append(handle)
                         break
-                    if ctypes.get_last_error() != 234 or capacity >= 4096:  # ERROR_MORE_DATA
-                        raise ctypes.WinError(ctypes.get_last_error())
+                    if ctypes.get_last_error() != 234 or capacity >= 4096:  # type: ignore[attr-defined]  # Windows ERROR_MORE_DATA.
+                        raise ctypes.WinError(ctypes.get_last_error())  # type: ignore[attr-defined]  # Windows-only API.
                     capacity *= 2
                 if not self.api.TerminateJobObject(self.handle, 1):
-                    raise ctypes.WinError(ctypes.get_last_error())
+                    raise ctypes.WinError(ctypes.get_last_error())  # type: ignore[attr-defined]  # Windows-only API.
                 deadline = time.monotonic() + 1
                 while True:
                     accounting = Accounting()
                     if not self.api.QueryInformationJobObject(self.handle, 1, ctypes.byref(accounting),
                                                                ctypes.sizeof(accounting), None):
-                        raise ctypes.WinError(ctypes.get_last_error())
+                        raise ctypes.WinError(ctypes.get_last_error())  # type: ignore[attr-defined]  # Windows-only API.
                     if accounting.active_processes == 0:
                         break
                     if time.monotonic() >= deadline:

@@ -77,7 +77,8 @@ class ExecutionSandbox:
             from aibenchmark_esw.sandbox.cross_compiler import CrossCompiler
             self.cross = CrossCompiler(target, cross_compiler, compile_timeout_seconds,
                                        max_output_bytes, isolation, memory_limit_bytes,
-                                       self._run_contained if self.containment else None)
+                                       self._run_contained if self.containment else None,
+                                       warnings=self.warnings, finding_parser=self._warning_findings)
 
     def warning_flags(self):
         if not self.warnings:

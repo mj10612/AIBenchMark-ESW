@@ -67,7 +67,13 @@ network, dropped capabilities, `no-new-privileges`, the non-root workspace owner
 uid/gid (65534 when the host runs as root or on Windows), a process quota,
 one CPU, a private bounded `/tmp`, optional memory quota and the task deadline.
 Compiler diagnostics and test output share the configured output cap. The
-named container is forcibly removed after execution, including timeout or
+host workspace stays private (directories 0700, data 0600); root hosts transfer
+ownership to the container uid rather than granting access to other host users.
+Cppcheck uses the selected containment backend, a bounded output pipe, a 512 MiB
+memory limit and a maximum of 200 diagnostics. Exceeding either diagnostic cap
+marks cppcheck incomplete and retains builtin analysis with a visible warning.
+The byte cap is configured by `--max-output-bytes`.
+The named container is forcibly removed after execution, including timeout or
 cancellation; killing the engine client alone is insufficient. Docker/Podman
 daemon access is a trusted administrative capability, and kernel/engine defects
 remain outside this boundary. Prefer rootless Podman/Docker and a disposable VM

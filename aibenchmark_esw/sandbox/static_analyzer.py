@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import Optional, List
 from aibenchmark_esw.models import StaticSafetyMetrics
 from aibenchmark_esw.sandbox.c_source import code_tokens, mask_noncode, original_line
+from aibenchmark_esw.sandbox.process_runner import run_bounded
 
 
 def _balanced_end(text, start, opening="{", closing="}"):
@@ -72,25 +73,30 @@ class StaticAnalyzer:
         if self.extended_rules:
             rules += ["stdio", "nonlocal-control", "nondeterminism", "misra.17.2", "misra.18.8", "alloca",
                       "heavy-library", "busy-wait"]
-        return {"version": 3, "builtin_rules": rules, "extended_rules": self.extended_rules,
+        return {"version": 4, "builtin_rules": rules, "extended_rules": self.extended_rules,
+                "max_output_bytes": self.max_output_bytes, "max_findings": 200,
                 "timeout_seconds": self.timeout_seconds,
                 "basic_type_exceptions": ["plain int (status/main APIs)", "plain char (character data)"],
                 "cppcheck_enabled": ["warning", "style", "performance", "portability"],
                 "inconclusive": True, "standard": "task effective standard",
                 "error_severities": ["error"], "warning_severities": ["warning", "style", "performance", "portability"]}
 
-    def __init__(self, cppcheck_cmd: Optional[str] = None, timeout_seconds=30, extended_rules=False):
+    def __init__(self, cppcheck_cmd: Optional[str] = None, timeout_seconds=30, extended_rules=False,
+                 max_output_bytes=1048576):
         if (isinstance(timeout_seconds, bool) or not isinstance(timeout_seconds, (int, float))
                 or not math.isfinite(timeout_seconds) or timeout_seconds <= 0):
             raise ValueError("timeout_seconds must be finite and positive")
         self.timeout_seconds, self.extended_rules = timeout_seconds, extended_rules
+        if isinstance(max_output_bytes, bool) or not isinstance(max_output_bytes, int) or max_output_bytes <= 0:
+            raise ValueError("max_output_bytes must be a positive integer")
+        self.max_output_bytes = max_output_bytes
         self.last_cppcheck_timeout = False
         configured = cppcheck_cmd if cppcheck_cmd is not None else os.environ.get("AIBENCHMARK_ESW_CPPCHECK")
         self.cppcheck_cmd = None if configured == "off" else configured or shutil.which("cppcheck")
         self.last_cppcheck_error: Optional[str] = None
 
     def analyze(self, source_path: Path, include_dirs: Optional[List[Path]] = None,
-                standard: str = "c99") -> StaticSafetyMetrics:
+                standard: str = "c99", executor=None) -> StaticSafetyMetrics:
         """
         Always check embedded rules; add cppcheck diagnostics when available.
         """
@@ -98,7 +104,7 @@ class StaticAnalyzer:
         metrics.cppcheck_status = "disabled" if not self.cppcheck_cmd else "not_run"
         if self.cppcheck_cmd and source_path.exists():
             self.last_cppcheck_error = None
-            cppcheck_metrics = self._run_cppcheck(source_path, include_dirs, standard)
+            cppcheck_metrics = self._run_cppcheck(source_path, include_dirs, standard, executor)
             if cppcheck_metrics is not None:
                 metrics.cppcheck_status = "completed"
                 metrics.error_count += cppcheck_metrics.error_count
@@ -111,7 +117,7 @@ class StaticAnalyzer:
         return metrics
 
     def _run_cppcheck(self, source_path: Path, include_dirs: Optional[List[Path]] = None,
-                      standard: str = "c99") -> Optional[StaticSafetyMetrics]:
+                      standard: str = "c99", executor=None) -> Optional[StaticSafetyMetrics]:
         self.last_cppcheck_timeout = False
         try:
             assert self.cppcheck_cmd is not None
@@ -126,17 +132,21 @@ class StaticAnalyzer:
             for directory in include_dirs or []:
                 cmd += ["-I", str(directory)]
             cmd.append(str(source_path))
-            proc = subprocess.run(cmd, capture_output=True, text=True, errors="backslashreplace",
-                                  timeout=self.timeout_seconds, stdin=subprocess.DEVNULL)
+            runner = executor._run_contained if executor and executor.containment else run_bounded
+            proc = runner(cmd, timeout=self.timeout_seconds, max_output_bytes=self.max_output_bytes,
+                          cwd=str(source_path.parent), isolation="process",
+                          memory_limit_bytes=536870912,
+                          cancel_event=getattr(executor, "cancel_event", None))
+            output = (proc.stdout + (proc.stderr or b"")).decode("utf-8", errors="backslashreplace")
             if proc.returncode != 0:
-                self.last_cppcheck_error = f"cppcheck exited with {proc.returncode}: {(proc.stdout + proc.stderr).strip()}"
+                self.last_cppcheck_error = f"cppcheck exited with {proc.returncode}: {output.strip()}"
                 return None
             errors = 0
             warnings = 0
             violations = []
-            findings = []
+            findings: list = []
 
-            for line in proc.stderr.splitlines():
+            for line in output.splitlines():
                 if line.startswith("error:"):
                     errors += 1
                     violations.append(line.strip())
@@ -145,6 +155,9 @@ class StaticAnalyzer:
                     violations.append(line.strip())
                 else:
                     continue
+                if len(findings) >= 200:
+                    self.last_cppcheck_error = "cppcheck finding limit exceeded (200); analysis is incomplete"
+                    return None
                 parts = line.split(":", 2)
                 location = re.match(r"(.*):(\d+):(.*)", parts[2]) if len(parts) == 3 else None
                 findings.append({"rule_id": parts[1], "engine": "cppcheck", "severity": parts[0],
@@ -158,7 +171,7 @@ class StaticAnalyzer:
                 violations=violations,
                 findings=findings,
             )
-        except (OSError, subprocess.TimeoutExpired, UnicodeError) as error:
+        except (OSError, subprocess.SubprocessError, UnicodeError, ValueError) as error:
             self.last_cppcheck_timeout = isinstance(error, subprocess.TimeoutExpired)
             self.last_cppcheck_error = str(error)
             return None
