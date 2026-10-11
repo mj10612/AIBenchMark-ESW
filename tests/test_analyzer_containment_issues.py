@@ -43,7 +43,9 @@ class TestAnalyzerContainmentIssues(unittest.TestCase):
 
     def test_doctor_runs_fixture_when_only_container_has_compiler(self):
         loader = DatasetLoader()
-        executor = ExecutionSandbox()
+        # The fake container executes the local compiler, so retain its host
+        # linker policy rather than pretending macOS uses a Linux linker.
+        executor = ExecutionSandbox(hardening='off')
         executor.containment = Mock()
         with patch('aibenchmark_esw.doctor.shutil.which', return_value=None), patch.object(
                 executor, 'compiler_identity', return_value={'version': 'container GCC'}), patch.object(

@@ -150,6 +150,7 @@ class ExecutionSandbox:
                 "hardening": {"policy": self.hardening, "compile_flags": self.hardening_flags(True),
                               "binary_flags": self.hardening_flags(), "available": bool(self.hardening_flags())},
                 "resource_limits": {"process_count": 64 if os.name == "nt" or self.isolation == "container" or self.isolation in ("process", "bwrap") and getattr(os, "getuid", lambda: 0)() != 0 else None,
+                                    "process_count_scope": "job" if os.name == "nt" else "container" if self.isolation == "container" else "uid-current-population-plus-budget" if sys.platform == "darwin" else "uid-total",
                                     "file_size_bytes": 16777216 if os.name != "nt" or self.containment else None,
                                     "core_bytes": 0 if os.name != "nt" or self.containment else None,
                                     "open_files": 256 if os.name != "nt" or self.containment else None},

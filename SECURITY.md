@@ -133,8 +133,10 @@ harness bugs and do not establish an oracle boundary. See the
 [GCC instrumentation options](https://gcc.gnu.org/onlinedocs/gcc/Instrumentation-Options.html).
 
 POSIX launches cap individual files at 16 MiB, disable core dumps and cap open
-files at 256. Process/bwrap mode also caps per-user processes at 64 (RLIMIT_NPROC
-includes that user's other processes and does not constrain privileged users).
+files at 256. Process/bwrap mode uses RLIMIT_NPROC: Linux caps the UID total at
+64; macOS adds a budget of 64 above the current UID population because desktop
+and CI users often already exceed 64 processes. Both include unrelated processes,
+so concurrent launches share the allowance; neither constrains privileged users.
 Native Windows Jobs cap the job at 64 active processes; Windows native has no
 RLIMIT_FSIZE/core equivalent and reports those controls unavailable. Native
 execution still permits host files/network access. Docker/Podman use a 512 MiB

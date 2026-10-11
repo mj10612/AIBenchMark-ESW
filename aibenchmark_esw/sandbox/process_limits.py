@@ -2,6 +2,7 @@
 import os
 import resource
 import signal
+import subprocess
 import sys
 
 
@@ -20,6 +21,14 @@ if __name__ == "__main__":
     if memory:
         limit(resource.RLIMIT_AS, memory)  # type: ignore[attr-defined]
     if processes:
+        # macOS runners already have more than 64 processes under their UID.
+        # NPROC is per UID, so reserve the requested additional process budget
+        # above the current population instead of preventing even clang exec.
+        if sys.platform == "darwin":
+            population = subprocess.check_output(
+                ["/bin/ps", "-U", str(os.getuid()), "-o", "pid="], timeout=2,
+            ).splitlines()
+            processes += max(0, len(population) - 1)
         limit(resource.RLIMIT_NPROC, processes)  # type: ignore[attr-defined]
     limit(resource.RLIMIT_FSIZE, 16777216)  # type: ignore[attr-defined]
     limit(resource.RLIMIT_CORE, 0)  # type: ignore[attr-defined]

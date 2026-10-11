@@ -67,7 +67,7 @@ f=fopen("permitted", "w");if(!f)return 0;fclose(f);return 1;}
             (root / 'tasks').mkdir()
             (root / 'third_party/unity').mkdir(parents=True)
             with patch.object(resources, '__file__', str(package / 'resources.py')), patch.dict(os.environ, {'AIBENCHMARK_ESW_DEV_CHECKOUT': '0'}):
-                self.assertEqual(resources.data_root(), package / '_data')
+                self.assertEqual(resources.data_root(), (package / '_data').resolve())
 
     def test_modified_bundled_task_fails_before_generation(self):
         import io
@@ -117,7 +117,12 @@ print(json.dumps(len(children)),flush=True)
         code = 'import resource,json; print(json.dumps([resource.getrlimit(k)[0] for k in (resource.RLIMIT_NPROC,resource.RLIMIT_FSIZE,resource.RLIMIT_CORE,resource.RLIMIT_NOFILE)]))'
         result = run_bounded([sys.executable, '-c', code], timeout=5, max_output_bytes=4096, isolation='process')
         self.assertEqual(result.returncode, 0, result.stdout)
-        self.assertEqual(json.loads(result.stdout), [64, 16777216, 0, 256])
+        limits = json.loads(result.stdout)
+        if sys.platform == 'darwin':
+            self.assertGreaterEqual(limits[0], 64)
+        else:
+            self.assertEqual(limits[0], 64)
+        self.assertEqual(limits[1:], [16777216, 0, 256])
         with TemporaryDirectory() as directory:
             result = run_bounded([sys.executable, '-c', 'open("large", "wb").write(b"x" * 17000000)'], cwd=directory, timeout=5, max_output_bytes=4096, isolation='process')
             self.assertNotEqual(result.returncode, 0)
@@ -142,24 +147,33 @@ finally:
         self.assertLessEqual(json.loads(result.stdout), 63)
 
     @unittest.skipUnless(os.environ.get('AIBENCHMARK_TEST_CONTAINER') == '1' or os.environ.get('AIBENCHMARK_TEST_BWRAP') == '1', 'Explicit real containment integration required')
-    def test_actual_contained_candidate_large_file_is_terminated(self):
+    def test_actual_contained_candidate_large_file_is_capped(self):
         from dataclasses import replace
         mode = 'container' if os.environ.get('AIBENCHMARK_TEST_CONTAINER') == '1' else 'bwrap'
         with TemporaryDirectory() as directory:
             root = Path(directory)
             (root / 'tests').mkdir()
-            (root / 'tests/test_quota.c').write_text('#include "unity.h"\nvoid quota(void);void setUp(void){}void tearDown(void){}void test_quota(void){quota();}int main(void){UNITY_BEGIN();RUN_TEST(test_quota);return UNITY_END();}', encoding='utf-8')
+            (root / 'tests/test_quota.c').write_text('#include "unity.h"\nint quota(void);void setUp(void){}void tearDown(void){}void test_quota(void){TEST_ASSERT_EQUAL(1,quota());}int main(void){UNITY_BEGIN();RUN_TEST(test_quota);return UNITY_END();}', encoding='utf-8')
             task = replace(DatasetLoader().get_task('tier1_crc16'), task_dir=root)
-            # Container runtimes may inherit ignored SIGXFSZ. The default
-            # disposition tests kernel termination; ignored signals still
-            # enforce the same file cap through EFBIG (tested above).
-            code = '#include <stdio.h>\n#include <signal.h>\nvoid quota(void){signal(SIGXFSZ,SIG_DFL);char b[4096]={0};FILE *f=fopen("large","wb");if(!f)return;setvbuf(f,NULL,_IONBF,0);for(int i=0;i<4352;i++)fwrite(b,1,sizeof b,f);fclose(f);}'
+            # Ignoring SIGXFSZ must still leave the kernel file-size cap in
+            # force. Check EFBIG and actual size, including fopen failures.
+            code = '''#include <stdio.h>
+#include <signal.h>
+#include <errno.h>
+#include <sys/stat.h>
+int quota(void){char b[4096]={0};struct stat s;signal(SIGXFSZ,SIG_IGN);
+FILE *f=fopen("large","wb");if(!f){perror("fopen");return 0;}
+setvbuf(f,NULL,_IONBF,0);int capped=0;
+for(int i=0;i<4352;i++){errno=0;if(fwrite(b,1,sizeof b,f)!=sizeof b){capped=(errno==EFBIG);break;}}
+fclose(f);if(stat("large",&s))return 0;
+printf("quota capped=%d size=%lld\\n",capped,(long long)s.st_size);
+return capped && s.st_size==16777216;}
+'''
             compiled, tests = ExecutionSandbox(isolation=mode, compiler_path='gcc').compile_and_test(task, code)
             self.addCleanup(compiled.cleanup)
             self.assertTrue(compiled.success, compiled.output)
-            self.assertFalse(tests.completed)
-            self.assertFalse(tests.passed)
-            self.assertIn(tests.returncode, (-25, 153))
+            self.assertTrue(tests.completed, tests.output)
+            self.assertTrue(tests.passed, tests.output)
 
     def test_runtime_mounts_read_only_workspace_and_bounded_scratch(self):
         from aibenchmark_esw.sandbox.containment import ContainmentBackend
