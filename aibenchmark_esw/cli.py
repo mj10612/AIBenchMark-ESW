@@ -10,12 +10,14 @@ from datetime import datetime, timezone
 from pathlib import Path
 from dataclasses import replace
 from aibenchmark_esw.models import TaskConfig
+from aibenchmark_esw import __version__
 
 from aibenchmark_esw.dataset import DatasetLoader, validate_task_assets
 from aibenchmark_esw.sandbox.executor import ExecutionSandbox
 from aibenchmark_esw.sandbox.static_analyzer import StaticAnalyzer
 from aibenchmark_esw.metrics.reporter import BenchmarkReporter
-from aibenchmark_esw.llm.client import LLMClient, is_fatal_provider_error
+from aibenchmark_esw.llm.client import LLMClient, is_fatal_provider_error, is_transient_provider_error
+from aibenchmark_esw.errors import error_diagnostic, redact
 from aibenchmark_esw.evaluation import evaluate_task, failed_evaluation
 from aibenchmark_esw.provenance import collect_run_metadata, text_sha256
 from aibenchmark_esw.metrics.comparison import compare_runs, render_comparison
@@ -96,6 +98,7 @@ def build_parser() -> argparse.ArgumentParser:
         prog="aibenchmark-esw",
         description="AIBenchMark-ESW: Open-Source Embedded AI Coding Benchmark Framework",
     )
+    parser.add_argument('--version', action='version', version=f'%(prog)s {__version__}')
     subparsers = parser.add_subparsers(dest="command", help="Command to run")
 
     # Command: list
@@ -140,6 +143,8 @@ def build_parser() -> argparse.ArgumentParser:
     run_p.add_argument("--retry-backoff", type=_backoff, default=1.0)
     run_p.add_argument("--prompt-strategy", choices=["single", "plan"], default="single")
     run_p.add_argument("--multi-turn", dest="prompt_strategy", action="store_const", const="plan")
+    run_p.add_argument('--repair-turns', type=_retries, default=0, help='Maximum compile-error repair turns (0..10; default 0)')
+    run_p.add_argument('--api-key-env', help='Environment variable containing the provider key; only the variable name is recorded')
     run_p.add_argument("--review-turn", action="store_true")
     run_p.add_argument("--system-prompt-file", type=Path, help="UTF-8 system prompt override")
     run_p.add_argument("--dry-run", action="store_true", help="Validate inputs and estimate token/cost bounds without requests or compilation")
@@ -193,7 +198,7 @@ def build_parser() -> argparse.ArgumentParser:
     mutation_p.add_argument("--output", type=Path)
     mutation_p.add_argument("--auto", action="store_true", help="Generate bounded operator mutants in addition to reviewed faults")
     mutation_p.add_argument("--max-mutants", type=_positive_int, default=20)
-    mutation_p.add_argument("--jobs", type=_positive_int, default=1)
+    mutation_p.add_argument("--jobs", type=_positive_int, default=1, help='Maximum concurrent mutants within each task')
     mutation_p.add_argument("--min-score", type=_nonnegative_float, default=1.0)
     for command in (doctor_p, mutation_p, replay_p):
         command.add_argument("--compiler", type=str)
@@ -260,7 +265,12 @@ def _target_task(task: TaskConfig, args) -> TaskConfig:
 
 
 def _new_client(args):
+    key_env = getattr(args, 'api_key_env', None)
+    api_key = os.environ.get(key_env) if key_env else None
+    if key_env and not api_key:
+        raise ValueError(f'Provider key environment variable is empty: {key_env}')
     return LLMClient(model_name=args.model, temperature=getattr(args, "temperature", None),
+        api_key=api_key, repair_turns=getattr(args, 'repair_turns', 0),
         max_tokens=getattr(args, "max_tokens", None), request_timeout=getattr(args, "request_timeout", 60),
         max_retries=getattr(args, "max_retries", 0), retry_backoff_seconds=getattr(args, "retry_backoff", 1),
         prompt_strategy=getattr(args, "prompt_strategy", "single"), review_turn=getattr(args, "review_turn", False),
@@ -270,13 +280,18 @@ def _new_client(args):
 
 
 def _benchmark_roots(args=None):
-    roots = [data_root() / "tasks", data_root() / "third_party" / "unity", Path(__file__).resolve().parent]
-    if args is not None and getattr(args, "tasks_root", None) is not None:
-        roots.append(Path(args.tasks_root))
-    if args is not None and getattr(args, "heldout_tests", None) is not None:
-        roots.append(Path(args.heldout_tests))
-    return roots + [child for root in roots[:1] + roots[3:] if root.is_dir()
+    dataset_roots = [data_root() / 'tasks']
+    for name in ('tasks_root', 'heldout_tests'):
+        if args is not None and getattr(args, name, None) is not None:
+            dataset_roots.append(Path(getattr(args, name)))
+    roots = dataset_roots + [data_root() / 'third_party' / 'unity', Path(__file__).resolve().parent]
+    return roots + [child for root in dataset_roots if root.is_dir()
                     for child in root.iterdir() if child.is_dir()]
+
+
+def _task_headers(task):
+    return '\n'.join(f'// --- {header.name} ---\n{header.read_text(encoding="utf-8")}'
+                     for header in sorted((task.task_dir / 'include').glob('*.h')))
 
 
 def _show_load_errors(loader):
@@ -376,7 +391,7 @@ def cmd_eval(args: argparse.Namespace) -> int:
         result = failed_evaluation(task, model_name, "Evaluation interrupted by user")
         interrupted = True
     except Exception as error:
-        result = failed_evaluation(task, model_name, str(error))
+        result = failed_evaluation(task, model_name, error_diagnostic(error))
     if metadata is not None:
         metadata.update(run_status="interrupted" if interrupted else "completed",
                         pending_tasks=[task.id] if interrupted else [])
@@ -496,7 +511,7 @@ def _cmd_run_once(args: argparse.Namespace) -> int:
                     "isolation", "memory_limit_bytes", "sanitizers", "save_solutions", "tasks_root", "system_prompt_file",
                     "target", "cross_compiler", "warnings", "container_engine", "container_image",
                     "static_analysis_timeout", "extended_safety_rules", "max_cost_usd",
-                    "input_cost_per_million", "output_cost_per_million", "variant_seed", "heldout_tests")
+                    "input_cost_per_million", "output_cost_per_million", "variant_seed", "heldout_tests", "api_key_env")
     metadata["run_options"] = {name: getattr(args, name, None) for name in option_names}
     metadata["run_options"]["compiler"] = executor.compiler_path
     metadata["run_options"].update(allow_standard_fallback=executor.allow_standard_fallback,
@@ -561,8 +576,7 @@ def _cmd_run_once(args: argparse.Namespace) -> int:
             if llm is None:
                 solution_code = reference
             else:
-                headers = "\n".join(f"// --- {header.name} ---\n{header.read_text(encoding='utf-8')}"
-                                    for header in sorted((task.task_dir / "include").glob("*.h")))
+                headers = _task_headers(task)
                 messages = llm.build_prompt(task.prompt, headers, loader.get_starter_code(task.id) or "",
                     target_standard=task.target_standard, prompt_overrides=task.prompt_overrides,
                     system_prompt=system_prompt)
@@ -575,13 +589,27 @@ def _cmd_run_once(args: argparse.Namespace) -> int:
                 atomic_write_text(Path(solution_directory) / f"{task.id}.c", solution_code)
             result = evaluate_task(task, solution_code, reference, args.model, executor,
                                    _new_analyzer(args), reference_cache=cache)
+            for _ in range(llm.repair_turns if llm is not None else 0):
+                assert llm is not None
+                if result.compiled:
+                    break
+                generating = True
+                solution_code = llm.repair_solution(redact(result.error_log or result.test_result.output, (llm.api_key,)))
+                generating = False
+                if not solution_code:
+                    raise ValueError('Model returned an empty repair implementation')
+                if solution_directory is not None:
+                    atomic_write_text(Path(solution_directory) / f'{task.id}.c', solution_code)
+                result = evaluate_task(task, solution_code, reference, args.model, executor,
+                                       _new_analyzer(args), reference_cache=cache)
         except (KeyboardInterrupt, InterruptedError):
             result = failed_evaluation(task, args.model, "Evaluation interrupted by user")
             state = "interrupted"
         except Exception as error:
-            result = failed_evaluation(task, args.model, str(error))
+            result = failed_evaluation(task, args.model, error_diagnostic(error, (llm.api_key,) if llm else ()))
             if generating:
-                state = "fatal" if is_fatal_provider_error(error) else "generation_failure"
+                state = ('fatal' if is_fatal_provider_error(error) else 'transient'
+                         if is_transient_provider_error(error) else 'generation_failure')
             if llm and llm.last_generation and llm.last_generation.get("partial_response") and solution_directory is not None:
                 atomic_write_text(Path(solution_directory) / f"{task.id}.truncated.c",
                                   llm.extract_c_code(llm.last_generation["partial_response"]))
@@ -607,17 +635,17 @@ def _cmd_run_once(args: argparse.Namespace) -> int:
             state = "interrupted"
         results[index] = result
         attempts += 1
-        generation_failures += state in ("fatal", "generation_failure")
-        if state == "generation_failure":
+        generation_failures += state in ("fatal", "generation_failure", "transient")
+        if state in ('generation_failure', 'transient'):
             retryable_streak.add(index)
         elif state != "fatal":
             retryable_streak.clear()
-        failure_streak = failure_streak + 1 if state == "generation_failure" else 0
+        failure_streak = failure_streak + 1 if state in ('generation_failure', 'transient') else 0
         interrupted |= state == "interrupted" and not aborted
         aborted |= state == "fatal" or failure_streak >= 3
         if aborted:
             pending.update(retryable_streak)
-        if state not in ("interrupted", "fatal") and not (state == "generation_failure" and aborted):
+        if state not in ("interrupted", "fatal", "transient") and not (state == "generation_failure" and aborted):
             pending.discard(index)
         if interrupted or aborted:
             cancelled.set()
@@ -664,6 +692,7 @@ def _cmd_run_once(args: argparse.Namespace) -> int:
         aborted = True
         # Failed provider requests are retryable pending slots on resume.
         pending.update(i for i in indices if not results[i].test_result.completed)
+    aborted |= bool(pending) and not interrupted
     checkpoint("interrupted" if interrupted else "aborted" if aborted else "completed")
     print("\n" + BenchmarkReporter.generate_cli_table(results, model_name=args.model, metadata=metadata))
     _write_junit(args, results, args.model, metadata)
@@ -676,15 +705,19 @@ def _cmd_run_once(args: argparse.Namespace) -> int:
 def _dry_run(args, loader, tasks, system_prompt):
     from aibenchmark_esw.llm.costs import pricing, token_upper_bound
     client = _new_client(args)
-    prices = pricing(None, args.model, getattr(args, "input_cost_per_million", None),
+    try:
+        import litellm as provider
+    except ImportError:
+        provider = None
+    prices = pricing(provider, args.model, getattr(args, "input_cost_per_million", None),
                      getattr(args, "output_cost_per_million", None))
-    turns = 1 + (getattr(args, "prompt_strategy", "single") == "plan") + bool(getattr(args, "review_turn", False))
+    turns = 1 + (getattr(args, "prompt_strategy", "single") == "plan") + bool(getattr(args, "review_turn", False)) + getattr(args, 'repair_turns', 0)
     rows = []
     for task in tasks:
         errors = validate_task_assets(task)
         if errors:
             raise ValueError(f"{task.id}: " + "; ".join(errors))
-        headers = "\n".join(path.read_text(encoding="utf-8") for path in sorted((task.task_dir / "include").glob("*.h")))
+        headers = _task_headers(task)
         prompt = client.build_prompt(task.prompt, headers, loader.get_starter_code(task.id) or "",
             target_standard=task.target_standard, prompt_overrides=task.prompt_overrides, system_prompt=system_prompt)
         input_bound = token_upper_bound(prompt)
@@ -702,6 +735,7 @@ def _dry_run(args, loader, tasks, system_prompt):
                      "maximum_attempts_per_turn": attempts, "samples": count,
                      "estimated_cost_upper_usd": estimate})
     payload = {"mode": "dry-run", "model": args.model, "tasks": rows, "pricing": prices,
+               'pricing_note': None if prices else 'Pricing unavailable; install the llm extra or provide both custom prices',
                "estimate_method": "conservative UTF-8 byte bounds; actual provider tokenization and billing may differ",
                "initial_prompt_token_upper_bound_total": sum(row["prompt_token_upper_bound"] for row in rows),
                "maximum_completion_tokens_total": sum(row["maximum_output_tokens_per_turn"] * row["turns"] *
@@ -746,7 +780,11 @@ def cmd_run(args):
             transformed_loader._tasks = {task.id: task for task in prepared}
             args._prepared_loader = transformed_loader
             args._variant_evidence = evidence
-            return _run_samples(args, saved) if args.samples > 1 and not args.dry_run else _cmd_run_once(args)
+            return _dispatch_run(args, saved)
+    return _dispatch_run(args, saved)
+
+
+def _dispatch_run(args, saved):
     return _run_samples(args, saved) if args.samples > 1 and not args.dry_run else _cmd_run_once(args)
 
 
@@ -776,9 +814,9 @@ def cmd_trend(args):
     directories = [path for path in args.results if path.is_dir()]
     validate_output_paths([args.output], protected_files=args.results,
                           protected_roots=_benchmark_roots(args) + directories)
-    from aibenchmark_esw.output_paths import _input_files
+    from aibenchmark_esw.output_paths import input_files
     paths = [file for path in args.results for file in
-             (sorted(_input_files([path])) if path.is_dir() else [path]) if file.suffix.lower() == ".json"]
+             (sorted(input_files([path])) if path.is_dir() else [path]) if file.suffix.lower() == ".json"]
     if not paths:
         raise ValueError("Trend inputs contain no JSON reports")
     reports = [json.loads(path.read_text(encoding="utf-8")) for path in paths]
@@ -932,7 +970,7 @@ def main() -> None:
 
     if not args.command:
         parser.print_help()
-        sys.exit(0)
+        sys.exit(2)
 
     dispatch = {
         "list": cmd_list,

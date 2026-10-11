@@ -244,7 +244,7 @@ def _evaluate_mutation(task, reference, mutation, executor):
     return record
 
 
-def run_mutations(tasks, loader, executor=None, *, auto=False, max_mutants=20, jobs=1, min_score=0.0):
+def run_mutations(tasks, loader, executor=None, *, auto=False, max_mutants=20, jobs=1, min_score=1.0):
     """Return a JSON-serializable adequacy report; ``passed`` controls CLI/CI exit.
 
     Only fully executed assertion failures kill a reviewed mutant. Surviving,

@@ -3,7 +3,7 @@ from types import SimpleNamespace as N
 from unittest.mock import Mock, patch
 
 from aibenchmark_esw.llm.client import LLMClient
-from aibenchmark_esw.llm.costs import BudgetExceededError, CostBudget
+from aibenchmark_esw.llm.costs import BudgetExceededError, CostBudget, PricingUnknownError
 
 
 class TestGenerationCosts(unittest.TestCase):
@@ -38,6 +38,6 @@ class TestGenerationCosts(unittest.TestCase):
     def test_unknown_pricing_fails_before_provider_call(self):
         provider = Mock()
         client = LLMClient("mock", max_tokens=10, budget=CostBudget(1))
-        with patch.dict("sys.modules", {"litellm": provider}), self.assertRaises(BudgetExceededError):
+        with patch.dict("sys.modules", {"litellm": provider}), self.assertRaises(PricingUnknownError):
             client.generate_solution([{"role": "user", "content": "task"}])
         provider.completion.assert_not_called()

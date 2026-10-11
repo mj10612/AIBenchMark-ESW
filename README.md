@@ -155,7 +155,7 @@ aibenchmark-esw compare --results results/openai.json results/claude.json \
 aibenchmark-esw eval --task tier1_crc16 --solution results/openai_sources/tier1_crc16.c
 ```
 
-Comparison requires identical task sets, weights, standards, and compatible recorded evaluator, dataset, and toolchain settings. Failed tasks remain in the denominator. Legacy files can be compared with explicit missing-provenance warnings. Token usage, generation duration, and provider cost are reported with measurement coverage; unknown costs remain unknown. Explicit input/output token prices can supplement provider pricing, and an optional spend guard records its reservations and charged amount.
+Comparison requires identical task sets, weights, standards, and compatible recorded evaluator, dataset, and toolchain settings. Failed tasks remain in the denominator. Legacy files can be compared with explicit missing-provenance warnings. Token usage, generation duration, and provider cost are reported with measurement coverage; unknown costs remain unknown. Explicit input/output token prices replace provider pricing (both flags are required), and an optional spend guard records its reservations and charged amount. See [provider accounting and repair](docs/PROVIDER_ACCOUNTING.md) for retry, cached-token, and context policies.
 
 For cross-toolchain validation, set `AIBENCHMARK_ESW_COMPILER` to a compiler executable (for example, `clang`); an explicit `--compiler` argument takes precedence. Provider settings must be supported by the selected model. A token-limit-truncated response is recorded as a generation failure.
 

@@ -13,7 +13,7 @@ from aibenchmark_esw.metrics.text import csv_safe_row, markdown_text
 
 GENERATION_CONDITIONS = ("temperature", "max_tokens", "request_timeout_seconds",
                          "prompt_strategy", "review_turn", "system_prompt_sha256", "max_retries", "retry_backoff_seconds",
-                         "input_cost_per_million", "output_cost_per_million")
+                         "input_cost_per_million", "output_cost_per_million", 'repair_turns', 'context_window_policy')
 
 
 def generation_conditions(metadata):
@@ -21,7 +21,8 @@ def generation_conditions(metadata):
     if settings is None:
         return None
     # Defaults preserve comparison with the original one-turn report format.
-    defaults = {"prompt_strategy": "single", "review_turn": False, "max_retries": 0, "retry_backoff_seconds": 1}
+    defaults = {"prompt_strategy": "single", "review_turn": False, "max_retries": 0, "retry_backoff_seconds": 1,
+                'repair_turns': 0}
     return {key: settings.get(key, defaults.get(key)) for key in GENERATION_CONDITIONS}
 
 

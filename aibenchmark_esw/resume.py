@@ -15,6 +15,7 @@ _GENERATION_OPTIONS = {
     "request_timeout_seconds": "request_timeout", "max_retries": "max_retries",
     "retry_backoff_seconds": "retry_backoff", "prompt_strategy": "prompt_strategy",
     "review_turn": "review_turn",
+    'repair_turns': 'repair_turns',
     "input_cost_per_million": "input_cost_per_million", "output_cost_per_million": "output_cost_per_million",
 }
 _EXECUTION_OPTIONS = {
@@ -25,7 +26,7 @@ _RUN_OPTIONS: tuple[str, ...] = ("compiler", "allow_standard_fallback", "compile
                 "isolation", "memory_limit_bytes", "sanitizers", "save_solutions", "tasks_root",
                 "system_prompt_file", "target", "cross_compiler")
 _RUN_OPTIONS += ("warnings", "container_engine", "container_image", "static_analysis_timeout", "extended_safety_rules",
-                 "variant_seed", "heldout_tests")
+                 "variant_seed", "heldout_tests", 'api_key_env')
 _PATH_OPTIONS = {"save_solutions", "tasks_root", "system_prompt_file", "heldout_tests"}
 
 
@@ -83,7 +84,8 @@ def load_resume(args):
     settings = metadata.get("generation_settings")
     if settings is not None:
         defaults = {"temperature": None, "max_tokens": None, "request_timeout_seconds": 60,
-                    "max_retries": 0, "retry_backoff_seconds": 1, "prompt_strategy": "single", "review_turn": False}
+                    "max_retries": 0, "retry_backoff_seconds": 1, "prompt_strategy": "single", "review_turn": False,
+                    'repair_turns': 0}
         for key, option in _GENERATION_OPTIONS.items():
             _restore(args, option, settings.get(key, defaults.get(key)))
     for key, option in _EXECUTION_OPTIONS.items():
