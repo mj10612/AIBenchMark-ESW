@@ -150,7 +150,10 @@ finally:
             (root / 'tests').mkdir()
             (root / 'tests/test_quota.c').write_text('#include "unity.h"\nvoid quota(void);void setUp(void){}void tearDown(void){}void test_quota(void){quota();}int main(void){UNITY_BEGIN();RUN_TEST(test_quota);return UNITY_END();}', encoding='utf-8')
             task = replace(DatasetLoader().get_task('tier1_crc16'), task_dir=root)
-            code = '#include <stdio.h>\nvoid quota(void){char b[4096]={0};FILE *f=fopen("large","wb");if(!f)return;setvbuf(f,NULL,_IONBF,0);for(int i=0;i<4352;i++)fwrite(b,1,sizeof b,f);fclose(f);}'
+            # Container runtimes may inherit ignored SIGXFSZ. The default
+            # disposition tests kernel termination; ignored signals still
+            # enforce the same file cap through EFBIG (tested above).
+            code = '#include <stdio.h>\n#include <signal.h>\nvoid quota(void){signal(SIGXFSZ,SIG_DFL);char b[4096]={0};FILE *f=fopen("large","wb");if(!f)return;setvbuf(f,NULL,_IONBF,0);for(int i=0;i<4352;i++)fwrite(b,1,sizeof b,f);fclose(f);}'
             compiled, tests = ExecutionSandbox(isolation=mode, compiler_path='gcc').compile_and_test(task, code)
             self.addCleanup(compiled.cleanup)
             self.assertTrue(compiled.success, compiled.output)
