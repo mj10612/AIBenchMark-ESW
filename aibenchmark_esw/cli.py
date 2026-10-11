@@ -81,6 +81,16 @@ def _temperature(value: str) -> float:
     return number
 
 
+def _pass_k(value):
+    try:
+        items = [int(item.strip()) for item in value.split(',')]
+    except ValueError as error:
+        raise argparse.ArgumentTypeError('must be a comma-separated list of positive integers') from error
+    if not items or any(item < 1 for item in items) or len(set(items)) != len(items):
+        raise argparse.ArgumentTypeError('must contain distinct positive integers')
+    return items
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = _Parser(
         prog="aibenchmark-esw",
@@ -137,7 +147,7 @@ def build_parser() -> argparse.ArgumentParser:
     run_p.add_argument("--output-cost-per-million", type=_nonnegative_float, help="Custom output token price in USD per million")
     run_p.add_argument("--max-cost-usd", type=_nonnegative_float, help="Shared conservative request budget; requires --max-tokens and known pricing")
     run_p.add_argument("--samples", type=_positive_int, default=1, help="Independent full runs per task")
-    run_p.add_argument("--pass-k", type=str, help="Comma-separated pass@k values, each <= --samples")
+    run_p.add_argument("--pass-k", type=_pass_k, help="Comma-separated pass@k values, each <= --samples")
     run_p.add_argument("--variant-seed", type=int, help="Deterministic task variant seed")
     run_p.add_argument("--heldout-tests", type=Path, help="Private per-task tests root; excluded from prompts")
 
@@ -156,6 +166,7 @@ def build_parser() -> argparse.ArgumentParser:
     compare_p.add_argument("--output", type=Path, help="Save the comparison to a file")
     compare_p.add_argument("--baseline-model", help="Baseline model for JUnit regression assertions")
     compare_p.add_argument("--regression-threshold", type=_nonnegative_float, default=0.0)
+    compare_p.add_argument('--fail-on-regression', action='store_true', help='Save evidence, then exit 3 on a measured regression')
 
     aggregate_p = subparsers.add_parser("aggregate", help="Summarize independent repeated runs offline")
     aggregate_p.add_argument("--results", nargs="+", type=Path, required=True)
@@ -165,6 +176,7 @@ def build_parser() -> argparse.ArgumentParser:
     trend_p.add_argument("--results", nargs="+", type=Path, required=True)
     trend_p.add_argument("--format", choices=["cli", "markdown", "json", "csv", "html"], default="markdown")
     trend_p.add_argument("--regression-threshold", type=_nonnegative_float, default=0.0)
+    trend_p.add_argument('--fail-on-regression', action='store_true', help='Save evidence, then exit 3 on a measured regression')
     trend_p.add_argument("--output", type=Path)
     replay_p = subparsers.add_parser("replay", help="Re-evaluate saved candidates offline with fresh evaluator provenance")
     replay_p.add_argument("--results", type=Path, required=True)
@@ -317,7 +329,8 @@ def cmd_eval(args: argparse.Namespace) -> int:
     if asset_errors:
         model = "golden_reference" if args.reference else "local_solution" if args.solution else "starter_stub"
         result = failed_evaluation(task, model, "Task asset validation failed: " + "; ".join(asset_errors))
-        asset_metadata = {"run_status": "completed", "selected_tasks": [task.id], "pending_tasks": []}
+        asset_metadata = collect_run_metadata([task], static_analyzer=_new_analyzer(args))
+        asset_metadata.update(run_status="completed", selected_tasks=[task.id], pending_tasks=[])
         _save_checkpoint(output, [result], model, asset_metadata)
         _write_junit(args, [result], model, asset_metadata)
         print(BenchmarkReporter.generate_cli_table([result], model, asset_metadata))
@@ -357,9 +370,6 @@ def cmd_eval(args: argparse.Namespace) -> int:
         _save_checkpoint(output, [pending], model_name, metadata)
     interrupted = False
     try:
-        errors = validate_task_assets(task)
-        if errors:
-            raise ValueError("Task asset validation failed: " + "; ".join(errors))
         result = evaluate_task(task, solution_code, loader.get_reference_solution(task.id),
                                model_name, executor, analyzer)
     except KeyboardInterrupt:
@@ -401,7 +411,7 @@ def _input_roots(loader):
 
 
 def _select_tasks(loader, args):
-    tasks = loader.list_tasks(tier=args.tier, category=getattr(args, "category", None))
+    tasks = loader.list_tasks(tier=getattr(args, "tier", None), category=getattr(args, "category", None))
     if args.tasks is not None:
         selected_ids = [item.strip() for item in args.tasks.split(",")]
         if any(not item for item in selected_ids) or len(set(selected_ids)) != len(selected_ids):
@@ -454,7 +464,12 @@ def _cmd_run_once(args: argparse.Namespace) -> int:
     if not tasks:
         return 1
     if saved:
-        tasks = [loader.get_task(item) for item in saved["metadata"]["selected_tasks"]]
+        tasks = []
+        for item in saved["metadata"]["selected_tasks"]:
+            task = loader.get_task(item)
+            if task is None:
+                raise ValueError(f'Saved resume task is unavailable: {item}')
+            tasks.append(task)
     tasks = [_target_task(task, args) for task in tasks]
     solution_directory = getattr(args, "save_solutions", None)
     solution_paths = [] if solution_directory is None else [
@@ -695,6 +710,8 @@ def _dry_run(args, loader, tasks, system_prompt):
                "estimated_total_upper_usd": sum(row["estimated_cost_upper_usd"] for row in rows)
                    if all(row["estimated_cost_upper_usd"] is not None for row in rows) else None}
     if args.output:
+        if Path(args.output).exists() and Path(args.output).stat().st_size:
+            raise ValueError('Dry-run output already exists; choose a new output path to preserve the checkpoint')
         atomic_write_json(args.output, payload)
     print(json.dumps(payload, indent=2))
     return 0
@@ -765,11 +782,13 @@ def cmd_trend(args):
     if not paths:
         raise ValueError("Trend inputs contain no JSON reports")
     reports = [json.loads(path.read_text(encoding="utf-8")) for path in paths]
-    rendered = render_trend(trend_runs(reports, args.regression_threshold), args.format)
+    summary = trend_runs(reports, args.regression_threshold)
+    rendered = render_trend(summary, args.format)
     if args.output:
         atomic_write_text(args.output, rendered)
     print(rendered)
-    return 0
+    return 3 if getattr(args, 'fail_on_regression', False) and any(
+        run['regressions'] for group in summary['groups'] for run in group['runs']) else 0
 
 
 def cmd_replay(args):
@@ -847,6 +866,9 @@ def cmd_compare(args: argparse.Namespace) -> int:
         validate_output_paths([args.output], protected_files=args.results, protected_roots=_benchmark_roots(args))
         reports = [json.loads(Path(path).read_text(encoding="utf-8")) for path in args.results]
         comparison = compare_runs(reports)
+        from aibenchmark_esw.metrics.comparison import comparison_regressions
+        regressions = comparison_regressions(comparison, getattr(args, 'baseline_model', None),
+            getattr(args, 'regression_threshold', 0.0)) if getattr(args, 'fail_on_regression', False) else []
         rendered = render_comparison(comparison, args.format, baseline_model=getattr(args, "baseline_model", None),
                                      regression_threshold=getattr(args, "regression_threshold", 0.0))
         if args.output:
@@ -859,7 +881,7 @@ def cmd_compare(args: argparse.Namespace) -> int:
         for warning in comparison["warnings"]:
             print(f"Warning: {warning}", file=sys.stderr)
     sys.stdout.write(rendered + ("" if rendered.endswith("\n") else "\n"))
-    return 0
+    return 3 if regressions else 0
 
 
 def cmd_aggregate(args):
@@ -929,7 +951,7 @@ def main() -> None:
 
     try:
         exit_code = dispatch[args.command](args)
-    except (OSError, ValueError) as error:
+    except (OSError, ValueError, TypeError, KeyError, IndexError, AttributeError) as error:
         print(f"Error: {error}", file=sys.stderr)
         exit_code = 1
     except KeyboardInterrupt:

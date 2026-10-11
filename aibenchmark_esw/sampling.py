@@ -4,8 +4,6 @@ import json
 import tempfile
 import uuid
 import sys
-import statistics
-import math
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -13,6 +11,7 @@ from aibenchmark_esw.metrics.reporter import BenchmarkReporter
 from aibenchmark_esw.output_paths import validate_output_paths
 from aibenchmark_esw.report_io import atomic_write_json, atomic_write_text
 from aibenchmark_esw.metrics.junit import render_junit
+from aibenchmark_esw.metrics.statistics import score_statistics
 
 
 def pass_at_k(n, c, k):
@@ -39,12 +38,11 @@ def sampling_statistics(reports, ks):
             "mean_score": round(sum(value.scores.total_score for value in values) / n, 6),
             "pass_at_k": {str(k): pass_at_k(n, c, k) if k <= n else None for k in ks}}
         scores = [value.scores.total_score for value in values]
-        deviation = statistics.stdev(scores) if n > 1 else None
-        margin = 1.96 * deviation / math.sqrt(n) if deviation is not None else None
-        mean = statistics.mean(scores)
-        summary[task_id].update(sample_stddev=deviation,
-            approximate_95pct_mean_interval=[max(0, mean - margin), min(100, mean + margin)] if margin is not None else None,
-            interval_method="normal approximation; descriptive, especially unreliable for small N")
+        stats = score_statistics(scores)
+        interval = stats['mean_ci95_approx']
+        summary[task_id].update(sample_stddev=stats['sample_stddev'],
+            approximate_95pct_mean_interval=[interval['lower'], interval['upper']] if interval else None,
+            interval_method=interval['method'] if interval else 'Unavailable (one sample)')
     return summary
 
 
@@ -54,7 +52,7 @@ def run_samples(args, saved, run_once, protected_roots):
     n = args.samples
     if getattr(args, "temperature", None) == 0:
         print("Warning: multiple samples at temperature 0 may be redundant; independence depends on provider sampling.", file=sys.stderr)
-    ks = [int(item.strip()) for item in args.pass_k.split(",")] if args.pass_k else list(range(1, n + 1))
+    ks = args.pass_k if args.pass_k else list(range(1, n + 1))
     if not ks or len(set(ks)) != len(ks) or any(not 1 <= k <= n for k in ks):
         raise ValueError("--pass-k must contain distinct positive integers <= --samples")
     if saved and ks != saved["sampling"]["pass_k"]:
@@ -98,11 +96,13 @@ def run_samples(args, saved, run_once, protected_roots):
                 [result for sample in measured_reports for result in BenchmarkReporter.from_json_dict(sample)])
             wrapper["sampling"] = {"requested": n, "completed": len(samples), "pending": pending,
                                    "pass_k": ks, "statistics": sampling_statistics(samples, ks), "active_sample": active_sample}
+            if child['metadata']['run_status'] != 'completed':
+                wrapper['sampling']['active_report'] = copy.deepcopy(child)
             BenchmarkReporter.from_json_dict(wrapper)
             if args.output:
                 atomic_write_json(args.output, wrapper)
 
-        interrupted = aborted = False
+        interrupted = aborted = child_failed = False
         for index in list(pending):
             child_args = copy.copy(args)
             child_args.samples, child_args.pass_k = 1, None
@@ -118,6 +118,7 @@ def run_samples(args, saved, run_once, protected_roots):
                 child_args.save_solutions = Path(args.save_solutions) / f"sample-{index + 1:04d}"
             active_sample = index
             code = run_once(child_args)
+            child_failed = child_failed or code != 0
             if not sample_paths[index].is_file():
                 raise ValueError("Sample did not produce a checkpoint")
             child = json.loads(sample_paths[index].read_text(encoding="utf-8"))
@@ -131,14 +132,13 @@ def run_samples(args, saved, run_once, protected_roots):
             checkpoint(child, "interrupted" if interrupted else "aborted" if aborted else "running" if pending else "completed")
             if interrupted or aborted:
                 break
-        if wrapper is None:
-            wrapper = saved
-            if args.output and wrapper is not None:
-                atomic_write_json(args.output, wrapper)
+        if args.output and not pending and saved is not None:
+            atomic_write_json(args.output, wrapper)
+        assert wrapper is not None
         if args.junit_output:
             atomic_write_text(args.junit_output, render_junit(
                 [result for sample in samples for result in BenchmarkReporter.from_json_dict(sample)], args.model, wrapper["metadata"]))
         print(json.dumps(wrapper["sampling"], indent=2))
-        return 130 if interrupted else 1 if pending or any(
-            not BenchmarkReporter._all_tests_passed(result) for sample in samples
+        return 130 if interrupted else 1 if pending or child_failed or any(
+            not BenchmarkReporter._all_tests_passed(result) or result.error_log for sample in samples
             for result in BenchmarkReporter.from_json_dict(sample)) else 0

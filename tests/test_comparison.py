@@ -75,12 +75,13 @@ class TestComparison(unittest.TestCase):
     def test_legacy_missing_provenance_and_partial_usage_are_visible(self):
         first, second = self.report("one"), self.report("two")
         first.pop("metadata")
+        first.pop("generation_summary", None)  # Legacy reports did not save this derived summary.
         first["tasks"][0]["generation"] = {"usage": {"total_tokens": 50}, "latency_seconds": 1.25}
         comparison = compare_runs([first, second])
         markdown = render_comparison(comparison)
         self.assertIn("compatibility cannot be fully checked", markdown)
-        self.assertIn(f"50 (1/{len(first['tasks'])} tasks)", markdown)
-        self.assertIn(f"1.25 (1/{len(first['tasks'])} tasks)", markdown)
+        self.assertIn(f"50 (1/{len(first['tasks'])} task attempts)", markdown)
+        self.assertIn(f"1.25 (1/{len(first['tasks'])} task attempts)", markdown)
         self.assertIn("Unknown", markdown)
 
     def test_csv_round_trip_and_cli_output(self):

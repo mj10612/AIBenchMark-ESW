@@ -152,7 +152,7 @@ class ReportIntegrityTests(unittest.TestCase):
         self.assertEqual(summary['groups'][0]['runs'],2)
         self.assertEqual(summary['groups'][0]['statistics']['score']['mean'],75)
         interval=summary['groups'][0]['statistics']['score']['mean_ci95_approx']
-        self.assertEqual(interval['method'],'normal approximation; descriptive, small-sample uncertainty')
+        self.assertIn('Student-t', interval['method'])
         self.assertLess(interval['lower'],75)
         self.assertGreater(interval['upper'],75)
         comparison=compare_runs([wrapper,fixture_report(model='other')])

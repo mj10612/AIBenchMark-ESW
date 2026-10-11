@@ -8,12 +8,9 @@ from collections import defaultdict
 
 from aibenchmark_esw.metrics.comparison import compare_runs, generation_conditions
 from aibenchmark_esw.metrics.reporter import BenchmarkReporter
-from aibenchmark_esw.metrics.measurements import generation_sequence, measurement_summary, coverage_text
+from aibenchmark_esw.metrics.measurements import generation_sequence, measurement_summary, coverage_text, dimension_summary, dimension_text
 from aibenchmark_esw.metrics.statistics import score_statistics, interval_text
-
-
-def _stats(values):
-    return score_statistics(values)
+from aibenchmark_esw.metrics.text import csv_safe_row, markdown_text
 
 
 def aggregate_runs(reports):
@@ -99,7 +96,10 @@ def aggregate_runs(reports):
             dimensions["score"].append(summary["overall_score"])
             dimensions["pass_at_1_pct"].append(summary["pass_at_1_pct"])
             for dimension in ("functional", "memory", "safety"):
-                dimensions[dimension].append(sum(getattr(result.scores, dimension + "_score") for result in results) / len(results))
+                value = (sum(result.scores.functional_score for result in results) / len(results)
+                         if dimension == 'functional' else dimension_summary(results)[dimension])
+                if value is not None:
+                    dimensions[dimension].append(value)
             for result in results:
                 task_passes[result.task_id] += int(BenchmarkReporter._all_tests_passed(result))
                 generation = result.generation or {}
@@ -116,7 +116,7 @@ def aggregate_runs(reports):
             "resolved_model_sequence": list(identity) if identity else [],
             "generation_settings": json.loads(settings_key), "runs": count,
             "run_ids": [report["metadata"]["run_id"] for report, _ in samples],
-            "statistics": {key: _stats(values) for key, values in dimensions.items()},
+            "statistics": {key: score_statistics(values) for key, values in dimensions.items()},
             "task_success": [{"task_id": task_id, "passed_runs": passed, "runs": count,
                               "pass_rate_pct": round(passed / count * 100, 6)}
                              for task_id, passed in sorted(task_passes.items())],
@@ -125,6 +125,8 @@ def aggregate_runs(reports):
             "duration_tasks": len(durations), "task_attempts": count * len(task_passes),
         })
         rows[-1].update(measurement_summary([result for _, results in samples for result in results]))
+        coverage = dimension_summary([result for _, results in samples for result in results])
+        rows[-1].update({key: coverage[key] for key in ('memory_measured_attempts', 'safety_measured_attempts')})
     return {"schema_version": 1, "sampling_unit": "complete independent run",
             "task_ids": checked["task_ids"], "warnings": list(dict.fromkeys(warnings)),
             "groups": sorted(rows, key=lambda row: (row["model"], row["resolved_model"] or "",
@@ -158,7 +160,7 @@ def render_aggregation(summary, format_name="markdown"):
                 interval = stats['mean_ci95_approx']
                 for bound in ('lower','upper'):
                     row[key + '_mean_ci95_' + bound] = interval[bound] if interval else None
-            writer.writerow(row)
+            writer.writerow(csv_safe_row(row))
         return stream.getvalue()
     if format_name not in ("markdown", "cli"):
         raise ValueError(f"Unknown aggregation format: {format_name}")
@@ -172,7 +174,7 @@ def render_aggregation(summary, format_name="markdown"):
         score = group["statistics"]["score"]
         deviation = "Unavailable (one run)" if score["sample_stddev"] is None else f"{score['sample_stddev']:.2f}"
         resolved = (group["resolved_model"] or "Unknown resolved model").replace("\n", " ").replace("\r", " ")
-        group_heading = f"{label} / {resolved}"
+        group_heading = markdown_text(f"{label} / {resolved}") if format_name == 'markdown' else f"{label} / {resolved}"
         lines += ["", ("## " if format_name == "markdown" else "") + group_heading,
                   f"Runs: {group['runs']}; mean score: {score['mean']:.2f}; sample SD: {deviation}",
                   interval_text(score['mean_ci95_approx']),
@@ -181,8 +183,10 @@ def render_aggregation(summary, format_name="markdown"):
                   coverage_text(group),
                   f"Cost USD: {group['total_cost_usd']}; known subtotal {group['known_cost_usd']}; complete "
                   f"{group['cost_tasks']}/{group['task_attempts']} attempts; cost per passing task {group['cost_per_passed_task']}",
-                  "Dimension means (F/M/S): " + "/".join(f"{group['statistics'][key]['mean']:.2f}"
+                  "Dimension means (F/M/S): " + "/".join(dimension_text(group['statistics'][key]['mean'])
                                                            for key in ("functional", "memory", "safety")),
+                  f"Measured dimensions: memory {group['memory_measured_attempts']}/{group['task_attempts']}, "
+                  f"safety {group['safety_measured_attempts']}/{group['task_attempts']} task attempts.",
                   "Dimension sample SD (F/M/S): " + "/".join(
                       "Unavailable" if group["statistics"][key]["sample_stddev"] is None else
                       f"{group['statistics'][key]['sample_stddev']:.2f}" for key in ("functional", "memory", "safety")),
@@ -192,6 +196,6 @@ def render_aggregation(summary, format_name="markdown"):
                   f"({group['duration_tasks']}/{group['task_attempts']} attempts)", "",
                   "| Task | Full passes | Success (%) |", "| :--- | ---: | ---: |"]
         for task in group["task_success"]:
-            label = task["task_id"].replace("|", "\\|").replace("\r", " ").replace("\n", " ")
+            label = markdown_text(task['task_id'])
             lines.append(f"| {label} | {task['passed_runs']}/{task['runs']} | {task['pass_rate_pct']:.2f} |")
     return "\n".join(lines)

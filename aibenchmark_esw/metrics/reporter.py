@@ -1,6 +1,7 @@
 from typing import List, Dict, Any
 from typing import Optional
 from dataclasses import asdict
+from aibenchmark_esw.metrics.text import markdown_text
 from aibenchmark_esw.metrics.validation import validate_task_result, validate_composite_score, validate_run_state
 from aibenchmark_esw.models import (
     TaskEvaluationResult, TestResult, SizeMetrics, StaticSafetyMetrics, DimensionScores, TaskWeights, TaskLimits,
@@ -75,7 +76,9 @@ class BenchmarkReporter:
                     raise ValueError("Invalid generation_summary measurement: " + key)
         results = []
         samples = data.get("samples")
-        if samples is not None:
+        if 'sampling' in data and 'samples' not in data:
+            raise ValueError('sampling requires a samples array')
+        if 'samples' in data:
             if not isinstance(samples, list):
                 raise ValueError("samples must be an array of independent reports")
             for sample in samples:
@@ -93,7 +96,7 @@ class BenchmarkReporter:
                     or any(isinstance(index, bool) or not isinstance(index, int) or not 0 <= index < requested for index in pending)
                     or len(set(pending)) != len(pending) or len(pending) != requested - completed):
                 raise ValueError("sampling counts and pending indexes must match the independent samples")
-            if (data.get("metadata") or {}).get("run_status") == "completed" and pending:
+            if (data.get("metadata") or {}).get("run_status") == "completed" and (pending or not samples):
                 raise ValueError("Completed sampling collections cannot contain pending samples")
             active_sample = sampling.get("active_sample")
             if active_sample is not None and (isinstance(active_sample, bool) or not isinstance(active_sample, int)
@@ -114,6 +117,15 @@ class BenchmarkReporter:
                         or sample.get("model_name") != data.get("model_name")
                         or {item["task_id"] for item in sample["tasks"]} != task_ids):
                     raise ValueError("Independent samples must be completed reports with the same model and task set")
+                from aibenchmark_esw.metrics.comparison import validate_collection_conditions
+                validate_collection_conditions(data, sample)
+            active = sampling.get('active_report')
+            if active is not None:
+                if not isinstance(active, dict) or 'samples' in active or active_sample is None:
+                    raise ValueError('active_report must describe the active pending sample')
+                BenchmarkReporter.from_json_dict(active)
+                from aibenchmark_esw.metrics.comparison import validate_collection_conditions
+                validate_collection_conditions(data, active)
             if "statistics" in sampling:
                 from aibenchmark_esw.sampling import sampling_statistics
                 expected_statistics = sampling_statistics(samples, pass_k)
@@ -199,7 +211,31 @@ class BenchmarkReporter:
             raise ValueError("Duplicate task IDs in a report")
         validate_run_state(data.get("metadata") or {}, results)
         from aibenchmark_esw.metrics.measurements import measurement_summary
-        measurement_summary(results)  # Validate optional measurements before consumers.
+        expected_summary = measurement_summary(results)
+        if 'samples' in data:
+            assert isinstance(samples, list)
+            measured = [item for sample in samples for item in BenchmarkReporter.from_json_dict(sample)]
+            active = data['sampling'].get('active_report')
+            if active is not None:
+                measured += BenchmarkReporter.from_json_dict(active)
+            expected_summary = measurement_summary(measured)
+        if 'generation_summary' in data:
+            import math
+            # Old interrupted collections may include spending from an active
+            # child saved only beside the wrapper. Keep it explicitly unverified.
+            unverifiable = ('samples' in data and data['sampling'].get('active_sample') is not None
+                            and data['sampling'].get('active_report') is None)
+            if not unverifiable:
+                for key, expected in expected_summary.items():
+                    recorded = data['generation_summary'].get(key)
+                    if expected is None or recorded is None:
+                        matches = expected is recorded
+                    else:
+                        matches = math.isclose(recorded, expected, rel_tol=1e-9, abs_tol=1e-6)
+                        if isinstance(expected, int) and key not in ('total_cost_usd', 'known_cost_usd'):
+                            matches = matches and isinstance(recorded, int) and not isinstance(recorded, bool)
+                    if not matches:
+                        raise ValueError('generation_summary disagrees with task/sample measurements: ' + key)
         return results
 
     @staticmethod
@@ -213,12 +249,14 @@ class BenchmarkReporter:
         all_passed_tasks = sum(1 for r in results if BenchmarkReporter._all_tests_passed(r))
 
         avg_func = sum(r.scores.functional_score for r in results) / total_tasks
-        avg_mem = sum(r.scores.memory_score for r in results) / total_tasks
-        avg_safe = sum(r.scores.safety_score for r in results) / total_tasks
+        from aibenchmark_esw.metrics.measurements import dimension_summary, dimension_text
+        dimensions = dimension_summary(results)
+        avg_mem = dimension_text(dimensions['memory'])
+        avg_safe = dimension_text(dimensions['safety'])
         avg_total = sum(r.scores.total_score for r in results) / total_tasks
 
         md = []
-        md.append(f"# AIBenchMark-ESW Benchmark Report: `{model_name}`\n")
+        md.append(f"# AIBenchMark-ESW Benchmark Report: {markdown_text(model_name)}\n")
         md += BenchmarkReporter.sampling_lines(metadata)
         warning = BenchmarkReporter.run_warning(metadata)
         if warning:
@@ -252,8 +290,10 @@ class BenchmarkReporter:
         md.append("| Dimension | Average Score | Weight |")
         md.append("| :--- | :--- | :--- |")
         md.append(f"| **Functional Correctness** | {avg_func:.2f} / 100 | {BenchmarkReporter._weight_summary(results, 'functional')} |")
-        md.append(f"| **Memory Efficiency** | {avg_mem:.2f} / 100 | {BenchmarkReporter._weight_summary(results, 'memory')} |")
-        md.append(f"| **Safety & Code Rules** | {avg_safe:.2f} / 100 | {BenchmarkReporter._weight_summary(results, 'safety')} |")
+        md.append(f"| **Memory Efficiency** | {avg_mem} / 100 | {BenchmarkReporter._weight_summary(results, 'memory')} |")
+        md.append(f"| **Safety & Code Rules** | {avg_safe} / 100 | {BenchmarkReporter._weight_summary(results, 'safety')} |")
+        md.append(f"Measured dimensions: memory {dimensions['memory_measured_attempts']}/{total_tasks}, "
+                  f"safety {dimensions['safety_measured_attempts']}/{total_tasks} task attempts.\n")
         md.append(f"| **Composite Score** | **{avg_total:.2f} / 100** | 100% |\n")
 
         md.append("### Detailed Task Breakdown")
@@ -271,7 +311,7 @@ class BenchmarkReporter:
             safe_str = f"Err:{r.safety_metrics.error_count}, Warn:{r.safety_metrics.warning_count}"
             score_str = f"**{r.scores.total_score:.1f}**"
             time_str = f"{r.execution_time_sec:.2f}s"
-            md.append(f"| {r.tier} | `{r.task_id}` | {BenchmarkReporter._standard(r)} | {BenchmarkReporter._task_weights(r)} | {status_comp} | {test_str} | {mem_str} | {safe_str} | {score_str} | {time_str} |")
+            md.append(f"| {r.tier} | {markdown_text(r.task_id)} | {BenchmarkReporter._standard(r)} | {BenchmarkReporter._task_weights(r)} | {status_comp} | {test_str} | {mem_str} | {safe_str} | {score_str} | {time_str} |")
 
         for r in results:
             if r.footprint_target != "host" and r.limits is not None:
@@ -359,7 +399,7 @@ class BenchmarkReporter:
             lines.append(f"{task_id}: {stats['attempts']} samples; {stats['passed']} passes; mean score {stats['mean_score']}; "
                          f"sample SD {stats.get('sample_stddev')}; approximate 95% mean interval {stats.get('approximate_95pct_mean_interval')}; "
                          f"Pass@k (%) {json.dumps(pass_k, sort_keys=True)}")
-        lines.append('Intervals use a normal approximation; descriptive and especially unreliable for small samples.')
+        lines.append('Intervals use Student-t critical values and assume independent samples; one-sample intervals are unavailable.')
         return lines + ['']
 
     @staticmethod
@@ -367,7 +407,11 @@ class BenchmarkReporter:
         metadata = metadata or {}
         if metadata.get("run_status") in ("running", "interrupted", "aborted"):
             if metadata.get('sampling'):
-                return f"Run status: {metadata['run_status']}; {len(metadata['sampling']['pending'])} samples pending. This collection is unfinished."
+                sampling = metadata['sampling']
+                warning = f"Run status: {metadata['run_status']}; {len(sampling['pending'])} samples pending. This collection is unfinished."
+                if sampling.get('active_sample') is not None and sampling.get('active_report') is None:
+                    warning += ' Active sample measurements are unverified because its report is not embedded; spending is a recorded subtotal.'
+                return warning
             return (f"Run status: {metadata['run_status']}; {len(metadata.get('pending_tasks', []))} "
                     "tasks pending (included as zero). This run is unfinished.")
         return None

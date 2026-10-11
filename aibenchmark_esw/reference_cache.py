@@ -60,7 +60,8 @@ class ReferenceCache:
                     record = ReferenceValidation(size.flash_bytes, size.ram_bytes)
             except (OSError, ValueError) as error:
                 record = ReferenceValidation(error=str(error))
-            self._records[key] = record
+            if record.error is None:
+                self._records[key] = record
             return record, False
 
 

@@ -17,7 +17,9 @@
         "completed": {"type": "integer", "minimum": 0},
         "pending": {"type": "array", "items": {"type": "integer", "minimum": 0}, "uniqueItems": true},
         "pass_k": {"type": "array", "items": {"type": "integer", "minimum": 1}, "uniqueItems": true},
-        "statistics": {"type": "object"}
+        "statistics": {"type": "object"},
+        "active_sample": {"type": ["integer", "null"], "minimum": 0},
+        "active_report": {"allOf": [{"$ref": "#"}, {"not": {"required": ["samples"]}}]}
       },
       "required": ["requested", "completed", "pending"]
     },

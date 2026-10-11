@@ -11,6 +11,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from aibenchmark_esw import __version__
+from aibenchmark_esw.resources import data_root
 from aibenchmark_esw.sandbox.static_analyzer import StaticAnalyzer
 from aibenchmark_esw.metrics.scorer import SCORING_FORMULA_VERSION, SAFETY_ERROR_PENALTY, SAFETY_WARNING_PENALTY
 
@@ -101,18 +102,21 @@ def _checkout_provenance(package_dir):
     return revision, bool(status) if status is not None else None
 
 
-def collect_run_metadata(tasks, executor, generation_settings=None, static_analyzer=None):
-    compiler = Path(executor.compiler_path).stem.lower()
+def collect_run_metadata(tasks, executor=None, generation_settings=None, static_analyzer=None):
+    compiler, version = None, None
+    if executor is not None:
+        compiler = Path(executor.compiler_path).stem.lower()
     if callable(getattr(executor, "compiler_identity", None)):
         identity = executor.compiler_identity()
         compiler, version = identity["name"], identity["version"]
-    else:
+    elif executor is not None:
         version = _command_output([executor.compiler_path, "/?" if compiler == "cl" else
                                    "-v" if compiler == "tcc" else "--version"])
     fingerprints, unreadable_assets = {}, {}
     for task in tasks:
         errors: list = []
-        fingerprints[task.id] = task_sha256(task, executor.unity_dir, unreadable=errors)
+        unity_dir = executor.unity_dir if executor is not None else data_root() / "third_party" / "unity"
+        fingerprints[task.id] = task_sha256(task, unity_dir, unreadable=errors)
         if errors:
             unreadable_assets[task.id] = errors
     analyzer = static_analyzer or StaticAnalyzer()
@@ -132,8 +136,9 @@ def collect_run_metadata(tasks, executor, generation_settings=None, static_analy
         "platform": {"system": platform.system(), "release": platform.release(), "machine": platform.machine()},
         "compiler": {"name": compiler, "version": version.splitlines()[0] if version else None,
                      "target": executor.cross.settings() if getattr(executor, "cross", None) else {"target": "host"},
-                     "optimization": "/O1" if compiler == "cl" else "native" if compiler == "tcc" else "-Os",
-                     "allow_standard_fallback": executor.allow_standard_fallback},
+                     "optimization": (None if compiler is None else
+                                      "/O1" if compiler == "cl" else "native" if compiler == "tcc" else "-Os"),
+                     "allow_standard_fallback": getattr(executor, "allow_standard_fallback", None)},
         "static_analysis": {"engine": "builtin+cppcheck" if analyzer.cppcheck_cmd else "builtin",
                             "cppcheck_version": cppcheck_version, "configuration": analyzer.configuration()},
         "source_revision": revision, "source_dirty": dirty,

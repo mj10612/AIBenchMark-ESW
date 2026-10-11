@@ -3,6 +3,21 @@
 import math
 
 
+def dimension_summary(results):
+    """Standalone dimensions are unavailable when any attempt was unmeasured."""
+    memory = [r for r in results if r.compiled and r.test_result.completed and r.size_metrics.measured]
+    safety = [r for r in results if r.safety_metrics.cppcheck_status in ('disabled', 'completed')]
+    return {'memory': round(sum(r.scores.memory_score for r in memory) / len(memory), 6)
+            if memory and len(memory) == len(results) else None,
+            'safety': round(sum(r.scores.safety_score for r in safety) / len(safety), 6)
+            if safety and len(safety) == len(results) else None,
+            'memory_measured_attempts': len(memory), 'safety_measured_attempts': len(safety)}
+
+
+def dimension_text(value):
+    return f'{value:.2f}' if value is not None else 'Unavailable'
+
+
 def generation_sequence(generation):
     turns = generation.get('turns')
     if turns:

@@ -6,8 +6,9 @@ import math
 from dataclasses import asdict
 
 from aibenchmark_esw.metrics.reporter import BenchmarkReporter
-from aibenchmark_esw.metrics.measurements import measurement_summary, portable_settings, coverage_text
+from aibenchmark_esw.metrics.measurements import measurement_summary, portable_settings, coverage_text, dimension_summary, dimension_text
 from aibenchmark_esw.metrics.statistics import score_statistics, interval_text
+from aibenchmark_esw.metrics.text import csv_safe_row, markdown_text
 
 
 GENERATION_CONDITIONS = ("temperature", "max_tokens", "request_timeout_seconds",
@@ -22,6 +23,33 @@ def generation_conditions(metadata):
     # Defaults preserve comparison with the original one-turn report format.
     defaults = {"prompt_strategy": "single", "review_turn": False, "max_retries": 0, "retry_backoff_seconds": 1}
     return {key: settings.get(key, defaults.get(key)) for key in GENERATION_CONDITIONS}
+
+
+def validate_collection_conditions(wrapper, child):
+    """A collection's declared conditions must describe its contributing runs."""
+    first, second = wrapper.get('metadata') or {}, child.get('metadata') or {}
+    for key in ('dataset_sha256', 'evaluator_sha256', 'benchmark_version', 'task_fingerprints',
+                'compiler', 'static_analysis', 'execution_settings', 'scoring_policy', 'contamination_controls'):
+        left, right = first.get(key), second.get(key)
+        if key in ('compiler', 'execution_settings'):
+            left, right = portable_settings(left), portable_settings(right)
+        if left != right:
+            raise ValueError('Collection child has incompatible ' + key)
+    for key in ('system', 'machine', 'release'):
+        if (first.get('platform') or {}).get(key) != (second.get('platform') or {}).get(key):
+            raise ValueError('Collection child has incompatible platform ' + key)
+    if generation_conditions(first) != generation_conditions(second):
+        raise ValueError('Collection child has incompatible generation conditions')
+    children = {item['task_id']: item for item in child['tasks']}
+    for item in wrapper['tasks']:
+        other = children.get(item['task_id'])
+        if other is None:
+            continue  # An active child may still have a pending task slot.
+        for key in ('limits', 'weights', 'target_standard', 'footprint_target'):
+            if item.get(key) != other.get(key):
+                raise ValueError('Collection child has incompatible task ' + key)
+        if (item.get('provenance') or {}).get('task_sha256') != (other.get('provenance') or {}).get('task_sha256'):
+            raise ValueError('Collection child has incompatible task fingerprint')
 
 
 def compare_runs(reports, *, _allow_repeated_models=False, _check_generation=True):
@@ -120,6 +148,8 @@ def compare_runs(reports, *, _allow_repeated_models=False, _check_generation=Tru
     for report, results, _, _, provenance in runs:
         sample_results = [BenchmarkReporter.from_json_dict(sample) for sample in report['samples']] if 'samples' in report else [results]
         if 'samples' in report:
+            if not report['samples']:
+                raise ValueError('Cannot compare an unfinished collection with no completed samples')
             compare_runs(report['samples'], _allow_repeated_models=True)
         all_results = [result for sample in sample_results for result in sample]
         tokens, durations = [], []
@@ -154,7 +184,7 @@ def compare_runs(reports, *, _allow_repeated_models=False, _check_generation=Tru
                 "total": round(sum(attempt.scores.total_score for attempt in attempts) / count, 6),
                 "functional": round(sum(attempt.scores.functional_score for attempt in attempts) / count, 6),
                 "memory": round(sum(attempt.scores.memory_score for attempt in attempts) / count, 6) if all(attempt.size_metrics.measured for attempt in attempts) else None,
-                "safety": round(sum(attempt.scores.safety_score for attempt in attempts) / count, 6),
+                "safety": dimension_summary(attempts)['safety'],
                 "measured": all(attempt.size_metrics.measured for attempt in attempts),
                 "pass_at_1": passed == count, "samples": count, "passed_samples": passed,
                 "pass_at_k": task_pass_k})
@@ -178,6 +208,11 @@ def compare_runs(reports, *, _allow_repeated_models=False, _check_generation=Tru
             "origin_run_id": (report.get("metadata") or {}).get("origin_run_id"),
         })
         rows[-1].update(measurement_summary(all_results))
+        rows[-1].update(dimension_summary(all_results))
+        if rows[-1]['memory'] is None or rows[-1]['safety'] is None:
+            warnings.append(f"{report['model_name']}: standalone dimensions are unavailable; "
+                            f"memory measured {rows[-1]['memory_measured_attempts']}/{len(all_results)}, "
+                            f"safety measured {rows[-1]['safety_measured_attempts']}/{len(all_results)} attempts.")
         if rows[-1]["run_mode"] == "replay":
             warnings.append(f"{report['model_name']}: offline replay of {rows[-1]['origin_run_id']}; fixed candidate grading, no new generation or spend.")
         if rows[-1]["usage_tasks"] < len(all_results):
@@ -193,6 +228,15 @@ def compare_runs(reports, *, _allow_repeated_models=False, _check_generation=Tru
             "models": sorted(rows, key=lambda row: (-row["score"], row["model"]))}
 
 
+def comparison_regressions(comparison, baseline_model=None, regression_threshold=0.0):
+    baseline_model = baseline_model or comparison['models'][0]['model']
+    baseline = {row['task_id']: row for row in comparison['task_rows'] if row['model'] == baseline_model}
+    if not baseline:
+        raise ValueError('Baseline model is absent from comparison')
+    return [dict(model=row['model'], task_id=row['task_id'], delta=row['total'] - baseline[row['task_id']]['total'])
+            for row in comparison['task_rows'] if row['total'] - baseline[row['task_id']]['total'] < -regression_threshold]
+
+
 def render_comparison(comparison, format_name="markdown", *, baseline_model=None, regression_threshold=0.0):
     if format_name == "html":
         from aibenchmark_esw.metrics.exports import summary_html
@@ -206,25 +250,25 @@ def render_comparison(comparison, format_name="markdown", *, baseline_model=None
                                                    "safety", "measured", "pass_at_1"],
                                 extrasaction="ignore", lineterminator="\n")
         writer.writeheader()
-        writer.writerows(comparison["task_rows"])
+        writer.writerows(csv_safe_row(row) for row in comparison['task_rows'])
         return stream.getvalue()
     if format_name == "csv":
         stream = io.StringIO(newline="")
         writer = csv.DictWriter(stream, fieldnames=list(comparison["models"][0]), lineterminator="\n")
         writer.writeheader()
-        writer.writerows(comparison["models"])
+        writer.writerows(csv_safe_row(row) for row in comparison['models'])
         return stream.getvalue()
     if format_name == "cli":
         lines = ["AIBenchMark-ESW Model Comparison", "=" * 94,
                  f"{'Model':<32} {'Score':>8} {'Pass@1':>8} {'F/M/S':>20} {'Provenance':>12}"]
         for row in comparison["models"]:
             model = row["model"].replace("\r", " ").replace("\n", " ")
-            dimensions = f"{row['functional']:.1f}/{row['memory']:.1f}/{row['safety']:.1f}"
+            dimensions = f"{row['functional']:.1f}/{dimension_text(row['memory'])}/{dimension_text(row['safety'])}"
             lines.append(f"{model:<32} {row['score']:>8.2f} {row['pass_at_1_pct']:>7.2f}% {dimensions:>20} {row['provenance']:>12}")
         lines += ["", "Failed tasks remain in the denominator."]
         lines += [f"{row['model']} generation settings: {row['generation_settings']}; tokens: {row['total_tokens']} "
-                  f"(known subtotal {row['known_total_tokens']}; complete {row['usage_tasks']}/{row['tasks']}); "
-                  f"cost USD: {row['total_cost_usd']} (known subtotal {row['known_cost_usd']}; complete {row['cost_tasks']}/{row['tasks']})"
+                  f"(known subtotal {row['known_total_tokens']}; complete {row['usage_tasks']}/{row['task_attempts']}); "
+                  f"cost USD: {row['total_cost_usd']} (known subtotal {row['known_cost_usd']}; complete {row['cost_tasks']}/{row['task_attempts']})"
                   for row in comparison["models"]]
         lines += [row['model'] + ': ' + coverage_text(row) for row in comparison['models']]
         lines += [f"{row['model']}: {row['samples']} samples; sample SD {row['score_sample_stddev']}; " + interval_text(row['score_mean_ci95_approx']) + f"; Pass@k (%) {row['pass_at_k']}" for row in comparison['models']]
@@ -240,19 +284,19 @@ def render_comparison(comparison, format_name="markdown", *, baseline_model=None
     lines += ["| Model | Score | Pass@1 (%) | Functional | Memory | Safety | Tokens | Generation (s) | Provenance |",
               "| :--- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | :--- |"]
     for row in comparison["models"]:
-        model = row["model"].replace("|", "\\|").replace("\r", " ").replace("\n", " ")
-        tokens = (f"Unknown (known subtotal {row['known_total_tokens']} ({row['usage_tasks']}/{row['tasks']} tasks); complete coverage)"
+        model = markdown_text(row['model'])
+        tokens = (f"Unknown (known subtotal {row['known_total_tokens']} ({row['usage_tasks']}/{row['task_attempts']} task attempts); complete coverage)"
                   if row["total_tokens"] is None else str(row["total_tokens"]))
         duration = "Unknown" if row["generation_seconds"] is None else str(row["generation_seconds"])
-        if row["total_tokens"] is not None and row["usage_tasks"] < row["tasks"]:
-            tokens += f" ({row['usage_tasks']}/{row['tasks']} tasks)"
-        if row["generation_seconds"] is not None and row["duration_tasks"] < row["tasks"]:
-            duration += f" ({row['duration_tasks']}/{row['tasks']} tasks)"
-        lines.append(f"| {model} | {row['score']:.2f} | {row['pass_at_1_pct']:.2f} | {row['functional']:.2f} | {row['memory']:.2f} | {row['safety']:.2f} | {tokens} | {duration} | {row['provenance']} |")
+        if row["total_tokens"] is not None and row["usage_tasks"] < row["task_attempts"]:
+            tokens += f" ({row['usage_tasks']}/{row['task_attempts']} task attempts)"
+        if row["generation_seconds"] is not None and row["duration_tasks"] < row["task_attempts"]:
+            duration += f" ({row['duration_tasks']}/{row['task_attempts']} task attempts)"
+        lines.append(f"| {model} | {row['score']:.2f} | {row['pass_at_1_pct']:.2f} | {row['functional']:.2f} | {dimension_text(row['memory'])} | {dimension_text(row['safety'])} | {tokens} | {duration} | {row['provenance']} |")
     lines += _task_matrix(comparison, markdown=True)
     lines += ["", "### Generation conditions"] + [f"- {row['model']}: {row['generation_settings']}" for row in comparison["models"]]
     lines += ["", "### Generation costs"] + [f"- {row['model']}: USD {row['total_cost_usd']}; known subtotal {row['known_cost_usd']}; "
-                                              f"complete {row['cost_tasks']}/{row['tasks']} tasks; cost per passing task {row['cost_per_passed_task']}"
+                                              f"complete {row['cost_tasks']}/{row['task_attempts']} task attempts; cost per passing task {row['cost_per_passed_task']}"
                                               for row in comparison['models']]
     lines += ["", "### Request and turn coverage"] + [row['model'] + ': ' + coverage_text(row) for row in comparison['models']]
     lines += ['', '### Independent sample estimates'] + [f"- {row['model']}: {row['samples']} samples; sample SD {row['score_sample_stddev']}; " + interval_text(row['score_mean_ci95_approx']) + f"; Pass@k (%) {row['pass_at_k']}" for row in comparison['models']]
@@ -261,7 +305,7 @@ def render_comparison(comparison, format_name="markdown", *, baseline_model=None
 
 def _task_matrix(comparison, markdown):
     def clean(value):
-        return str(value).replace("|", "\\|").replace("\r", " ").replace("\n", " ")
+        return markdown_text(value) if markdown else str(value).replace('\r', ' ').replace('\n', ' ')
     ids = comparison["task_ids"]
     lines = ["", "### Per-task totals" if markdown else "Per-task totals", ""]
     if markdown:
