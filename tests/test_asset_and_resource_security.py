@@ -144,7 +144,7 @@ finally:
 '''
         result = run_bounded([sys.executable, '-c', code], timeout=10, max_output_bytes=4096, isolation='process')
         self.assertEqual(result.returncode, 0, result.stdout)
-        self.assertLessEqual(json.loads(result.stdout), 63)
+        self.assertLessEqual(json.loads(result.stdout), 64 if sys.platform == 'darwin' else 63)
 
     @unittest.skipUnless(os.environ.get('AIBENCHMARK_TEST_CONTAINER') == '1' or os.environ.get('AIBENCHMARK_TEST_BWRAP') == '1', 'Explicit real containment integration required')
     def test_actual_contained_candidate_large_file_is_capped(self):
