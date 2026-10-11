@@ -53,6 +53,7 @@ class ContainmentBackend:
                 "mount_scope": "ephemeral-workspace", "capabilities": "none", "no_new_privileges": True,
                 "user": self.user if self.mode == "container" else "current-user-namespace",
                 "pids_limit": 64, "file_size_bytes": 16777216, "core_bytes": 0, "open_files": 256,
+                "process_limit_scope": "container-cgroup" if self.mode == "container" else "uid-rlimit",
                 "tmpfs_bytes": 67108864, "runtime_workspace": "read-only with bounded scratch and receipt",
                 "default_memory_bytes": 536870912 if self.mode == "container" else None, "cpus": 1 if self.mode == "container" else None}
 
@@ -127,7 +128,10 @@ class ContainmentBackend:
                           "--tmpfs=/tmp:rw,nosuid,nodev,size=64m", "--mount",
                           mount.getvalue(),
                           "--workdir", inner_cwd]
-            invocation += ["--ulimit=nproc=64:64", "--ulimit=fsize=16777216:16777216",
+            # --pids-limit bounds this container, including threads. NPROC
+            # counts the host UID across containers and can prevent runc exec
+            # even when this container has only one process.
+            invocation += ["--ulimit=fsize=16777216:16777216",
                            "--ulimit=core=0:0", "--ulimit=nofile=256:256"]
             if running_candidate:
                 invocation += ["--tmpfs=/workspace/scratch:rw,nosuid,nodev,size=64m,mode=0700,uid=" + self.user.split(':')[0] + ",gid=" + self.user.split(':')[1]]

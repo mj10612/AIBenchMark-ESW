@@ -24,19 +24,33 @@ class TestAssetAndResourceSecurity(unittest.TestCase):
             (root / 'tests').mkdir()
             (root / 'tests/test_limits.c').write_text('#include "unity.h"\nint limits(void);void setUp(void){}void tearDown(void){}void test_limits(void){TEST_ASSERT_EQUAL(1,limits());}int main(void){UNITY_BEGIN();RUN_TEST(test_limits);return UNITY_END();}', encoding='utf-8')
             task = replace(DatasetLoader().get_task('tier1_crc16'), task_dir=root)
-            code = '''#include <sys/resource.h>
+            code = '''#define _POSIX_C_SOURCE 200809L
+#include <sys/resource.h>
 #include <sys/statvfs.h>
+#include <sys/wait.h>
+#include <unistd.h>
+#include <signal.h>
 #include <stdio.h>
 int limits(void){struct rlimit l;struct statvfs v;
 if(getrlimit(RLIMIT_FSIZE,&l)||l.rlim_cur!=16777216)return 0;
 if(getrlimit(RLIMIT_CORE,&l)||l.rlim_cur!=0)return 0;
-if(getrlimit(RLIMIT_NPROC,&l)||l.rlim_cur!=64)return 0;
+PROCESS_LIMIT_CHECK
 if(getrlimit(RLIMIT_NOFILE,&l)||l.rlim_cur!=256)return 0;
 if(statvfs("/tmp",&v)||(unsigned long long)v.f_blocks*v.f_frsize>67108864)return 0;
 if(statvfs(".",&v)||(unsigned long long)v.f_blocks*v.f_frsize>67108864)return 0;
 FILE *f=fopen("../unexpected", "w");if(f){fclose(f);return 0;}
-f=fopen("permitted", "w");if(!f)return 0;fclose(f);return 1;}
+f=fopen("permitted", "w");if(!f)return 0;fclose(f);
+pid_t children[80];int count=0;
+for(int i=0;i<80;i++){pid_t pid=fork();if(pid<0)break;
+if(pid==0){pause();_exit(0);}children[count++]=pid;}
+for(int i=0;i<count;i++){kill(children[i],SIGKILL);waitpid(children[i],NULL,0);}
+printf("forked children=%d\\n",count);return count>0 && count<=63;}
 '''
+            process_check = '''FILE *p=fopen("/sys/fs/cgroup/pids.max","r");
+if(!p)p=fopen("/sys/fs/cgroup/pids/pids.max","r");
+unsigned long cap=0;if(!p)return 0;int scanned=fscanf(p,"%lu",&cap);fclose(p);
+if(scanned!=1 || cap!=64)return 0;''' if mode == 'container' else 'if(getrlimit(RLIMIT_NPROC,&l)||l.rlim_cur!=64)return 0;'
+            code = code.replace('PROCESS_LIMIT_CHECK', process_check)
             compiled, tests = ExecutionSandbox(isolation=mode, compiler_path='gcc').compile_and_test(task, code)
             self.addCleanup(compiled.cleanup)
             self.assertTrue(compiled.success, compiled.output)
@@ -197,6 +211,8 @@ return capped && s.st_size==16777216;}
                 backend.run(['/workspace/test'], cwd=scratch, timeout=2, max_output_bytes=4096)
                 invocation = runner.call_args_list[0].args[0]
             self.assertIn('--memory=536870912', invocation)
+            self.assertIn('--pids-limit=64', invocation)
+            self.assertFalse(any(value.startswith('--ulimit=nproc=') for value in invocation))
             self.assertIn('--ulimit=fsize=16777216:16777216', invocation)
             self.assertTrue(any('target=/workspace,readonly' in value for value in invocation))
             self.assertTrue(any(value.startswith('--tmpfs=/workspace/scratch:') for value in invocation))

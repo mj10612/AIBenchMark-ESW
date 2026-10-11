@@ -140,8 +140,10 @@ so concurrent launches share the allowance; neither constrains privileged users.
 Native Windows Jobs cap the job at 64 active processes; Windows native has no
 RLIMIT_FSIZE/core equivalent and reports those controls unavailable. Native
 execution still permits host files/network access. Docker/Podman use a 512 MiB
-default memory cap with no additional swap, 64 container PIDs and explicit
-nproc/fsize/core/nofile limits. Container/bwrap runtime workspaces are read-only
+default memory cap with no additional swap, 64 container PIDs/threads through the
+container cgroup, and explicit fsize/core/nofile limits. Docker NPROC is omitted
+because its host-UID scope interferes with unrelated processes; the cgroup caps
+each container independently. Container/bwrap runtime workspaces are read-only
 with 64 MiB scratch and /tmp tmpfs mounts. A narrow writable receipt file is capped
 by the file-size limit. Compilation workspaces remain writable for trusted compiler
 outputs. POSIX per-file limits do not bound total native disk use; choose external
