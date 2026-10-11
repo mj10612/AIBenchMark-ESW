@@ -5,11 +5,16 @@ import io
 import math
 from dataclasses import asdict
 
+from aibenchmark_esw.metrics.measurements import (
+    coverage_text,
+    dimension_summary,
+    dimension_text,
+    measurement_summary,
+    portable_settings,
+)
 from aibenchmark_esw.metrics.reporter import BenchmarkReporter
-from aibenchmark_esw.metrics.measurements import measurement_summary, portable_settings, coverage_text, dimension_summary, dimension_text
-from aibenchmark_esw.metrics.statistics import score_statistics, interval_text
+from aibenchmark_esw.metrics.statistics import interval_text, score_statistics
 from aibenchmark_esw.metrics.text import csv_safe_row, markdown_text
-
 
 GENERATION_CONDITIONS = ("temperature", "max_tokens", "request_timeout_seconds",
                          "prompt_strategy", "review_turn", "system_prompt_sha256", "max_retries", "retry_backoff_seconds",

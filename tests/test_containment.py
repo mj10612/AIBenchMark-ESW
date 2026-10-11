@@ -115,6 +115,7 @@ class TestContainment(unittest.TestCase):
     @unittest.skipUnless(os.environ.get('AIBENCHMARK_TEST_CONTAINER') == '1', 'Explicit real container integration required')
     def test_real_container_blocks_host_file_and_network_access(self):
         from dataclasses import replace
+
         from aibenchmark_esw.dataset import DatasetLoader
         with TemporaryDirectory() as directory:
             root = Path(directory)

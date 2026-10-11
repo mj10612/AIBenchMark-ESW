@@ -4,15 +4,14 @@ import os
 import shutil
 import subprocess
 from pathlib import Path
-from typing import Any, Dict
 from tempfile import TemporaryDirectory
+from typing import Any
 
 from aibenchmark_esw.dataset import validate_task_assets
 from aibenchmark_esw.models import TaskConfig
 from aibenchmark_esw.reference_cache import ReferenceCache
 from aibenchmark_esw.sandbox.size_analyzer import SizeAnalyzer
 from aibenchmark_esw.sandbox.static_analyzer import StaticAnalyzer
-
 
 _FIXTURE_SOURCE = '''#include "doctor.h"
 int32_t doctor_add(int32_t left, int32_t right) { return left + right; }
@@ -35,7 +34,7 @@ def run_doctor(tasks, loader, executor, check_references=False, reference_cache=
     the supplied cache with the following evaluation when requested.
     """
     tasks = list(tasks)
-    report: Dict[str, Any] = {"passed": True, "checks": [], "selected_tasks": [task.id for task in tasks],
+    report: dict[str, Any] = {"passed": True, "checks": [], "selected_tasks": [task.id for task in tasks],
               "check_references": bool(check_references), "effective_standards": {}}
 
     def record(name, passed, detail, required=True, **extra):

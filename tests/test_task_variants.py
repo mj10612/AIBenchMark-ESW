@@ -2,16 +2,16 @@ import hashlib
 import importlib
 import io
 import json
+import shutil
+import unittest
 from contextlib import redirect_stdout
 from pathlib import Path
-import shutil
 from tempfile import TemporaryDirectory
-import unittest
 from unittest.mock import patch
 
+from aibenchmark_esw import cli
 from aibenchmark_esw.dataset import DatasetLoader
 from aibenchmark_esw.sandbox.executor import ExecutionSandbox
-from aibenchmark_esw import cli
 
 
 class TestTaskVariants(unittest.TestCase):

@@ -1,10 +1,9 @@
 import unittest
 
 from aibenchmark_esw.dataset import DatasetLoader, validate_task_assets
-from aibenchmark_esw.sandbox.executor import ExecutionSandbox
 from aibenchmark_esw.evaluation import evaluate_task
+from aibenchmark_esw.sandbox.executor import ExecutionSandbox
 from aibenchmark_esw.sandbox.static_analyzer import StaticAnalyzer
-
 
 NEW_TASKS = {
     "tier4_dma_buffer": 5,

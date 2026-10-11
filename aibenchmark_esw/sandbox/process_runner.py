@@ -11,8 +11,8 @@ import math
 import os
 import signal
 import subprocess
-import time
 import sys
+import time
 from pathlib import Path
 
 
@@ -308,7 +308,7 @@ def run_bounded(command, *, timeout, max_output_bytes, cwd=None, env=None,
                 raise ExecutionCancelled(captured)
             if reason == "timeout":
                 error = subprocess.TimeoutExpired(command, timeout, output=captured)
-                setattr(error, "output_truncated", truncated)
+                error.output_truncated = truncated  # type: ignore[attr-defined]  # Preserve bounded diagnostic metadata.
                 raise error
             if reason == "output" or truncated:
                 raise OutputLimitExceeded(captured, max_output_bytes)

@@ -3,9 +3,10 @@ import unittest
 from pathlib import Path
 from tempfile import TemporaryDirectory
 
+from compiler_tools import find_clang
+
 from aibenchmark_esw.dataset import DatasetLoader
 from aibenchmark_esw.sandbox.executor import ExecutionSandbox
-from compiler_tools import find_clang
 
 
 class TestQ15Task(unittest.TestCase):

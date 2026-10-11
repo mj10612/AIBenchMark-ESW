@@ -2,11 +2,11 @@ import io
 import json
 import unittest
 from argparse import Namespace
-from contextlib import redirect_stdout, redirect_stderr
+from contextlib import redirect_stderr, redirect_stdout
+from dataclasses import replace
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from unittest.mock import MagicMock, patch
-from dataclasses import replace
 
 from aibenchmark_esw import cli
 from aibenchmark_esw.dataset import DatasetLoader
@@ -83,7 +83,7 @@ class TestCLI(unittest.TestCase):
                                prompt=f"Implement the API using {standard.upper()}.")
                 loader._tasks = {task.id: task}
                 captured = []
-                def generate(messages):
+                def generate(messages, captured=captured, loader=loader, task=task):
                     captured.extend(messages)
                     return loader.get_reference_solution(task.id)
                 args = Namespace(tier=None, tasks=None, model="mock", compiler=None, output=None)

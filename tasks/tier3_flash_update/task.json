@@ -2,9 +2,9 @@
   "id": "tier3_flash_update",
   "name": "Power-Safe Dual-Slot Flash Update",
   "tier": 3,
-  "category": "firmware",
+  "category": "flash_management",
   "target_standard": "c99",
-  "description": "Power-Safe Dual-Slot Flash Update",
+  "description": "Implement power-safe dual-slot firmware updates with bounded steps, read-back CRC verification and commit only after complete validation.",
   "limits": {
     "max_flash_bytes": 3072,
     "max_ram_bytes": 128,

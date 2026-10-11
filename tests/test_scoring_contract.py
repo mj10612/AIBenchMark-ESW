@@ -3,7 +3,13 @@ from pathlib import Path
 
 from aibenchmark_esw.metrics.scorer import BenchmarkScorer
 from aibenchmark_esw.models import (
-    CompilationResult, SizeMetrics, StaticSafetyMetrics, TaskConfig, TaskLimits, TaskWeights, TestResult,
+    CompilationResult,
+    SizeMetrics,
+    StaticSafetyMetrics,
+    TaskConfig,
+    TaskLimits,
+    TaskWeights,
+    TestResult,
 )
 
 

@@ -5,13 +5,13 @@ are copied into it before invocation, so containers never mount the checkout.
 Docker/Podman images must already be present; resolved image IDs pin execution.
 """
 
+import csv
+import io
 import os
+import re
 import shutil
 import subprocess
 import uuid
-import csv
-import io
-import re
 from pathlib import Path
 
 from aibenchmark_esw.sandbox.process_runner import run_bounded

@@ -41,7 +41,12 @@ def _name(value, name):
 
 
 def validate_task_result(item, default_model):
-    from aibenchmark_esw.models import SizeMetrics, StaticSafetyMetrics, TaskWeights, TaskLimits
+    from aibenchmark_esw.models import (
+        SizeMetrics,
+        StaticSafetyMetrics,
+        TaskLimits,
+        TaskWeights,
+    )
     for name, model in (("size_metrics", SizeMetrics), ("safety_metrics", StaticSafetyMetrics),
                         ("weights", TaskWeights), ("limits", TaskLimits)):
         value = item.get(name)

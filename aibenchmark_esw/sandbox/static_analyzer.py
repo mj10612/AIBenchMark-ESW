@@ -1,10 +1,11 @@
+import math
 import os
+import re
 import shutil
 import subprocess
-import re
-import math
 from pathlib import Path
-from typing import Optional, List
+from typing import Optional
+
 from aibenchmark_esw.models import StaticSafetyMetrics
 from aibenchmark_esw.sandbox.c_source import code_tokens, mask_noncode, original_line
 from aibenchmark_esw.sandbox.process_runner import run_bounded
@@ -95,7 +96,7 @@ class StaticAnalyzer:
         self.cppcheck_cmd = None if configured == "off" else configured or shutil.which("cppcheck")
         self.last_cppcheck_error: Optional[str] = None
 
-    def analyze(self, source_path: Path, include_dirs: Optional[List[Path]] = None,
+    def analyze(self, source_path: Path, include_dirs: Optional[list[Path]] = None,
                 standard: str = "c99", executor=None) -> StaticSafetyMetrics:
         """
         Always check embedded rules; add cppcheck diagnostics when available.
@@ -116,7 +117,7 @@ class StaticAnalyzer:
                 metrics.cppcheck_diagnostic = self.last_cppcheck_error or "cppcheck did not complete"
         return metrics
 
-    def _run_cppcheck(self, source_path: Path, include_dirs: Optional[List[Path]] = None,
+    def _run_cppcheck(self, source_path: Path, include_dirs: Optional[list[Path]] = None,
                       standard: str = "c99", executor=None) -> Optional[StaticSafetyMetrics]:
         self.last_cppcheck_timeout = False
         try:
@@ -180,7 +181,7 @@ class StaticAnalyzer:
         if not source_path.exists():
             return StaticSafetyMetrics()
 
-        with open(source_path, "r", encoding="utf-8", errors="ignore") as f:
+        with open(source_path, encoding="utf-8", errors="ignore") as f:
             code = f.read()
 
         errors = 0

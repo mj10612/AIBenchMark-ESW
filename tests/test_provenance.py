@@ -7,7 +7,12 @@ from tempfile import TemporaryDirectory
 from unittest.mock import patch
 
 from aibenchmark_esw.dataset import DatasetLoader
-from aibenchmark_esw.provenance import collect_run_metadata, task_sha256, text_sha256, _checkout_provenance
+from aibenchmark_esw.provenance import (
+    _checkout_provenance,
+    collect_run_metadata,
+    task_sha256,
+    text_sha256,
+)
 from aibenchmark_esw.sandbox.executor import ExecutionSandbox
 from aibenchmark_esw.sandbox.static_analyzer import StaticAnalyzer
 

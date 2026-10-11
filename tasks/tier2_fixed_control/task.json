@@ -2,9 +2,9 @@
   "id": "tier2_fixed_control",
   "name": "Q8 Saturating PID and Low-Pass Filter",
   "tier": 2,
-  "category": "firmware",
+  "category": "fixed_point_control",
   "target_standard": "c99",
-  "description": "Q8 Saturating PID and Low-Pass Filter",
+  "description": "Implement bounded Q8 PID and low-pass control with wide products, signed truncation, saturation and conditional anti-windup.",
   "limits": {
     "max_flash_bytes": 2048,
     "max_ram_bytes": 128,

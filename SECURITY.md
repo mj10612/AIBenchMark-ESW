@@ -86,6 +86,14 @@ Home directories and the checkout are not mounted. It requires working user
 namespaces and bubblewrap; it does not silently relax unavailable restrictions.
 System libraries and compiler files within those system roots remain readable.
 
+CI exercises Ubuntu 24.04's packaged bubblewrap and kernel with unprivileged user
+namespaces enabled. The isolated CI job sets
+`kernel.apparmor_restrict_unprivileged_userns=0` to permit that boundary on the
+disposable runner; production hosts must configure an equivalent explicit policy.
+The job records `bwrap --version`, verifies host files/provider environment/network
+are inaccessible, runs namespace-descendant timeout coverage, and saves a real
+bwrap baseline artifact. Missing runtime/namespace support fails explicitly.
+
 Footprint defaults to a host object, not an MCU image. Opt-in AVR/ARM/RISC-V compilation
 measures allocated target-object sections with target-scoped budgets; it excludes
 final linking, startup code, stack and heap. Host Unity tests still supply

@@ -1,17 +1,17 @@
 """Independent checkpointed samples with unbiased pass@k estimates."""
 import copy
 import json
+import sys
 import tempfile
 import uuid
-import sys
 from datetime import datetime, timezone
 from pathlib import Path
 
+from aibenchmark_esw.metrics.junit import render_junit
 from aibenchmark_esw.metrics.reporter import BenchmarkReporter
+from aibenchmark_esw.metrics.statistics import score_statistics
 from aibenchmark_esw.output_paths import validate_output_paths
 from aibenchmark_esw.report_io import atomic_write_json, atomic_write_text
-from aibenchmark_esw.metrics.junit import render_junit
-from aibenchmark_esw.metrics.statistics import score_statistics
 
 
 def pass_at_k(n, c, k):

@@ -1,15 +1,20 @@
 """Additional target-object evidence; Unity suites continue to run on the host."""
 
+import locale
 import os
 import re
 import shutil
 import subprocess
-import locale
 import tempfile
 from pathlib import Path
 
 from aibenchmark_esw.models import CompilationResult
-from aibenchmark_esw.sandbox.process_runner import run_bounded, OutputLimitExceeded, ExecutionCancelled, ExecutionCleanupError
+from aibenchmark_esw.sandbox.process_runner import (
+    ExecutionCancelled,
+    ExecutionCleanupError,
+    OutputLimitExceeded,
+    run_bounded,
+)
 
 
 class CrossCompiler:

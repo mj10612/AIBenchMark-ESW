@@ -1,11 +1,12 @@
-import unittest
 import os
 import subprocess
 import sys
+import unittest
+from dataclasses import replace
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from unittest.mock import patch
-from dataclasses import replace
+
 from aibenchmark_esw.dataset import DatasetLoader
 from aibenchmark_esw.sandbox.executor import ExecutionSandbox
 from aibenchmark_esw.sandbox.process_runner import run_bounded
@@ -246,7 +247,7 @@ int main(void) {
     def test_test_timeout_preserves_records_without_parsing_them_as_completed(self):
         task = self.loader.get_task("tier1_crc16")
         for as_bytes in (False, True):
-            def timeout_after_compile(command, **kwargs):
+            def timeout_after_compile(command, as_bytes=as_bytes, **kwargs):
                 if len(command) != 2:
                     return run_bounded(command, **kwargs)
                 token = Path(command[0]).parent.glob("aibenchmark_tests_*.c")

@@ -1,11 +1,11 @@
 import hashlib
 import unittest
+from dataclasses import replace
 from unittest.mock import patch
 
 from aibenchmark_esw.dataset import DatasetLoader
 from aibenchmark_esw.mutations import MUTATIONS, Mutation, run_mutations
 from aibenchmark_esw.sandbox.executor import ExecutionSandbox
-from dataclasses import replace
 
 
 class TestMutationAdequacy(unittest.TestCase):

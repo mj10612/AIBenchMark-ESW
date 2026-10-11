@@ -2,9 +2,9 @@
   "id": "tier4_uart_frame_fix",
   "name": "UART Framing and Recovery Bug Fix",
   "tier": 4,
-  "category": "concurrency",
+  "category": "bug_fix_and_safety",
   "target_standard": "c99",
-  "description": "UART Framing and Recovery Bug Fix",
+  "description": "Repair UART framing with one global poll budget, length/checksum validation, exactly-once recovery and preserved caller output on failure.",
   "limits": {
     "max_flash_bytes": 2048,
     "max_ram_bytes": 128,

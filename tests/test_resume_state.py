@@ -6,7 +6,11 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 from types import SimpleNamespace
 
-from aibenchmark_esw.resume import load_resume, validate_resume, merge_generation_history
+from aibenchmark_esw.resume import (
+    load_resume,
+    merge_generation_history,
+    validate_resume,
+)
 
 
 def checkpoint():

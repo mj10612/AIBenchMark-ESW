@@ -1,15 +1,15 @@
 import json
 import logging
 from pathlib import Path
-from typing import List, Optional, Dict
+from typing import Optional
+
 from aibenchmark_esw.models import TaskConfig
 from aibenchmark_esw.resources import data_root
-
 
 logger = logging.getLogger(__name__)
 
 
-def validate_task_assets(task: TaskConfig) -> List[str]:
+def validate_task_assets(task: TaskConfig) -> list[str]:
     """Check readable, nonempty prompt/API/source/test inputs without executing C."""
     required = [("prompt", task.task_dir / "prompt.md"),
                 ("starter implementation", task.task_dir / task.entry_file),
@@ -35,7 +35,7 @@ def validate_task_assets(task: TaskConfig) -> List[str]:
 class DatasetLoader:
     def __init__(self, tasks_root: Optional[Path] = None, strict: bool = True):
         self.strict = strict
-        self.load_errors: Dict[str, str] = {}
+        self.load_errors: dict[str, str] = {}
         if tasks_root is None:
             self.tasks_root = data_root() / "tasks"
         else:
@@ -44,7 +44,7 @@ class DatasetLoader:
             raise FileNotFoundError(f"Benchmark task data not found: {self.tasks_root}")
         if not self.tasks_root.is_dir():
             raise NotADirectoryError(f"Benchmark task root is not a directory: {self.tasks_root}")
-        self._tasks: Dict[str, TaskConfig] = {}
+        self._tasks: dict[str, TaskConfig] = {}
         self._load_all()
 
     def _load_all(self) -> None:
@@ -58,7 +58,7 @@ class DatasetLoader:
                 continue
 
             try:
-                with open(task_json, "r", encoding="utf-8") as f:
+                with open(task_json, encoding="utf-8") as f:
                     data = json.load(f)
 
                 prompt_file = task_dir / "prompt.md"
@@ -82,7 +82,7 @@ class DatasetLoader:
                 self.load_errors[str(task_dir)] = str(error)
         self._tasks = tasks
 
-    def list_tasks(self, tier: Optional[int] = None, category: Optional[str] = None) -> List[TaskConfig]:
+    def list_tasks(self, tier: Optional[int] = None, category: Optional[str] = None) -> list[TaskConfig]:
         tasks = list(self._tasks.values())
         if tier is not None:
             tasks = [t for t in tasks if t.tier == tier]
@@ -99,7 +99,7 @@ class DatasetLoader:
             return None
         ref_file = task.reference_path
         if ref_file.is_file():
-            with open(ref_file, "r", encoding="utf-8") as f:
+            with open(ref_file, encoding="utf-8") as f:
                 return f.read()
         return None
 
@@ -109,6 +109,6 @@ class DatasetLoader:
             return None
         starter_file = task.task_dir / task.entry_file
         if starter_file.is_file():
-            with open(starter_file, "r", encoding="utf-8") as f:
+            with open(starter_file, encoding="utf-8") as f:
                 return f.read()
         return None

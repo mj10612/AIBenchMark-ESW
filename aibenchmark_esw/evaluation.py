@@ -5,15 +5,19 @@ import time
 from pathlib import Path
 from typing import Optional
 
-from aibenchmark_esw.models import (
-    TaskConfig, TaskEvaluationResult, TestResult, SizeMetrics,
-    StaticSafetyMetrics, DimensionScores,
-)
 from aibenchmark_esw.metrics.scorer import BenchmarkScorer
+from aibenchmark_esw.models import (
+    DimensionScores,
+    SizeMetrics,
+    StaticSafetyMetrics,
+    TaskConfig,
+    TaskEvaluationResult,
+    TestResult,
+)
+from aibenchmark_esw.reference_cache import executor_reference_cache
 from aibenchmark_esw.sandbox.executor import ExecutionSandbox
 from aibenchmark_esw.sandbox.size_analyzer import SizeAnalyzer
 from aibenchmark_esw.sandbox.static_analyzer import StaticAnalyzer
-from aibenchmark_esw.reference_cache import executor_reference_cache
 
 
 def failed_evaluation(task: TaskConfig, model_name: str, error: str) -> TaskEvaluationResult:

@@ -5,6 +5,7 @@ from unittest.mock import patch
 from xml.etree import ElementTree
 
 from test_aggregation import fixture_report
+
 from aibenchmark_esw.metrics.aggregation import aggregate_runs, render_aggregation
 from aibenchmark_esw.metrics.comparison import compare_runs, render_comparison
 from aibenchmark_esw.metrics.reporter import BenchmarkReporter
@@ -266,7 +267,7 @@ class ExportServiceTests(unittest.TestCase):
         self.assertIn('-50',root.find('.//failure').text)
 
     def test_trend_orders_timestamps_groups_fingerprints_and_flags_regressions(self):
-        from aibenchmark_esw.metrics.trend import trend_runs, render_trend
+        from aibenchmark_esw.metrics.trend import render_trend, trend_runs
         old,new,changed=fixture_report(run_id='old'),fixture_report(50,run_id='new'),fixture_report(run_id='changed')
         for report,time in [(old,'2026-01-01T00:00:00Z'),(new,'2026-01-02T00:00:00Z'),(changed,'2026-01-03T00:00:00Z')]:
             report['metadata']['created_at_utc']=time

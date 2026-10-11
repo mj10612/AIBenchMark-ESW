@@ -36,7 +36,7 @@ inputs:
     description: Uploaded JSON and JUnit artifact name
     default: aibenchmark-esw-results
   extra-arguments:
-    description: JSON array of additional CLI argument strings; artifact paths and resume cannot be overridden
+    description: JSON array of additional CLI strings; dedicated identity, artifact, and control inputs cannot be overridden
     default: '[]'
 outputs:
   json:
@@ -46,8 +46,11 @@ outputs:
     description: Absolute JUnit XML pathname
     value: ${{ steps.benchmark.outputs.junit }}
   exit-code:
-    description: Benchmark command exit code
+    description: Benchmark status normalized to 128 plus signal for signal termination
     value: ${{ steps.benchmark.outputs.exit-code }}
+  raw-exit-code:
+    description: Raw subprocess return code, negative for POSIX signals
+    value: ${{ steps.benchmark.outputs.raw-exit-code }}
 runs:
   using: composite
   steps:
@@ -60,6 +63,7 @@ runs:
         INPUT_COMMAND: ${{ inputs.command }}
         INPUT_MODEL: ${{ inputs.model }}
         INPUT_PACKAGE_VERSION: ${{ inputs.package-version }}
+        INPUT_EXTRA_ARGUMENTS: ${{ inputs.extra-arguments }}
       run: python "$GITHUB_ACTION_PATH/.github/scripts/action_runner.py" install
     - name: Evaluate candidates
       id: benchmark
@@ -84,6 +88,7 @@ runs:
           ${{ steps.benchmark.outputs.json }}
           ${{ steps.benchmark.outputs.junit }}
         if-no-files-found: warn
+        include-hidden-files: true
     - name: Preserve benchmark exit status
       if: always()
       shell: bash

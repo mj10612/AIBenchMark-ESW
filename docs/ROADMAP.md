@@ -1,7 +1,7 @@
 # Roadmap and project status
 
 AIBenchMark-ESW is an early-stage, Apache-2.0 embedded C benchmark. The current
-dataset contains 13 tasks and 113 C test cases. Public baseline results are
+dataset contains 13 tasks and 114 C test cases. Public baseline results are
 golden-reference validation; no live OpenAI or Claude measurements have been
 published in this repository yet.
 

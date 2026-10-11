@@ -1,19 +1,24 @@
-import os
-import re
-import shutil
-import tempfile
-import subprocess
-import uuid
 import json
 import locale
 import math
+import os
+import re
+import shutil
+import subprocess
+import tempfile
+import uuid
 from pathlib import Path
-from typing import Optional, Tuple
+from typing import Optional
 
-from aibenchmark_esw.models import TaskConfig, CompilationResult, TestResult
+from aibenchmark_esw.models import CompilationResult, TaskConfig, TestResult
 from aibenchmark_esw.resources import data_root
 from aibenchmark_esw.sandbox.c_source import mask_noncode
-from aibenchmark_esw.sandbox.process_runner import run_bounded, OutputLimitExceeded, ExecutionCancelled, ExecutionCleanupError
+from aibenchmark_esw.sandbox.process_runner import (
+    ExecutionCancelled,
+    ExecutionCleanupError,
+    OutputLimitExceeded,
+    run_bounded,
+)
 
 
 def _timeout_output(error: subprocess.TimeoutExpired) -> str:
@@ -240,7 +245,7 @@ class ExecutionSandbox:
         return self._compile(task, [source], workspace / f"{name}.o", object_only=True)
 
     def compile_and_test(self, task: TaskConfig, solution_code: str,
-                         custom_workspace: Optional[Path] = None) -> Tuple[CompilationResult, TestResult]:
+                         custom_workspace: Optional[Path] = None) -> tuple[CompilationResult, TestResult]:
         """The result owns automatic artifacts until cleanup() or garbage collection."""
         workspace = None
         retained = False

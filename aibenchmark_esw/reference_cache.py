@@ -4,8 +4,8 @@ import json
 import threading
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Optional
 from tempfile import TemporaryDirectory
+from typing import Optional
 
 from aibenchmark_esw.provenance import task_sha256, text_sha256
 from aibenchmark_esw.sandbox.size_analyzer import SizeAnalyzer

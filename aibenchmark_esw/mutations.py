@@ -4,15 +4,15 @@ These mutations check suite adequacy, not model quality. A compilation error or
 an incomplete execution is an invalid fixture, never evidence of a killed fault.
 """
 
-from dataclasses import dataclass
-from concurrent.futures import ThreadPoolExecutor
 import math
 import re
-from typing import List, Optional, Tuple
+from concurrent.futures import ThreadPoolExecutor
+from dataclasses import dataclass
+from typing import Optional
 
 from aibenchmark_esw.provenance import collect_run_metadata
-from aibenchmark_esw.sandbox.executor import ExecutionSandbox
 from aibenchmark_esw.sandbox.c_source import mask_noncode
+from aibenchmark_esw.sandbox.executor import ExecutionSandbox
 
 GENERATOR_VERSION = "c-operators-v1"
 
@@ -21,7 +21,7 @@ GENERATOR_VERSION = "c-operators-v1"
 class Mutation:
     name: str
     description: str
-    replacements: Tuple[Tuple[str, str], ...]
+    replacements: tuple[tuple[str, str], ...]
     offset: Optional[int] = None
 
     def apply(self, source):
@@ -197,10 +197,20 @@ def generate_mutations(source, max_mutants=20):
             number_match = re.match(r"(?:0[xX][0-9A-Fa-f]+|[0-9]+)", before)
             assert number_match is not None
             number = number_match.group()
-            value = int(number, 16 if number.lower().startswith("0x") else 10)
-            after = str(value + 1) + before[len(number):]
+            base = 16 if number.lower().startswith('0x') else 8 if len(number) > 1 and number.startswith('0') else 10
+            try:
+                value = int(number, base)
+            except ValueError:
+                continue
+            suffix = before[len(number):]
+            def literal(value, base=base, suffix=suffix):
+                if value < 0:
+                    return f'({value}{suffix})'
+                digits = (f'0x{value:X}' if base == 16 else '0' + format(value, 'o') if base == 8 and value else str(value))
+                return digits + suffix
+            after = literal(value + 1)
             kind = "increment"
-            locations.append((match.start(), before, str(value - 1) + before[len(number):], "decrement"))
+            locations.append((match.start(), before, literal(value - 1), "decrement"))
         locations.append((match.start(), before, after, kind))
     for match in re.finditer(r"\b[A-Za-z_]\w*(?:\s*->\s*\w+)*\s*(==|!=)\s*NULL\b", masked):
         locations.append((match.start(), source[match.start():match.end()], "0" if match.group(1) == "==" else "1", "null"))
@@ -210,7 +220,7 @@ def generate_mutations(source, max_mutants=20):
                   "INT32_MAX": "INT32_MIN", "UINT16_MAX": "UINT8_MAX", "UINT32_MAX": "UINT16_MAX", "SIZE_MAX": "0U"}
     for match in re.finditer(r"\b(?:" + "|".join(boundaries) + r")\b", masked):
         locations.append((match.start(), match.group(), boundaries[match.group()], "boundary"))
-    probes: List[Mutation] = []
+    probes: list[Mutation] = []
     for offset, before, after, kind in sorted(locations, key=lambda item: (item[0], item[3])):
         probes.append(Mutation(f"auto-{len(probes) + 1:04d}-{kind}",
                                f"{kind} at offset {offset}: {before} -> {after}",
@@ -289,7 +299,8 @@ def run_mutations(tasks, loader, executor=None, *, auto=False, max_mutants=20, j
             if auto:
                 generated = generate_mutations(reference, max_mutants)
                 with ThreadPoolExecutor(max_workers=jobs) as pool:
-                    records = list(pool.map(lambda mutation: _evaluate_mutation(task, reference, mutation, executor), generated))
+                    records = list(pool.map(lambda mutation, task=task, reference=reference:
+                                            _evaluate_mutation(task, reference, mutation, executor), generated))
                 counts = {status: sum(record["status"] == status for record in records)
                           for status in ("killed", "survived", "invalid")}
                 valid = counts["killed"] + counts["survived"]

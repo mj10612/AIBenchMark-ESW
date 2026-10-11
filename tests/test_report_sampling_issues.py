@@ -10,6 +10,8 @@ from tempfile import TemporaryDirectory
 from unittest.mock import patch
 from xml.etree import ElementTree
 
+from test_aggregation import fixture_report
+
 from aibenchmark_esw import cli
 from aibenchmark_esw.dataset import DatasetLoader
 from aibenchmark_esw.metrics.comparison import compare_runs, render_comparison
@@ -21,7 +23,6 @@ from aibenchmark_esw.reference_cache import ReferenceCache
 from aibenchmark_esw.report_io import atomic_write_text
 from aibenchmark_esw.report_schema import validate_report_structure
 from aibenchmark_esw.sandbox.executor import ExecutionSandbox
-from test_aggregation import fixture_report
 
 
 def collection():

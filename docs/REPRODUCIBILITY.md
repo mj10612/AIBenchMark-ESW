@@ -166,7 +166,7 @@ requests. An absent optional analyzer is valid builtin mode; a broken explicitly
 configured analyzer fails preflight. Mutations cover 47 hand-reviewed faulty
 candidates across 13 tasks; compilation errors/timeouts are invalid probes,
 not successful kills. CI requires reference success and no surviving/invalid
-mutants. The suite contains 13 tasks and 113 C test cases, including bounded
+mutants. The suite contains 13 tasks and 114 C test cases, including bounded
 COBS, SPI NOR, DMA ownership, fixed-point control, flash updates, framed UART,
 and strengthened CRC/I2C/HOLD contracts.
 

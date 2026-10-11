@@ -3,7 +3,11 @@ import xml.etree.ElementTree as ET
 
 from aibenchmark_esw.metrics.junit import render_junit
 from aibenchmark_esw.models import (
-    DimensionScores, SizeMetrics, StaticSafetyMetrics, TaskEvaluationResult, TestResult,
+    DimensionScores,
+    SizeMetrics,
+    StaticSafetyMetrics,
+    TaskEvaluationResult,
+    TestResult,
 )
 
 

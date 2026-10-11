@@ -3,7 +3,11 @@ from types import SimpleNamespace as N
 from unittest.mock import Mock, patch
 
 from aibenchmark_esw.llm.client import LLMClient
-from aibenchmark_esw.llm.costs import BudgetExceededError, CostBudget, PricingUnknownError
+from aibenchmark_esw.llm.costs import (
+    BudgetExceededError,
+    CostBudget,
+    PricingUnknownError,
+)
 
 
 class TestGenerationCosts(unittest.TestCase):

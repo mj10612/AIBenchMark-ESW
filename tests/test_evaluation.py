@@ -1,15 +1,16 @@
-import unittest
 import subprocess
+import unittest
 from dataclasses import replace
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from unittest.mock import patch
 
+from compiler_tools import find_clang
+
 from aibenchmark_esw.dataset import DatasetLoader
 from aibenchmark_esw.evaluation import evaluate_task
 from aibenchmark_esw.sandbox.executor import ExecutionSandbox
 from aibenchmark_esw.sandbox.size_analyzer import SizeAnalyzer
-from compiler_tools import find_clang
 
 
 class TestEvaluation(unittest.TestCase):

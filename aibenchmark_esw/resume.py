@@ -9,7 +9,6 @@ from pathlib import Path
 from aibenchmark_esw.metrics.comparison import generation_conditions
 from aibenchmark_esw.metrics.reporter import BenchmarkReporter
 
-
 _GENERATION_OPTIONS = {
     "temperature": "temperature", "max_tokens": "max_tokens",
     "request_timeout_seconds": "request_timeout", "max_retries": "max_retries",

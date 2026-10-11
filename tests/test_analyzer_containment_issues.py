@@ -7,6 +7,9 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 from unittest.mock import Mock, patch
 
+import test_containment
+from compiler_tools import find_clang
+
 from aibenchmark_esw.cli import build_parser, cmd_doctor
 from aibenchmark_esw.dataset import DatasetLoader
 from aibenchmark_esw.doctor import run_doctor
@@ -15,8 +18,6 @@ from aibenchmark_esw.sandbox.executor import ExecutionSandbox
 from aibenchmark_esw.sandbox.process_runner import OutputLimitExceeded
 from aibenchmark_esw.sandbox.size_analyzer import SizeAnalyzer
 from aibenchmark_esw.sandbox.static_analyzer import StaticAnalyzer
-import test_containment
-from compiler_tools import find_clang
 
 
 class TestAnalyzerContainmentIssues(unittest.TestCase):
@@ -56,8 +57,8 @@ class TestAnalyzerContainmentIssues(unittest.TestCase):
         self.assertTrue(checks['object_size:c99']['passed'])
 
     def test_cli_doctor_applies_analyzer_options_and_mutations_reject_noops(self):
-        from contextlib import redirect_stdout
         import io
+        from contextlib import redirect_stdout
         output = io.StringIO()
         args = build_parser().parse_args(['doctor', '--tasks', 'tier1_crc16',
             '--static-analysis-timeout', '0.25', '--extended-safety-rules', '--max-output-bytes', '4096'])

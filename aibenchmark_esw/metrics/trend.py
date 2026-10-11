@@ -9,7 +9,7 @@ from collections import defaultdict
 from datetime import datetime
 
 from aibenchmark_esw.metrics.comparison import compare_runs, generation_conditions
-from aibenchmark_esw.metrics.measurements import portable_settings, generation_sequence
+from aibenchmark_esw.metrics.measurements import generation_sequence, portable_settings
 from aibenchmark_esw.metrics.reporter import BenchmarkReporter
 from aibenchmark_esw.metrics.text import csv_safe_row, markdown_text
 

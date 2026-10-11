@@ -7,9 +7,15 @@ import json
 from collections import defaultdict
 
 from aibenchmark_esw.metrics.comparison import compare_runs, generation_conditions
+from aibenchmark_esw.metrics.measurements import (
+    coverage_text,
+    dimension_summary,
+    dimension_text,
+    generation_sequence,
+    measurement_summary,
+)
 from aibenchmark_esw.metrics.reporter import BenchmarkReporter
-from aibenchmark_esw.metrics.measurements import generation_sequence, measurement_summary, coverage_text, dimension_summary, dimension_text
-from aibenchmark_esw.metrics.statistics import score_statistics, interval_text
+from aibenchmark_esw.metrics.statistics import interval_text, score_statistics
 from aibenchmark_esw.metrics.text import csv_safe_row, markdown_text
 
 
@@ -91,7 +97,7 @@ def aggregate_runs(reports):
         dimensions: dict = {key: [] for key in ("score", "functional", "memory", "safety", "pass_at_1_pct")}
         task_passes = {task_id: 0 for task_id in checked["task_ids"]}
         tokens, durations = [], []
-        for report, results in samples:
+        for _report, results in samples:
             summary = BenchmarkReporter.to_json_dict(results, requested)
             dimensions["score"].append(summary["overall_score"])
             dimensions["pass_at_1_pct"].append(summary["pass_at_1_pct"])

@@ -1,32 +1,36 @@
-import sys
-import json
 import argparse
-import math
 import copy
+import json
+import math
 import os
+import sys
 import threading
-from concurrent.futures import ThreadPoolExecutor, wait, FIRST_COMPLETED
+from concurrent.futures import FIRST_COMPLETED, ThreadPoolExecutor, wait
+from dataclasses import replace
 from datetime import datetime, timezone
 from pathlib import Path
-from dataclasses import replace
-from aibenchmark_esw.models import TaskConfig
-from aibenchmark_esw import __version__
 
+from aibenchmark_esw import __version__
 from aibenchmark_esw.dataset import DatasetLoader, validate_task_assets
-from aibenchmark_esw.sandbox.executor import ExecutionSandbox
-from aibenchmark_esw.sandbox.static_analyzer import StaticAnalyzer
-from aibenchmark_esw.metrics.reporter import BenchmarkReporter
-from aibenchmark_esw.llm.client import LLMClient, is_fatal_provider_error, is_transient_provider_error
 from aibenchmark_esw.errors import error_diagnostic, redact
 from aibenchmark_esw.evaluation import evaluate_task, failed_evaluation
-from aibenchmark_esw.provenance import collect_run_metadata, text_sha256
-from aibenchmark_esw.metrics.comparison import compare_runs, render_comparison
-from aibenchmark_esw.report_io import atomic_write_json, atomic_write_text
-from aibenchmark_esw.output_paths import validate_output_paths
-from aibenchmark_esw.resources import data_root
-from aibenchmark_esw.reference_cache import ReferenceCache
+from aibenchmark_esw.llm.client import (
+    LLMClient,
+    is_fatal_provider_error,
+    is_transient_provider_error,
+)
 from aibenchmark_esw.metrics.aggregation import aggregate_runs, render_aggregation
+from aibenchmark_esw.metrics.comparison import compare_runs, render_comparison
 from aibenchmark_esw.metrics.junit import render_junit
+from aibenchmark_esw.metrics.reporter import BenchmarkReporter
+from aibenchmark_esw.models import TaskConfig
+from aibenchmark_esw.output_paths import validate_output_paths
+from aibenchmark_esw.provenance import collect_run_metadata, text_sha256
+from aibenchmark_esw.reference_cache import ReferenceCache
+from aibenchmark_esw.report_io import atomic_write_json, atomic_write_text
+from aibenchmark_esw.resources import data_root
+from aibenchmark_esw.sandbox.executor import ExecutionSandbox
+from aibenchmark_esw.sandbox.static_analyzer import StaticAnalyzer
 
 
 class _Parser(argparse.ArgumentParser):
@@ -159,7 +163,7 @@ def build_parser() -> argparse.ArgumentParser:
     # Command: report
     report_p = subparsers.add_parser("report", help="Generate report from evaluation JSON")
     report_p.add_argument("--results", type=str, required=True, help="Path to results JSON file")
-    report_p.add_argument("--format", choices=["cli", "markdown", "junit", "html", "sarif"], default="cli", help="Output format")
+    report_p.add_argument("--format", choices=["cli", "markdown", "junit", "html", "sarif", 'github-summary'], default="cli", help="Output format")
     report_p.add_argument("--output", type=Path)
     schema_p = subparsers.add_parser("validate-report", help="Validate report structure and cross-field consistency offline")
     schema_p.add_argument("results", type=Path, nargs="?")
@@ -364,7 +368,7 @@ def cmd_eval(args: argparse.Namespace) -> int:
         if not sol_path.is_file():
             print(f"Error: Solution file '{args.solution}' not found.", file=sys.stderr)
             return 1
-        with open(sol_path, "r", encoding="utf-8") as f:
+        with open(sol_path, encoding="utf-8") as f:
             solution_code = f.read()
     else:
         # Default to starter code
@@ -472,7 +476,11 @@ def cmd_validate(args: argparse.Namespace) -> int:
 
 
 def _cmd_run_once(args: argparse.Namespace) -> int:
-    from aibenchmark_esw.resume import load_resume, validate_resume, merge_generation_history
+    from aibenchmark_esw.resume import (
+        load_resume,
+        merge_generation_history,
+        validate_resume,
+    )
     saved = load_resume(args) if getattr(args, "resume", None) else None
     loader = getattr(args, "_prepared_loader", None) or DatasetLoader(getattr(args, "tasks_root", None))
     tasks = _select_tasks(loader, args)
@@ -810,7 +818,7 @@ def _run_samples(args, saved):
 
 
 def cmd_trend(args):
-    from aibenchmark_esw.metrics.trend import trend_runs, render_trend
+    from aibenchmark_esw.metrics.trend import render_trend, trend_runs
     directories = [path for path in args.results if path.is_dir()]
     validate_output_paths([args.output], protected_files=args.results,
                           protected_roots=_benchmark_roots(args) + directories)
@@ -863,6 +871,7 @@ def cmd_report(args: argparse.Namespace) -> int:
             render_metadata.update(sampling=data["sampling"], collection_generation_summary=data.get("generation_summary"))
         validate_output_paths([getattr(args, "output", None)], protected_files=[report_file], protected_roots=_benchmark_roots())
         from aibenchmark_esw.metrics.exports import generate_sarif
+        from aibenchmark_esw.metrics.github_summary import github_summary
         export_results = results
         if "samples" in data:
             export_results = []
@@ -871,7 +880,8 @@ def cmd_report(args: argparse.Namespace) -> int:
                 for result in child_results:
                     result.provenance = {**(result.provenance or {}), "sample_run_id": sample["metadata"]["run_id"]}
                 export_results.extend(child_results)
-        rendered = (generate_sarif(export_results, model_name, render_metadata) if args.format == "sarif" else
+        rendered = (github_summary(data) if args.format == 'github-summary' else
+                    generate_sarif(export_results, model_name, render_metadata) if args.format == "sarif" else
                     BenchmarkReporter.generate_html(results, model_name, render_metadata) if args.format == "html" else
                     render_junit(export_results, model_name, render_metadata) if args.format == "junit" else
                     BenchmarkReporter.generate_markdown(results, model_name, render_metadata) if args.format == "markdown"

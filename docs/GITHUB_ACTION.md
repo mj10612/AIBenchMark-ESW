@@ -2,6 +2,18 @@
 
 The root `action.yml` installs the benchmark, evaluates candidates, and uploads JSON and JUnit evidence even when the benchmark fails. The action preserves the benchmark exit status, so failed evaluations fail the job after artifact upload. A host C compiler must already be installed on the runner; Ubuntu hosted runners provide GCC.
 
+The default hidden artifact directory is uploaded with `include-hidden-files: true`.
+The smoke workflow downloads the uploaded artifact and verifies both evidence files.
+`exit-code` normalizes signal termination to 128 plus the signal; `raw-exit-code`
+retains the subprocess value. Extra arguments cannot replace dedicated model,
+task, dataset, solution, compiler, concurrency, or artifact inputs, nor resume or
+dry-run the action. This protects provider-extra installation and run identity.
+
+Every saved run also produces a compact Actions step summary, including failed
+or interrupted evidence. Offline export uses
+`aibenchmark-esw report --results run.json --format github-summary --output summary.md`.
+It escapes labels and omits provider responses and diagnostic bodies.
+
 ```yaml
 permissions:
   contents: read

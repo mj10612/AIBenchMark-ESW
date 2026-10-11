@@ -7,8 +7,9 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 from unittest.mock import patch
 
-from aibenchmark_esw.sandbox.size_analyzer import SizeAnalyzer
 from compiler_tools import find_clang
+
+from aibenchmark_esw.sandbox.size_analyzer import SizeAnalyzer
 
 
 class TestSizeAnalyzer(unittest.TestCase):

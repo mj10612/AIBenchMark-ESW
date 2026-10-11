@@ -14,8 +14,18 @@ from aibenchmark_esw import cli
 from aibenchmark_esw.dataset import DatasetLoader
 from aibenchmark_esw.errors import error_diagnostic
 from aibenchmark_esw.llm import litellm_available
-from aibenchmark_esw.llm.client import ContextWindowError, LLMClient, is_fatal_provider_error
-from aibenchmark_esw.llm.costs import CostBudget, PricingUnknownError, pricing, token_upper_bound, usage_cost
+from aibenchmark_esw.llm.client import (
+    ContextWindowError,
+    LLMClient,
+    is_fatal_provider_error,
+)
+from aibenchmark_esw.llm.costs import (
+    CostBudget,
+    PricingUnknownError,
+    pricing,
+    token_upper_bound,
+    usage_cost,
+)
 from aibenchmark_esw.metrics.comparison import compare_runs
 from aibenchmark_esw.metrics.reporter import BenchmarkReporter
 
@@ -82,7 +92,7 @@ class TestProviderIssueFixes(unittest.TestCase):
             report = json.loads(path.read_text(encoding='utf-8'))
             results = BenchmarkReporter.from_json_dict(report)
             evidence = path.read_text(encoding='utf-8') + BenchmarkReporter.generate_markdown(results, 'mock')
-            from aibenchmark_esw.metrics.exports import report_html, generate_sarif
+            from aibenchmark_esw.metrics.exports import generate_sarif, report_html
             from aibenchmark_esw.metrics.junit import render_junit
             evidence += report_html(results, 'mock') + json.dumps(generate_sarif(results, 'mock')) + render_junit(results, 'mock')
             for secret in ('sk-super-secret', 'bearer-secret', 'query-secret', 'user:password', 'token-secret', 'custom-secret'):

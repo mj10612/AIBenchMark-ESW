@@ -6,7 +6,13 @@ from unittest.mock import patch
 
 from aibenchmark_esw.dataset import DatasetLoader
 from aibenchmark_esw.metrics.reporter import BenchmarkReporter
-from aibenchmark_esw.models import TaskEvaluationResult, TestResult, SizeMetrics, StaticSafetyMetrics, DimensionScores
+from aibenchmark_esw.models import (
+    DimensionScores,
+    SizeMetrics,
+    StaticSafetyMetrics,
+    TaskEvaluationResult,
+    TestResult,
+)
 from aibenchmark_esw.provenance import text_sha256
 from aibenchmark_esw.sandbox.executor import ExecutionSandbox
 from aibenchmark_esw.sandbox.static_analyzer import StaticAnalyzer
@@ -89,8 +95,8 @@ class ReplayTests(unittest.TestCase):
                 replay_candidates(self.origin,self.sources,self.tasks,self.executor,self.analyzer)
 
     def test_interrupted_checkpoint_preserves_completed_slot(self):
-        from aibenchmark_esw.replay import replay_candidates
         from aibenchmark_esw.evaluation import evaluate_task
+        from aibenchmark_esw.replay import replay_candidates
         calls=[]
         def grading(*args,**kwargs):
             calls.append(args[0].id)

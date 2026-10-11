@@ -3,9 +3,18 @@ import copy
 import math
 import re
 import time
-from typing import Optional, List, Dict, Any, Set
+from typing import Any, Optional
+
+from aibenchmark_esw.llm.costs import (
+    BudgetExceededError,
+    PricingUnknownError,
+    model_info,
+    pricing,
+    token_upper_bound,
+    usage_cost,
+    valid_cost,
+)
 from aibenchmark_esw.sandbox.c_source import mask_noncode
-from aibenchmark_esw.llm.costs import BudgetExceededError, PricingUnknownError, model_info, pricing, token_upper_bound, usage_cost, valid_cost
 
 
 def is_fatal_provider_error(error):
@@ -76,7 +85,7 @@ class LLMClient:
         self.input_cost_per_million, self.output_cost_per_million = input_cost_per_million, output_cost_per_million
         self.budget = budget
         self.last_generation: Any = None
-        self.expected_functions: Set[str] = set()
+        self.expected_functions: set[str] = set()
         self.cancel_event = None
 
     def settings(self):
@@ -90,7 +99,7 @@ class LLMClient:
 
     def build_prompt(self, task_prompt: str, header_code: str, starter_code: str,
                      target_standard: str = "c99", prompt_overrides=None,
-                     system_prompt: Optional[str] = None) -> List[Dict[str, str]]:
+                     system_prompt: Optional[str] = None) -> list[dict[str, str]]:
         if target_standard not in ("c99", "c11", "c17"):
             raise ValueError("target_standard must be c99, c11, or c17")
         overrides = prompt_overrides or {}
@@ -172,7 +181,7 @@ class LLMClient:
                 estimate = (token_upper_bound(messages) * prices["input_per_token"]
                             + self.max_tokens * prices["output_per_token"]) if prices else None
                 reservation = self.budget.reserve(estimate)
-            record: Dict[str, Any] = {"turn": len(self.last_generation["request_messages"]),
+            record: dict[str, Any] = {"turn": len(self.last_generation["request_messages"]),
                       "attempt": attempt + 1, "latency_seconds": None, "error": None,
                       "cost_usd": None, "budget_charge_usd": reservation, "usage": None}
             self.last_generation["attempts"].append(record)
@@ -272,7 +281,7 @@ class LLMClient:
         durations = [item['latency_seconds'] for item in attempts if valid_cost(item.get('latency_seconds'))]
         self.last_generation['latency_seconds'] = sum(durations) if attempts and len(durations) == len(attempts) else None
 
-    def generate_solution(self, messages: List[Dict[str, str]]) -> str:
+    def generate_solution(self, messages: list[dict[str, str]]) -> str:
         self.last_generation = {"requested_model": self.model_name, "resolved_model": None,
                                 **self.settings(), "latency_seconds": None, "finish_reason": None,
                                 "usage": None, "attempts": [], "turns": [],

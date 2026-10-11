@@ -2,8 +2,12 @@ import unittest
 
 from aibenchmark_esw.metrics.reporter import BenchmarkReporter
 from aibenchmark_esw.models import (
-    TaskEvaluationResult, TaskWeights, TestResult, SizeMetrics,
-    StaticSafetyMetrics, DimensionScores,
+    DimensionScores,
+    SizeMetrics,
+    StaticSafetyMetrics,
+    TaskEvaluationResult,
+    TaskWeights,
+    TestResult,
 )
 
 

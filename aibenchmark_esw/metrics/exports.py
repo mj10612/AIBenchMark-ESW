@@ -5,6 +5,7 @@ import json
 import math
 from urllib.parse import quote
 from xml.etree import ElementTree as ET
+
 from aibenchmark_esw.metrics.junit import _xml_text
 
 

@@ -8,7 +8,7 @@
 
 > A host-based benchmark for evaluating AI-generated embedded C using functional tests, resource budgets, and selected static safety rules.
 
-The project is in early development: 13 tasks and 113 C test cases provide a reproducible reference baseline. The published [100-point baseline](results/baseline.md) measures the bundled golden implementations; it is not an OpenAI or Claude model score. See [reproducibility](docs/REPRODUCIBILITY.md), the [roadmap](docs/ROADMAP.md), and [contributor guidance](CONTRIBUTING.md).
+The project is in early development: 13 tasks and 114 C test cases provide a reproducible reference baseline. The published [100-point baseline](results/baseline.md) measures the bundled golden implementations; it is not an OpenAI or Claude model score. See [reproducibility](docs/REPRODUCIBILITY.md), the [roadmap](docs/ROADMAP.md), and [contributor guidance](CONTRIBUTING.md).
 
 ---
 
@@ -52,9 +52,9 @@ However, **embedded systems software (firmware)** operates under fundamentally d
 | **4** | Bug Fix & Safety | `tier4_bitmask_fix` | W1C Interrupt Status Register & Priority Bitmask Fix | Write-1-to-Clear race condition, bitfield isolation |
 | **2** | Fixed-point Control | `tier2_fixed_control` | Q8 PID and low-pass filter | Wide products, saturation, truncation, anti-windup |
 | **3** | Device Drivers | `tier3_spi_flash` | SPI NOR flash driver | JEDEC, 24-bit addresses, page splitting, WIP timeout |
-| **3** | Flash Update | `tier3_flash_update` | Dual-slot update state machine | CRC read-back, atomic commit, power-cut recovery |
-| **4** | DMA Ownership | `tier4_dma_buffer` | C11 double-buffer ownership | Alignment, critical sections, cache hooks, overrun |
-| **4** | Bug Fix & Recovery | `tier4_uart_frame_fix` | UART frame receiver repair | Global poll budget, checksum, recovery, output preservation |
+| **3** | Flash Management | `tier3_flash_update` | Dual-slot update state machine | CRC read-back, atomic commit, power-cut recovery |
+| **4** | Concurrency | `tier4_dma_buffer` | C11 double-buffer ownership | Alignment, critical sections, cache hooks, overrun |
+| **4** | Bug Fix & Safety | `tier4_uart_frame_fix` | UART frame receiver repair | Global poll budget, checksum, recovery, output preservation |
 
 ---
 
@@ -197,7 +197,7 @@ The combined size ($\text{Flash} + \text{RAM}$) is compared to the measured refe
 * Missing or unreadable measurements are reported as unavailable and receive no memory points.
 * References that fail to compile, do not complete and pass every test, or exceed either resource budget produce an explicit reference-validation error and receive no memory points.
 
-Reference implementations must pass all functional tests and fit the budgets with the compiler used for comparisons. The refreshed TCC baseline scores 100/100 and passes all 113 tests. The ring buffer's Flash budget is 2048 bytes, accommodating its measured 1474-byte TCC object footprint. Its RAM footprint is legitimately zero because it uses caller-owned storage. The Q1.15 task has 16 cases, including a sweep of all 65,536 raw values for selected arithmetic identities and scaling checks; it does not exhaust all input pairs. The tick timer has 16 cases for wrap, deadline boundaries, phase retention, and missed-expiration counts; real elapsed time from its stored origin must remain below 2^32 ticks. Other compilers may produce different footprints; resource limits remain enforced for both candidates and references.
+Reference implementations must pass all functional tests and fit the budgets with the compiler used for comparisons. The refreshed TCC baseline scores 100/100 and passes all 114 tests. The ring buffer's Flash budget is 2048 bytes, accommodating its measured 1474-byte TCC object footprint. Its RAM footprint is legitimately zero because it uses caller-owned storage. The Q1.15 task has 16 cases, including a sweep of all 65,536 raw values for selected arithmetic identities and scaling checks; it does not exhaust all input pairs. The tick timer has 16 cases for wrap, deadline boundaries, phase retention, and missed-expiration counts; real elapsed time from its stored origin must remain below 2^32 ticks. Other compilers may produce different footprints; resource limits remain enforced for both candidates and references.
 
 ### 3. Static Code Safety ($S_{\text{safety}}$, 20%)
 Checks selected embedded safety rules using built-in heuristics and, when installed, `cppcheck`. These checks are not full MISRA-C certification. Penalizes:
@@ -215,12 +215,21 @@ The built-in allocation rule conservatively rejects named references to `malloc`
 ```text
 AIBenchMark-ESW/
 ├── pyproject.toml              # Python packaging & dependencies
+├── setup.py                    # Dataset packaging hook
+├── MANIFEST.in                 # Source distribution contents
+├── uv.lock                     # Locked development/provider dependencies
+├── action.yml                  # Consumer GitHub Action
+├── docs/                       # Reproducibility, policies and usage
+├── results/                    # Published reference evidence
+├── .github/                    # CI, action helpers and dependency maintenance
+├── SECURITY.md                 # Security boundary and reporting policy
 ├── README.md                   # Project documentation & quickstart
 ├── NOTICE                      # Copyright & third-party license notices
 ├── CONTRIBUTING.md             # Guide for contributing new tasks
 ├── aibenchmark_esw/            # Python benchmark orchestrator
 │   ├── cli.py                  # CLI command entry point
 │   ├── dataset.py              # Task discovery & loader
+│   ├── schemas/                # Report schema and trusted asset metadata
 │   ├── models.py               # Data models and evaluation types
 │   ├── llm/                    # LLM API adapter (LiteLLM)
 │   ├── sandbox/                # Compiler execution, size analysis, static analysis

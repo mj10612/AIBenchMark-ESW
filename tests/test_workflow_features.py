@@ -7,15 +7,16 @@ import threading
 import time
 import unittest
 from argparse import Namespace
-from contextlib import redirect_stdout, redirect_stderr
+from contextlib import redirect_stderr, redirect_stdout
 from dataclasses import replace
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from unittest.mock import MagicMock, patch
 
 from compiler_tools import find_clang
+
 from aibenchmark_esw import cli
-from aibenchmark_esw.baseline_check import verify_baseline, current_fingerprints
+from aibenchmark_esw.baseline_check import current_fingerprints, verify_baseline
 from aibenchmark_esw.dataset import DatasetLoader
 from aibenchmark_esw.evaluation import evaluate_task
 from aibenchmark_esw.llm.client import LLMClient
@@ -239,10 +240,13 @@ class TestWorkflowFeatures(unittest.TestCase):
 
     def test_published_fingerprint_gate_matching_and_drift(self):
         fresh = current_fingerprints()
-        verify_baseline({"metadata": fresh}, fresh)
-        bad = {**fresh, "evaluator_sha256": "stale"}
+        report = json.loads(Path('results/baseline.json').read_text(encoding='utf-8'))
+        report['metadata'].update(fresh, source_dirty=False)
+        verify_baseline(report, fresh)
+        bad = copy.deepcopy(report)
+        bad['metadata']['evaluator_sha256'] = 'stale'
         with self.assertRaisesRegex(ValueError, "stale evaluator"):
-            verify_baseline({"metadata": bad}, fresh)
+            verify_baseline(bad, fresh)
 
     @unittest.skipUnless(find_clang(), "Cross-object integration requires Clang")
     def test_real_arm_object_target_budgets_and_comparison_rejection(self):

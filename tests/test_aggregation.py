@@ -3,14 +3,23 @@ import csv
 import io
 import json
 import unittest
-
 from dataclasses import asdict
-from aibenchmark_esw.metrics.scorer import SCORING_FORMULA_VERSION, SAFETY_ERROR_PENALTY, SAFETY_WARNING_PENALTY
+
 from aibenchmark_esw.metrics.aggregation import aggregate_runs, render_aggregation
 from aibenchmark_esw.metrics.reporter import BenchmarkReporter
+from aibenchmark_esw.metrics.scorer import (
+    SAFETY_ERROR_PENALTY,
+    SAFETY_WARNING_PENALTY,
+    SCORING_FORMULA_VERSION,
+)
 from aibenchmark_esw.models import (
-    DimensionScores, SizeMetrics, StaticSafetyMetrics, TaskEvaluationResult,
-    TaskLimits, TaskWeights, TestResult,
+    DimensionScores,
+    SizeMetrics,
+    StaticSafetyMetrics,
+    TaskEvaluationResult,
+    TaskLimits,
+    TaskWeights,
+    TestResult,
 )
 
 

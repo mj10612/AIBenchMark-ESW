@@ -4,7 +4,7 @@
   "tier": 4,
   "category": "concurrency",
   "target_standard": "c11",
-  "description": "DMA Double-Buffer Ownership",
+  "description": "Implement caller-owned DMA double buffering with aligned halves, balanced critical sections, cache invalidation and explicit overrun ownership.",
   "limits": {
     "max_flash_bytes": 2048,
     "max_ram_bytes": 128,

@@ -4,7 +4,6 @@ import os
 import resource
 import sys
 
-
 if __name__ == "__main__":
     cpu, memory = int(sys.argv[1]), int(sys.argv[2])
     resource.setrlimit(resource.RLIMIT_CPU, (cpu, cpu))  # type: ignore[attr-defined]  # Launcher executes only on POSIX.

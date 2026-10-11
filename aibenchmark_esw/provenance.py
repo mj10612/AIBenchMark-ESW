@@ -11,9 +11,13 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from aibenchmark_esw import __version__
+from aibenchmark_esw.metrics.scorer import (
+    SAFETY_ERROR_PENALTY,
+    SAFETY_WARNING_PENALTY,
+    SCORING_FORMULA_VERSION,
+)
 from aibenchmark_esw.resources import data_root
 from aibenchmark_esw.sandbox.static_analyzer import StaticAnalyzer
-from aibenchmark_esw.metrics.scorer import SCORING_FORMULA_VERSION, SAFETY_ERROR_PENALTY, SAFETY_WARNING_PENALTY
 
 
 def text_sha256(text):
@@ -98,7 +102,8 @@ def _checkout_provenance(package_dir):
     if not top or Path(top).resolve() != checkout.resolve():
         return None, None
     revision = _command_output(["git", "-C", str(checkout), "rev-parse", "HEAD"])
-    status = _command_output(["git", "-C", str(checkout), "status", "--porcelain"])
+    status = _command_output(["git", "-C", str(checkout), "status", "--porcelain", '--',
+                              'aibenchmark_esw', 'tasks', 'third_party', 'pyproject.toml', 'setup.py', 'MANIFEST.in'])
     return revision, bool(status) if status is not None else None
 
 
