@@ -130,21 +130,30 @@ print(json.dumps(len(children)),flush=True)
 
     @unittest.skipIf(os.name == 'nt' or getattr(os, 'geteuid', lambda: 1)() == 0, 'Requires unprivileged POSIX RLIMIT_NPROC enforcement')
     def test_actual_fork_loop_is_bounded(self):
-        code = '''import os,signal,json
+        code = '''import os,signal,json,resource,sys
 children=[]
+quota=resource.getrlimit(resource.RLIMIT_NPROC)[0]
+attempts=quota+1 if sys.platform=='darwin' else 100
 try:
- for _ in range(100):
+ for _ in range(attempts):
   try: pid=os.fork()
   except OSError: break
   if pid==0: signal.pause();os._exit(0)
   children.append(pid)
- print(json.dumps(len(children)),flush=True)
+ print(json.dumps({'count':len(children),'quota':quota,'attempts':attempts}),flush=True)
 finally:
  for pid in children: os.kill(pid,signal.SIGKILL);os.waitpid(pid,0)
 '''
         result = run_bounded([sys.executable, '-c', code], timeout=10, max_output_bytes=4096, isolation='process')
         self.assertEqual(result.returncode, 0, result.stdout)
-        self.assertLessEqual(json.loads(result.stdout), 64 if sys.platform == 'darwin' else 63)
+        observed = json.loads(result.stdout)
+        # NPROC counts unrelated UID processes. Their concurrent exit can let
+        # macOS create more than the additional budget, but never exceed its
+        # actual inherited UID quota. Exhaust that quota to verify rejection.
+        self.assertLess(observed['count'], observed['attempts'])
+        self.assertLessEqual(observed['count'], observed['quota'] - 1)
+        if sys.platform != 'darwin':
+            self.assertLessEqual(observed['count'], 63)
 
     @unittest.skipUnless(os.environ.get('AIBENCHMARK_TEST_CONTAINER') == '1' or os.environ.get('AIBENCHMARK_TEST_BWRAP') == '1', 'Explicit real containment integration required')
     def test_actual_contained_candidate_large_file_is_capped(self):
