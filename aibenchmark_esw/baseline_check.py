@@ -6,7 +6,7 @@ from pathlib import Path
 
 from aibenchmark_esw.dataset import DatasetLoader
 from aibenchmark_esw.metrics.reporter import BenchmarkReporter
-from aibenchmark_esw.provenance import _digest_records, task_sha256
+from aibenchmark_esw.provenance import _digest_records, evaluator_records, task_sha256
 from aibenchmark_esw.resources import data_root
 
 
@@ -20,9 +20,7 @@ def current_fingerprints(package_dir=None, loader=None, task_ids=None):
             raise ValueError('Baseline names unavailable tasks: ' + ', '.join(sorted(unknown)))
         selected = [task for task in selected if task.id in task_ids]
     tasks = {task.id: task_sha256(task, data_root() / "third_party" / "unity") for task in selected}
-    return {"evaluator_sha256": _digest_records([
-        (path.relative_to(package).as_posix(), path.read_bytes())
-        for path in package.rglob("*.py") if "_data" not in path.relative_to(package).parts]),
+    return {"evaluator_sha256": _digest_records(evaluator_records(package)),
         "dataset_sha256": _digest_records([(name, value.encode("ascii")) for name, value in tasks.items()])}
 
 

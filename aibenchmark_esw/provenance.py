@@ -74,6 +74,13 @@ def task_sha256(task, unity_dir, *, unreadable=None):
     return _digest_records(records)
 
 
+def evaluator_records(package_dir):
+    package = Path(package_dir)
+    return [(path.relative_to(package).as_posix(), path.read_bytes())
+            for path in package.rglob('*.py') if '_data' not in path.relative_to(package).parts] + [
+                ('schemas/asset-manifest.json', (package / 'schemas/asset-manifest.json').read_bytes())]
+
+
 def _command_output(command):
     try:
         result = subprocess.run(command, capture_output=True, text=True,
@@ -133,10 +140,7 @@ def collect_run_metadata(tasks, executor=None, generation_settings=None, static_
         "run_id": uuid.uuid4().hex,
         "created_at_utc": datetime.now(timezone.utc).isoformat(),
         "benchmark_version": __version__,
-        "evaluator_sha256": _digest_records([
-            (path.relative_to(package_dir).as_posix(), path.read_bytes())
-            for path in package_dir.rglob("*.py") if "_data" not in path.relative_to(package_dir).parts
-        ]),
+        "evaluator_sha256": _digest_records(evaluator_records(package_dir)),
         "python_version": platform.python_version(),
         "platform": {"system": platform.system(), "release": platform.release(), "machine": platform.machine()},
         "compiler": {"name": compiler, "version": version.splitlines()[0] if version else None,

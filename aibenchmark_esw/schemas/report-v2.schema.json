@@ -5,6 +5,10 @@
   "description": "Structural contract. Python additionally validates scoring, task policy, suite consistency and run state.",
   "type": "object",
   "properties": {
+    "tier_weighted_score": {"type": "number", "minimum": 0, "maximum": 100},
+    "tier_weight_policy": {"const": "proportional-to-tier-v1"},
+    "by_tier": {"type": "object"},
+    "by_category": {"type": "object"},
     "generation_summary": {"type": "object"},
     "samples": {
       "type": "array",

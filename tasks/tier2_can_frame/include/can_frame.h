@@ -1,3 +1,4 @@
+/* AIBENCHMARK_ESW_CANARY_V1_tier2_can_frame */
 #ifndef CAN_FRAME_H
 #define CAN_FRAME_H
 #include <stdbool.h>

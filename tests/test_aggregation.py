@@ -45,6 +45,8 @@ def fixture_report(score=100, run_id="run-1", model="provider/alias"):
     # This editable fixture represents legacy input without derived summaries;
     # tests adding a summary must recompute it from their edited measurements.
     report.pop('generation_summary')
+    for field in ('tier_weighted_score', 'tier_weight_policy', 'by_tier', 'by_category'):
+        report.pop(field)
     return report
 
 

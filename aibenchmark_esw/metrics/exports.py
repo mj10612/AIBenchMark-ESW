@@ -3,7 +3,6 @@
 import html
 import json
 import math
-from urllib.parse import quote
 from xml.etree import ElementTree as ET
 
 from aibenchmark_esw.metrics.junit import _xml_text
@@ -77,7 +76,13 @@ def report_html(results, model_name, metadata=None):
     warning = BenchmarkReporter.run_warning(metadata)
     if warning:
         warnings.append(warning)
+    from aibenchmark_esw.metrics.groups import breakdown_rows, grouped_scores
+    groups = grouped_scores(results, metadata)
+    group_rows = breakdown_rows([dict(model=model_name, **groups)])
+    group_fields = ['scope', 'group', 'count', 'task_attempts', 'mean_score', 'pass_at_1_pct']
+    group_table = '<h2>Tier and category breakdown</h2>' + _table(group_fields, ['<tr>' + ''.join('<td>' + _escape(row[field]) + '</td>' for field in group_fields) + '</tr>' for row in group_rows])
     return _document('AIBenchMark-ESW: ' + model_name, '<p>' + _escape('; '.join(warnings)) + '</p>' +
+                     '<p>Tier-weighted score: ' + _escape(groups['tier_weighted_score']) + '; flat score: ' + _escape(BenchmarkReporter.to_json_dict(results, model_name)['overall_score']) + '</p>' + group_table +
                      '<pre>' + _escape('\n'.join(sampling + measurements)) + '</pre>' +
                      _table(['Task', 'Tier', 'Category', 'Status', 'Standard', 'Weights F/M/S', 'Score', 'Functional', 'Memory', 'Safety', 'Flash', 'RAM', 'Time', 'Details'], rows) +
                      '<details open><summary>Reproducibility metadata</summary><pre>' + _escape(json.dumps(metadata or {}, indent=2)) + '</pre></details>')
@@ -90,27 +95,23 @@ def summary_html(title, records, summary):
         cells = ''.join('<td>' + _escape(json.dumps(record[field], ensure_ascii=False) if isinstance(record[field], (dict, list)) else record[field]) + '</td>' for field in fields)
         score = record.get('score', (record.get('statistics') or {}).get('score', {}).get('mean', 0))
         rows.append('<tr data-score="' + _escape(score) + '">' + cells + '</tr>')
-    return _document(title, _table(fields, rows) + '<details><summary>Complete data and warnings</summary><pre>' + _escape(json.dumps(summary, indent=2, ensure_ascii=False)) + '</pre></details>', task_filters=False)
+    extra = ''
+    from aibenchmark_esw.metrics.groups import breakdown_rows
+    groups = breakdown_rows(records)
+    if groups:
+        keys = list(groups[0])
+        extra += '<h2>Tier and category breakdown</h2>' + _table(keys, ['<tr>' + ''.join('<td>' + _escape(row[key]) + '</td>' for key in keys) + '</tr>' for row in groups])
+    paired = summary.get('paired')
+    if paired:
+        extra += '<h2>Paired task differences</h2><p>' + _escape(paired['interpretation']) + '</p>'
+        paired_keys = ['model', 'baseline', 'matched_tasks', 'unmatched_tasks', 'median_delta', 'median_delta_ci95', 'p_value', 'p_value_bonferroni', 'cohens_dz', 'task_deltas']
+        extra += _table(paired_keys, ['<tr>' + ''.join('<td>' + _escape(row[key]) + '</td>' for key in paired_keys) + '</tr>' for row in paired['comparisons']])
+    return _document(title, _table(fields, rows) + extra + '<details><summary>Complete data and warnings</summary><pre>' + _escape(json.dumps(summary, indent=2, ensure_ascii=False)) + '</pre></details>', task_filters=False)
 
 
-def generate_sarif(results, model_name='unknown', metadata=None):
-    rules: dict = {}
-    findings = []
-    for result in results:
-        for finding in result.safety_metrics.findings:
-            rule_id = finding['rule_id']
-            rules.setdefault(rule_id, {'id': rule_id, 'shortDescription': {'text': rule_id}, 'properties': {'engine': finding['engine']}})
-            physical = {'artifactLocation': {'uri': quote(finding['file'].replace('\\', '/'), safe='/:' )}}
-            if finding.get('line') is not None:
-                physical['region'] = {'startLine': finding['line']}
-            findings.append({'ruleId': rule_id, 'level': 'error' if finding['severity'] == 'error' else 'warning',
-                             'message': {'text': finding['message']}, 'locations': [{'physicalLocation': physical}],
-                             'properties': {'task_id': result.task_id, 'model': model_name, 'severity': finding['severity'],
-                                            'sample_run_id': (result.provenance or {}).get('sample_run_id'),
-                                            'candidate_sha256': (result.provenance or {}).get('candidate_sha256')}})
-    return json.dumps({'$schema': 'https://json.schemastore.org/sarif-2.1.0.json', 'version': '2.1.0',
-                       'runs': [{'tool': {'driver': {'name': 'AIBenchMark-ESW', 'rules': list(rules.values())}},
-                                 'results': findings, 'properties': metadata or {}}]}, indent=2, allow_nan=False) + '\n'
+def generate_sarif(results, model_name='unknown', metadata=None, *, source_root=None, source_mapping=None):
+    from aibenchmark_esw.metrics.sarif_sources import generate_sarif as render
+    return render(results, model_name, metadata, source_root=source_root, source_mapping=source_mapping)
 
 
 def comparison_junit(comparison, baseline_model=None, regression_threshold=0.0):
@@ -131,4 +132,10 @@ def comparison_junit(comparison, baseline_model=None, regression_threshold=0.0):
             ET.SubElement(case, 'failure', message='Task score regression', type='score-regression').text = _xml_text(text)
         ET.SubElement(case, 'system-out').text = _xml_text(text)
     suite.set('failures', str(failures))
+    from aibenchmark_esw.metrics.paired import paired_comparisons
+    paired = paired_comparisons(comparison, baseline_model)
+    for row in paired['comparisons']:
+        case = ET.SubElement(suite, 'testcase', classname=_xml_text(row['model']), name='paired-task-statistics')
+        ET.SubElement(case, 'system-out').text = _xml_text(json.dumps(row, ensure_ascii=False))
+    suite.set('tests', str(len(suite.findall('testcase'))))
     return ET.tostring(suite, encoding='unicode', xml_declaration=True) + '\n'

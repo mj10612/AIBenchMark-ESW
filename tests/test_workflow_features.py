@@ -285,16 +285,19 @@ class TestWorkflowFeatures(unittest.TestCase):
             self.assertIn("Per-task totals", rendered)
             self.assertIn("Largest gap: tier1_crc16", rendered)
             self.assertIn("Memory unavailable", rendered)
-        rows = list(csv.DictReader(io.StringIO(render_comparison(comparison, "csv-long"))))
+        exported_rows = list(csv.DictReader(io.StringIO(render_comparison(comparison, "csv-long"))))
+        rows = [row for row in exported_rows if row["scope"] == "task"]
+        self.assertTrue(any(row["scope"] == "by_tier" for row in exported_rows))
+        self.assertTrue(any(row["scope"] == "by_category" for row in exported_rows))
         self.assertEqual(len(rows), 2)
-        self.assertEqual(set(rows[0]), {"model","task_id","total","functional","memory","safety","measured","pass_at_1"})
+        self.assertTrue({"model","task_id","total","functional","memory","safety","measured","pass_at_1", "scope", "group", "tier", "category", "delta_vs_baseline"}.issubset(rows[0]))
         self.assertEqual(rows[1]["memory"], "")
         third = copy.deepcopy(reference)
         third.model_name = "three"
         comparison = compare_runs([BenchmarkReporter.to_json_dict([reference], "one"),
             BenchmarkReporter.to_json_dict([other], "two"), BenchmarkReporter.to_json_dict([third], "three")])
         self.assertEqual(comparison["largest_gap"]["high"]["model"], "three")
-        self.assertEqual(len(list(csv.DictReader(io.StringIO(render_comparison(comparison, "csv-long"))))), 3)
+        self.assertEqual(len([row for row in csv.DictReader(io.StringIO(render_comparison(comparison, "csv-long"))) if row["scope"] == "task"]), 3)
         self.assertIn("| three | 100.00 |", render_comparison(comparison))
 
     def test_eval_invalid_assets_are_retained_before_compiler_construction(self):

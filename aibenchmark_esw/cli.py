@@ -164,6 +164,8 @@ def build_parser() -> argparse.ArgumentParser:
     report_p = subparsers.add_parser("report", help="Generate report from evaluation JSON")
     report_p.add_argument("--results", type=str, required=True, help="Path to results JSON file")
     report_p.add_argument("--format", choices=["cli", "markdown", "junit", "html", "sarif", 'github-summary'], default="cli", help="Output format")
+    report_p.add_argument('--source-root', type=Path, help='Repository root for verified SARIF candidate sources')
+    report_p.add_argument('--source-mapping', type=Path, help='JSON mapping of task or task:sample IDs to persistent candidate paths')
     report_p.add_argument("--output", type=Path)
     schema_p = subparsers.add_parser("validate-report", help="Validate report structure and cross-field consistency offline")
     schema_p.add_argument("results", type=Path, nargs="?")
@@ -215,6 +217,7 @@ def build_parser() -> argparse.ArgumentParser:
         command.add_argument("--isolation", choices=["native", "process", "container", "bwrap"], default="native")
         command.add_argument("--container-engine", help="Docker or Podman executable")
         command.add_argument("--container-image", default="gcc:14", help="Compiler-equipped container image")
+        command.add_argument("--hardening", choices=["auto", "off", "required"], default="auto", help="Native exploit-mitigation policy; cross-target footprints retain freestanding flags")
         command.add_argument("--warnings", action="store_true", help="Score compiler warnings as additional safety findings")
         if command is not mutation_p:
             command.add_argument("--static-analysis-timeout", type=_positive_float, default=30.0)
@@ -248,7 +251,7 @@ def _new_executor(args):
         memory_limit_bytes=getattr(args, "memory_limit_bytes", None), sanitizers=sanitizers,
         target=getattr(args, "target", None), cross_compiler=getattr(args, "cross_compiler", None),
         warnings=getattr(args, "warnings", False), container_engine=getattr(args, "container_engine", None),
-        container_image=getattr(args, "container_image", "gcc:14"))
+        container_image=getattr(args, "container_image", "gcc:14"), hardening=getattr(args, "hardening", "auto"))
 
 
 def _new_analyzer(args):
@@ -400,6 +403,10 @@ def cmd_eval(args: argparse.Namespace) -> int:
         metadata.update(run_status="interrupted" if interrupted else "completed",
                         pending_tasks=[task.id] if interrupted else [])
         _attach_provenance(result, metadata, task.id, solution_code)
+        if getattr(args, 'solution', None):
+            assert result.provenance is not None
+            result.provenance['candidate_source'] = str(Path(args.solution).resolve())
+            result.provenance['candidate_basename'] = Path(task.entry_file).name
         _save_checkpoint(output, [result], model_name, metadata)
     print(BenchmarkReporter.generate_cli_table([result], model_name=model_name, metadata=metadata))
     _task_diagnostics(args, result)
@@ -517,7 +524,7 @@ def _cmd_run_once(args: argparse.Namespace) -> int:
         metadata["contamination_controls"] = args._variant_evidence
     option_names = ("compiler", "allow_standard_fallback", "compile_timeout", "max_output_bytes",
                     "isolation", "memory_limit_bytes", "sanitizers", "save_solutions", "tasks_root", "system_prompt_file",
-                    "target", "cross_compiler", "warnings", "container_engine", "container_image",
+                    "target", "cross_compiler", "warnings", "hardening", "container_engine", "container_image",
                     "static_analysis_timeout", "extended_safety_rules", "max_cost_usd",
                     "input_cost_per_million", "output_cost_per_million", "variant_seed", "heldout_tests", "api_key_env")
     metadata["run_options"] = {name: getattr(args, name, None) for name in option_names}
@@ -630,6 +637,10 @@ def _cmd_run_once(args: argparse.Namespace) -> int:
             if llm.last_generation:
                 messages = llm.last_generation.get("request_messages", messages)
         _attach_provenance(result, metadata, task.id, solution_code, messages)
+        if solution_directory and solution_code:
+            assert result.provenance is not None
+            result.provenance['candidate_source'] = str((Path(solution_directory) / f'{task.id}.c').resolve())
+            result.provenance['candidate_basename'] = Path(task.entry_file).name
         return index, result, state
 
     interrupted = aborted = False
@@ -881,7 +892,9 @@ def cmd_report(args: argparse.Namespace) -> int:
                     result.provenance = {**(result.provenance or {}), "sample_run_id": sample["metadata"]["run_id"]}
                 export_results.extend(child_results)
         rendered = (github_summary(data) if args.format == 'github-summary' else
-                    generate_sarif(export_results, model_name, render_metadata) if args.format == "sarif" else
+                    generate_sarif(export_results, model_name, render_metadata,
+                                   source_root=getattr(args, 'source_root', None),
+                                   source_mapping=json.loads(args.source_mapping.read_text(encoding='utf-8')) if getattr(args, 'source_mapping', None) else None) if args.format == "sarif" else
                     BenchmarkReporter.generate_html(results, model_name, render_metadata) if args.format == "html" else
                     render_junit(export_results, model_name, render_metadata) if args.format == "junit" else
                     BenchmarkReporter.generate_markdown(results, model_name, render_metadata) if args.format == "markdown"

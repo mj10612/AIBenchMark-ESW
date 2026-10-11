@@ -6,9 +6,11 @@ from aibenchmark_esw.sandbox.executor import ExecutionSandbox
 from aibenchmark_esw.sandbox.static_analyzer import StaticAnalyzer
 
 NEW_TASKS = {
-    "tier4_dma_buffer": 5,
-    "tier3_spi_flash": 6,
-    "tier4_uart_frame_fix": 7,
+    "tier4_dma_buffer": 8,
+    "tier3_spi_flash": 8,
+    "tier4_uart_frame_fix": 8,
+    "tier2_can_frame": 14,
+    "tier2_windowed_watchdog": 13,
     "tier2_fixed_control": 7,
     "tier3_flash_update": 7,
 }

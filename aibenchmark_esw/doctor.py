@@ -64,6 +64,8 @@ def run_doctor(tasks, loader, executor, check_references=False, reference_cache=
                 unity_errors.append(f"Empty Unity asset: {path}")
         except (OSError, UnicodeError) as error:
             unity_errors.append(f"Unreadable Unity asset {path}: {error}")
+    from aibenchmark_esw.resources import unity_integrity_errors
+    unity_errors += unity_integrity_errors(executor.unity_dir)
     record("unity", not unity_errors, "; ".join(unity_errors) or "Unity sources and headers are readable")
 
     valid_assets = {}

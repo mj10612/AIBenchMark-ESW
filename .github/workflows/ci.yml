@@ -241,6 +241,7 @@ jobs:
         run: |
           docker pull gcc:14
           python -m unittest discover -s tests -p test_containment.py -v
+          python -m unittest discover -s tests -p test_asset_and_resource_security.py -v
           aibenchmark-esw run --model baseline --isolation container --container-engine docker --container-image gcc:14 --memory-limit-bytes 536870912 --output artifacts/container-baseline.json
           aibenchmark-esw validate-report artifacts/container-baseline.json
       - name: Exercise real bubblewrap boundaries
@@ -250,6 +251,7 @@ jobs:
           sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
           bwrap --version
           python -m unittest discover -s tests -p test_real_bwrap.py -v
+          python -m unittest discover -s tests -p test_asset_and_resource_security.py -v
           aibenchmark-esw run --model baseline --isolation bwrap --compiler gcc --output artifacts/bwrap-baseline.json
           aibenchmark-esw validate-report artifacts/bwrap-baseline.json
       - name: Upload containment evidence

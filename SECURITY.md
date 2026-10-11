@@ -112,6 +112,41 @@ references use scoped declaration exemptions; local values and aggregate members
 do not hide references in other functions. These remain lexical heuristics.
 # Private test state
 
+Bundled data is preferred over adjacent checkout-shaped directories. A development
+checkout must declare this project; overriding installed bundled data requires
+`AIBENCHMARK_ESW_DEV_CHECKOUT=1`. The package's SHA-256 asset manifest verifies
+bundled prompts, configs, APIs, test suites, starters, references and Unity before
+generation/compilation. Missing, modified, escaping or unlisted source inputs fail
+closed. Explicit external datasets/variants are fingerprinted separately and do
+not acquire bundled-trusted status. The manifest assumes the installed Python
+package is protected; it is not a signed defense against an attacker who can edit
+the evaluator itself. Reviewed asset edits require
+`python .github/scripts/update_asset_manifest.py` before committing source.
+
+`--hardening auto` enables GCC/Clang stack protection and FORTIFY; Linux executables
+also use PIE, RELRO, immediate binding and a non-executable stack. MSVC/clang-cl
+use SDL, Control Flow Guard, ASLR and DEP. `off` permits explicit opt-out;
+`required` rejects TCC, whose auto mode records unavailable support. Exact flags
+are recorded for comparison compatibility. Freestanding cross-target footprint
+objects retain their separate target policy. These mitigations protect against
+harness bugs and do not establish an oracle boundary. See the
+[GCC instrumentation options](https://gcc.gnu.org/onlinedocs/gcc/Instrumentation-Options.html).
+
+POSIX launches cap individual files at 16 MiB, disable core dumps and cap open
+files at 256. Process/bwrap mode also caps per-user processes at 64 (RLIMIT_NPROC
+includes that user's other processes and does not constrain privileged users).
+Native Windows Jobs cap the job at 64 active processes; Windows native has no
+RLIMIT_FSIZE/core equivalent and reports those controls unavailable. Native
+execution still permits host files/network access. Docker/Podman use a 512 MiB
+default memory cap with no additional swap, 64 container PIDs and explicit
+nproc/fsize/core/nofile limits. Container/bwrap runtime workspaces are read-only
+with 64 MiB scratch and /tmp tmpfs mounts. A narrow writable receipt file is capped
+by the file-size limit. Compilation workspaces remain writable for trusted compiler
+outputs. POSIX per-file limits do not bound total native disk use; choose external
+containment for hostile code. See [Docker resource controls](https://docs.docker.com/reference/cli/docker/container/run/)
+and [Windows Job limits](https://learn.microsoft.com/en-us/windows/win32/api/winnt/ns-winnt-jobobject_basic_limit_information).
+
+
 Unity's mutable state and assertion jump buffer are private static objects. Its
 public result accessor returns counter values by copy. Repeated UnityBegin calls
 record a failure rather than resetting the runner. GCC/Clang compilation uses

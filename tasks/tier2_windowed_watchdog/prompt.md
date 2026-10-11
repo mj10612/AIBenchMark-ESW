@@ -1,3 +1,4 @@
+<!-- AIBENCHMARK_ESW_CANARY_V1_tier2_windowed_watchdog -->
 # Windowed Watchdog and Heartbeat Coordinator
 
 Implement windowed_watchdog.c using the supplied public header. All state belongs

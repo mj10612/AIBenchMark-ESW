@@ -256,13 +256,15 @@ class ExportServiceTests(unittest.TestCase):
         self.assertEqual(sarif['version'],'2.1.0')
         run=sarif['runs'][0]
         self.assertEqual(len(run['tool']['driver']['rules']),1)
-        self.assertEqual(run['results'][0]['locations'][0]['physicalLocation']['region']['startLine'],3)
-        self.assertNotIn('region',run['results'][1]['locations'][0]['physicalLocation'])
+        self.assertEqual(run['results'][0]['properties']['original_line'],3)
+        self.assertEqual(run['results'][0]['properties']['source_mapping'], 'diagnostic-only')
+        self.assertNotIn('locations', run['results'][0])
+        self.assertIsNone(run['results'][1]['properties']['original_line'])
 
     def test_junit_comparison_regression_threshold_and_baseline(self):
         comparison=compare_runs([fixture_report(),fixture_report(50,model='other')])
         root=ElementTree.fromstring(render_comparison(comparison,'junit',baseline_model='provider/alias',regression_threshold=10))
-        self.assertEqual(len(root.findall('.//testcase')),2)
+        self.assertEqual(len(root.findall('.//testcase')),3)
         self.assertEqual(len(root.findall('.//failure')),1)
         self.assertIn('-50',root.find('.//failure').text)
 

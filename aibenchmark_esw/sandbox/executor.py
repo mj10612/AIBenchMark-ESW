@@ -5,6 +5,7 @@ import os
 import re
 import shutil
 import subprocess
+import sys
 import tempfile
 import uuid
 from pathlib import Path
@@ -43,12 +44,19 @@ class ExecutionSandbox:
                  compile_timeout_seconds: float = 30, max_output_bytes: int = 1048576,
                  isolation: str = "native", memory_limit_bytes: Optional[int] = None,
                  sanitizers=(), target=None, cross_compiler=None, warnings=False,
-                 container_engine=None, container_image="gcc:14", container_runtime=None):
+                 container_engine=None, container_image="gcc:14", container_runtime=None, hardening="auto"):
+        if hardening not in ("auto", "off", "required"):
+            raise ValueError("hardening must be auto, off or required")
+        self.hardening = hardening
         self.compiler_path = compiler_path or os.environ.get("AIBENCHMARK_ESW_COMPILER") or (
             "gcc" if isolation == "container" else self._find_c_compiler())
         if Path(self.compiler_path).is_file():
             self.compiler_path = str(Path(self.compiler_path).resolve())
         self.unity_dir = data_root() / "third_party" / "unity"
+        from aibenchmark_esw.resources import unity_integrity_errors
+        integrity = unity_integrity_errors(self.unity_dir)
+        if integrity:
+            raise ValueError('; '.join(integrity))
         self.allow_standard_fallback = allow_standard_fallback
         if (isinstance(compile_timeout_seconds, bool) or not isinstance(compile_timeout_seconds, (float, int))
                 or not math.isfinite(compile_timeout_seconds) or compile_timeout_seconds <= 0):
@@ -85,6 +93,25 @@ class ExecutionSandbox:
                                        self._run_contained if self.containment else None,
                                        warnings=self.warnings, finding_parser=self._warning_findings)
 
+    def hardening_flags(self, object_only=False):
+        if self.hardening == "off":
+            return []
+        name = Path(self.compiler_path).stem.lower()
+        if name == "tcc":
+            if self.hardening == "required":
+                raise ValueError("TCC does not support required hardening; use GCC/Clang/MSVC or --hardening off")
+            return []
+        if name in ("cl", "clang-cl"):
+            flags = ["/sdl", "/guard:cf", "/D_CRT_SECURE_NO_WARNINGS"]
+            return flags if object_only else flags + ["/link", "/DYNAMICBASE", "/NXCOMPAT", "/guard:cf"]
+        flags = ["-fstack-protector-strong", "-D_FORTIFY_SOURCE=2"]
+        linux = self.containment is not None or os.name != "nt" and sys.platform.startswith('linux')
+        if linux:
+            flags += ["-fPIE"]
+            if not object_only:
+                flags += ["-pie", "-Wl,-z,relro,-z,now", "-Wl,-z,noexecstack"]
+        return flags
+
     def warning_flags(self):
         if not self.warnings:
             return []
@@ -120,6 +147,12 @@ class ExecutionSandbox:
                 "containment": self.containment.settings() if self.containment else None,
                 "candidate_environment": "minimal-v1",
                 "oracle_policy": "private-unity-state-v1",
+                "hardening": {"policy": self.hardening, "compile_flags": self.hardening_flags(True),
+                              "binary_flags": self.hardening_flags(), "available": bool(self.hardening_flags())},
+                "resource_limits": {"process_count": 64 if os.name == "nt" or self.isolation != "native" else None,
+                                    "file_size_bytes": 16777216 if os.name != "nt" or self.containment else None,
+                                    "core_bytes": 0 if os.name != "nt" or self.containment else None,
+                                    "open_files": 256 if os.name != "nt" or self.containment else None},
                 "process_backend": "windows-job" if os.name == "nt" else "posix-session",
                 "cpu_limit": "task-timeout" if self.isolation == "process" else None,
                 "footprint": self.cross.settings() if self.cross else {"target": "host", "measurement": "host-object"}}
@@ -149,6 +182,13 @@ class ExecutionSandbox:
 
     def _compile(self, task: TaskConfig, sources, output: Path, object_only=False,
                   extra_includes=()) -> CompilationResult:
+        from aibenchmark_esw.resources import (
+            task_integrity_errors,
+            unity_integrity_errors,
+        )
+        errors = unity_integrity_errors(self.unity_dir) + task_integrity_errors(task.task_dir)
+        if errors:
+            return CompilationResult(False, "\n".join(errors), error_message="Trusted asset integrity check failed")
         output = output.resolve()
         compiler_name = Path(self.compiler_path).stem.lower()
         includes = [task.task_dir.resolve() / "include", self.unity_dir.resolve()]
@@ -187,6 +227,7 @@ class ExecutionSandbox:
                         "-fno-omit-frame-pointer", "-g"]
         try:
             cmd += self.warning_flags()
+            cmd += self.hardening_flags(object_only)
             runner = self._run_contained if self.containment else run_bounded
             proc = runner(cmd, timeout=self.compile_timeout_seconds, max_output_bytes=self.max_output_bytes,
                           cwd=str(output.parent), isolation=self.isolation,
@@ -315,6 +356,7 @@ class ExecutionSandbox:
                 scratch.mkdir(exist_ok=True)
                 environment = self._candidate_environment(scratch)
                 receipt = work_dir / "harness.receipt"
+                receipt.write_bytes(b"")
                 runner = self._run_contained if self.containment else run_bounded
                 proc = runner([str(binary_path), str(receipt)], timeout=task.limits.timeout_seconds,
                                    max_output_bytes=self.max_output_bytes, cwd=str(scratch), env=environment,

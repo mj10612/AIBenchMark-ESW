@@ -255,6 +255,11 @@ class BenchmarkReporter:
                             matches = matches and isinstance(recorded, int) and not isinstance(recorded, bool)
                     if not matches:
                         raise ValueError('generation_summary disagrees with task/sample measurements: ' + key)
+        from aibenchmark_esw.metrics.groups import grouped_scores
+        expected_groups = grouped_scores(results, data.get('metadata'))
+        for field in ('tier_weighted_score', 'tier_weight_policy', 'by_tier', 'by_category'):
+            if field in data and data[field] != expected_groups[field]:
+                raise ValueError(field + ' disagrees with task results')
         return results
 
     @staticmethod
@@ -279,7 +284,7 @@ class BenchmarkReporter:
 
         md = []
         md.append(f"# AIBenchMark-ESW Benchmark Report: {markdown_text(model_name)}\n")
-        md += BenchmarkReporter.sampling_lines(metadata)
+        md += [markdown_text(line) for line in BenchmarkReporter.sampling_lines(metadata)]
         warning = BenchmarkReporter.run_warning(metadata)
         if warning:
             md.append(f"**{warning}**\n")
@@ -291,6 +296,10 @@ class BenchmarkReporter:
         qualifier = " (first sample)" if (metadata or {}).get('sampling') else ""
         md.append(f"- **Pass@1 (All Tests Passed){qualifier}**: {all_passed_tasks}/{total_tasks} ({all_passed_tasks/total_tasks*100:.1f}%)")
         md.append(f"- **Overall AIBenchMark-ESW Score{qualifier}**: **{avg_total:.2f} / 100.0**\n")
+        from aibenchmark_esw.metrics.groups import breakdown_markdown, grouped_scores
+        groups = grouped_scores(results, metadata)
+        md.append(f"- **Tier-weighted score{qualifier}**: **{groups['tier_weighted_score']:.2f} / 100.0** (weights proportional to tier)")
+        md += breakdown_markdown([dict(model=model_name, **groups)])
 
         if metadata:
             compiler = metadata.get("compiler") or {}
@@ -348,14 +357,14 @@ class BenchmarkReporter:
         warnings = BenchmarkReporter.analysis_warnings(results) + BenchmarkReporter.scoring_warnings(results, metadata)
         if warnings:
             md += ["", "### Validation and analysis coverage", ""]
-            md += [f"- {warning}" for warning in warnings]
+            md += [f"- {markdown_text(warning)}" for warning in warnings]
         findings = [(result.task_id, finding) for result in results for finding in result.safety_metrics.findings]
         if findings:
             md += ["", "### Static-analysis findings", ""]
             for task_id, finding in findings:
-                message = finding["message"].replace("|", "\\|").replace("\n", " ")
-                md.append(f"- `{task_id}` [{finding['engine']} / {finding['rule_id']} / {finding['severity']}] "
-                          f"{finding['file']}:{finding.get('line') or '?'}: {message}")
+                message = markdown_text(finding['message'])
+                md.append(f"- `{markdown_text(task_id)}` [{markdown_text(finding['engine'])} / {markdown_text(finding['rule_id'])} / {markdown_text(finding['severity'])}] "
+                          f"{markdown_text(finding['file'])}:{finding.get('line') or '?'}: {message}")
 
         return "\n".join(md)
 
@@ -389,6 +398,8 @@ class BenchmarkReporter:
         pass_at_1 = sum(1 for r in results if BenchmarkReporter._all_tests_passed(r)) / max(1, len(results)) * 100.0
         qualifier = " (first sample)" if (metadata or {}).get('sampling') else ""
         lines.append(f"Final Score{qualifier}: {avg_total:.2f}/100.0 | Pass@1{qualifier}: {pass_at_1:.1f}%")
+        from aibenchmark_esw.metrics.groups import grouped_scores
+        lines.append(f"Tier-weighted score{qualifier}: {grouped_scores(results, metadata)['tier_weighted_score']:.2f}/100.0")
         lines.append("=" * 110)
         lines += [f"Warning: {warning}" for warning in
                   BenchmarkReporter.analysis_warnings(results) + BenchmarkReporter.scoring_warnings(results, metadata)]
@@ -473,6 +484,7 @@ class BenchmarkReporter:
     @staticmethod
     def to_json_dict(results: list[TaskEvaluationResult], model_name: str,
                      metadata: Optional[dict[str, Any]] = None) -> dict[str, Any]:
+        from aibenchmark_esw.metrics.groups import grouped_scores
         from aibenchmark_esw.metrics.measurements import measurement_summary
         return {
             "schema_version": 2,
@@ -482,4 +494,5 @@ class BenchmarkReporter:
             "pass_at_1_pct": round(sum(1 for r in results if BenchmarkReporter._all_tests_passed(r)) / max(1, len(results)) * 100.0, 2),
             "tasks": [r.to_dict() for r in results],
             "generation_summary": measurement_summary(results),
+            **grouped_scores(results, metadata),
         }

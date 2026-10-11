@@ -1,12 +1,24 @@
-"""POSIX resource-limit launcher, avoiding preexec_fn in parallel evaluators."""
-
+"""POSIX resource-limit launcher; no preexec_fn in parallel evaluators."""
 import os
 import resource
 import sys
 
+
+def limit(kind, value):
+    _, hard = resource.getrlimit(kind)  # type: ignore[attr-defined]  # POSIX launcher.
+    effective = value if hard == resource.RLIM_INFINITY else min(value, hard)  # type: ignore[attr-defined]
+    resource.setrlimit(kind, (effective, effective))  # type: ignore[attr-defined]
+
+
 if __name__ == "__main__":
-    cpu, memory = int(sys.argv[1]), int(sys.argv[2])
-    resource.setrlimit(resource.RLIMIT_CPU, (cpu, cpu))  # type: ignore[attr-defined]  # Launcher executes only on POSIX.
+    cpu, memory, processes = map(int, sys.argv[1:4])
+    if cpu:
+        limit(resource.RLIMIT_CPU, cpu)  # type: ignore[attr-defined]
     if memory:
-        resource.setrlimit(resource.RLIMIT_AS, (memory, memory))  # type: ignore[attr-defined]  # Launcher executes only on POSIX.
-    os.execvpe(sys.argv[3], sys.argv[3:], os.environ)
+        limit(resource.RLIMIT_AS, memory)  # type: ignore[attr-defined]
+    if processes:
+        limit(resource.RLIMIT_NPROC, processes)  # type: ignore[attr-defined]
+    limit(resource.RLIMIT_FSIZE, 16777216)  # type: ignore[attr-defined]
+    limit(resource.RLIMIT_CORE, 0)  # type: ignore[attr-defined]
+    limit(resource.RLIMIT_NOFILE, 256)  # type: ignore[attr-defined]
+    os.execvpe(sys.argv[4], sys.argv[4:], os.environ)

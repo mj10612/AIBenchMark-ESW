@@ -1,3 +1,4 @@
+<!-- AIBENCHMARK_ESW_CANARY_V1_tier2_can_frame -->
 # CAN 2.0 Frame Parser, Acceptance Filter and Mailbox FIFO
 
 Implement can_frame.c with no allocation or hidden mutable globals. This benchmark

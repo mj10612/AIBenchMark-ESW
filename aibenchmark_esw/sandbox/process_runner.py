@@ -132,7 +132,8 @@ class _WindowsJob:
         if not self.handle:
             raise ctypes.WinError(ctypes.get_last_error())  # type: ignore[attr-defined]  # Windows-only API; absent in POSIX ctypes stubs.
         limits = Extended()
-        limits.basic.flags = 0x2000  # JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE
+        limits.basic.active = 64
+        limits.basic.flags = 0x2000 | 0x8  # JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE
         if cpu_seconds is not None:
             limits.basic.flags |= 0x4  # JOB_OBJECT_LIMIT_JOB_TIME (all processes)
             limits.basic.job_time = math.ceil(cpu_seconds) * 10_000_000
@@ -261,9 +262,10 @@ def run_bounded(command, *, timeout, max_output_bytes, cwd=None, env=None,
             kwargs["creationflags"] = 0x08000000 | 0x4  # CREATE_NO_WINDOW | CREATE_SUSPENDED
         else:
             kwargs["start_new_session"] = True
-            if isolation == "process":
+            if isolation in ("native", "process"):
                 command = [sys.executable, str(Path(__file__).with_name("process_limits.py")),
-                           str(max(1, math.ceil(timeout))), str(memory_bytes or 0)] + list(command)
+                           str(max(1, math.ceil(timeout)) if isolation == "process" else 0), str(memory_bytes or 0),
+                           "64" if isolation == "process" else "0"] + list(command)
         deadline = time.monotonic() + timeout
         process = subprocess.Popen(command, **kwargs)
         assert process.stdout is not None

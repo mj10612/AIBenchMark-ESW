@@ -1,3 +1,4 @@
+/* AIBENCHMARK_ESW_CANARY_V1_tier2_windowed_watchdog */
 #include "windowed_watchdog.h"
 /* Implement the public contract without allocation or hidden global state. */
 bool watchdog_init(watchdog_t *m,uint32_t low,uint32_t high,uint32_t now,watchdog_refresh_t refresh,void *ctx){(void)m;(void)low;(void)high;(void)now;(void)refresh;(void)ctx;return false;}

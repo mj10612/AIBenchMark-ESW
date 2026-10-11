@@ -1,3 +1,4 @@
+/* AIBENCHMARK_ESW_CANARY_V1_tier2_windowed_watchdog */
 #ifndef WINDOWED_WATCHDOG_H
 #define WINDOWED_WATCHDOG_H
 #include <stdbool.h>

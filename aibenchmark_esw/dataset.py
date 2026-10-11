@@ -29,7 +29,8 @@ def validate_task_assets(task: TaskConfig) -> list[str]:
                 errors.append(f"Empty {label}: {path.relative_to(task.task_dir).as_posix()}")
         except (OSError, UnicodeError) as error:
             errors.append(f"Unreadable {label}: {path.relative_to(task.task_dir).as_posix()} ({error})")
-    return errors
+    from aibenchmark_esw.resources import task_integrity_errors
+    return errors + task_integrity_errors(task.task_dir)
 
 
 class DatasetLoader:
@@ -58,6 +59,10 @@ class DatasetLoader:
                 continue
 
             try:
+                from aibenchmark_esw.resources import task_integrity_errors
+                integrity = task_integrity_errors(task_dir)
+                if integrity:
+                    raise ValueError("; ".join(integrity))
                 with open(task_json, encoding="utf-8") as f:
                     data = json.load(f)
 

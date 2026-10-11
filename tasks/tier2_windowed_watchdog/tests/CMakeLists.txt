@@ -1,3 +1,4 @@
+# AIBENCHMARK_ESW_CANARY_V1_tier2_windowed_watchdog
 cmake_minimum_required(VERSION 3.16)
 project(windowed_watchdog_tests C)
 set(CMAKE_C_STANDARD 99)

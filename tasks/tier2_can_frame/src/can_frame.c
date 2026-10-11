@@ -1,3 +1,4 @@
+/* AIBENCHMARK_ESW_CANARY_V1_tier2_can_frame */
 #include "can_frame.h"
 /* Implement caller-owned parsing, filtering and FIFO state. */
 int can_decode(const can_mailbox_t *r,can_frame_t *f){(void)r;(void)f;return CAN_ARGUMENT;}
