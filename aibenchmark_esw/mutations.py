@@ -42,6 +42,28 @@ def _mutation(name, description, before, after):
 
 
 MUTATIONS = {
+    "tier2_can_frame": (
+        _mutation("dlc-over-eight", "Classic CAN rejects DLC 9 without changing output.",
+                  "(raw->control&15U)>8U", "(raw->control&15U)>9U"),
+        _mutation("extended-shift", "Extended IDs use 29 bits at bit 3.",
+                  "(ext?3:21)", "(ext?4:21)"),
+        _mutation("ignore-format", "Standard and extended identifiers never share a filter.",
+                  "frame->extended==filter->extended &&", ""),
+        _mutation("remote-data", "Remote requests never publish data bytes.",
+                  "if(!frame.remote) for", "if(true) for"),
+        _mutation("clear-overrun-on-pop", "Overflow is latched until explicitly cleared.",
+                  "--q->count;return CAN_OK;", "--q->count;q->overrun=false;return CAN_OK;"),
+    ),
+    "tier2_windowed_watchdog": (
+        _mutation("naive-window", "Elapsed subtraction must survive timer rollover.",
+                  "uint32_t elapsed=now-m->origin;", "uint32_t elapsed=now < m->origin ? 0 : now-m->origin;"),
+        _mutation("carry-heartbeats", "Each refresh requires new heartbeats from every task.",
+                  "m->seen=0;\n    m->origin=now;", "m->origin=now;"),
+        _mutation("skip-starvation", "A missing registered heartbeat latches starvation.",
+                  "else if (m->seen != m->registered)", "else if (false)"),
+        _mutation("early-boundary", "The minimum window endpoint is inclusive.",
+                  "elapsed < m->window_min", "elapsed <= m->window_min"),
+    ),
     "tier1_crc16": (
         _mutation("discard-high-bit", "Bytes >= 128 must retain their high bit in the CRC.",
                   "(uint16_t)byte << 8", "(uint16_t)(byte & 0x7FU) << 8"),
@@ -123,6 +145,12 @@ MUTATIONS = {
                   "if (count > dst_capacity - output) return COBS_NO_SPACE;", ""),
     ),
     "tier4_dma_buffer": (
+        _mutation("only-sixteen-bytes", "Valid 8/24/32-byte storage must work for both halves.",
+                  "length % 8U != 0", "length != 16"),
+        _mutation("unaligned-half", "Both halves, not just the base, require alignment.",
+                  "length % 8U != 0", "length % 4U != 0"),
+        _mutation("unguarded-acquire", "Acquire must enter and leave on successful and rejected ownership paths.",
+                  "b->hal.enter(b->hal.ctx);\n    bool ok = b->owner[half] == DMA_READY;", "bool ok = b->owner[half] == DMA_READY;"),
         _mutation("steal-reader", "A DMA completion cannot steal an application-owned half.",
                   "bool ok = b->owner[half] == DMA_OWNED;", "bool ok = true;"),
         _mutation("skip-invalidation", "DMA writes require cache invalidation before publication.",
@@ -133,6 +161,12 @@ MUTATIONS = {
                   "(uintptr_t)storage % 4U != 0", "false"),
     ),
     "tier3_spi_flash": (
+        _mutation("erase-address-overflow", "An aligned address above 24 bits is still invalid.",
+                  "address > UINT32_C(0xFFFFFF) || address % 4096U", "address % 4096U"),
+        _mutation("erase-without-ready", "Erase must wait before WREN, not just after erase.",
+                  "int status = ready(d);\n    if (status != FLASH_OK) return status;\n    status = enable(d);", "int status = enable(d);"),
+        _mutation("erase-wren-error", "Erase propagates WREN errors without issuing erase.",
+                  "if (status != FLASH_OK) return status;\n    uint8_t tx[4]", "uint8_t tx[4]"),
         _mutation("cross-page", "Programs split at actual 256-byte page boundaries.",
                   "256U - (address & 255U)", "256U"),
         _mutation("little-endian-address", "NOR commands serialize 24-bit addresses most-significant byte first.",
@@ -143,6 +177,8 @@ MUTATIONS = {
                   "if (status != FLASH_OK) return status;\n        uint8_t tx[260];", "uint8_t tx[260];"),
     ),
     "tier4_uart_frame_fix": (
+        _mutation("space-without-reset", "An insufficient destination must reset exactly once.",
+                  "hal->reset(hal->ctx);", "if (error != UART_SPACE) hal->reset(hal->ctx);"),
         _mutation("skip-checksum", "Only verified frames publish caller output.",
                   "if (byte != checksum)", "if (0)"),
         _mutation("skip-reset", "Errors invoke peripheral recovery exactly once.",

@@ -119,6 +119,7 @@ class ExecutionSandbox:
                 "compiler_warnings": self.warnings, "warning_flags": self.warning_flags(),
                 "containment": self.containment.settings() if self.containment else None,
                 "candidate_environment": "minimal-v1",
+                "oracle_policy": "private-unity-state-v1",
                 "process_backend": "windows-job" if os.name == "nt" else "posix-session",
                 "cpu_limit": "task-timeout" if self.isolation == "process" else None,
                 "footprint": self.cross.settings() if self.cross else {"target": "host", "measurement": "host-object"}}
@@ -175,7 +176,7 @@ class ExecutionSandbox:
         else:
             cmd = [self.compiler_path, f"-std={task.target_standard}"]
             if compiler_name != "tcc":
-                cmd.append("-Os")
+                cmd += ["-Os", "-fvisibility=hidden", "-fno-common"]
             for directory in includes:
                 cmd += ["-I", str(directory)]
             if object_only:

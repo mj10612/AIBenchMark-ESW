@@ -110,3 +110,16 @@ busy-wait loops. These approximate diagnostics are not a formal MISRA checker.
 default and included in evaluation provenance. Named allocation and host-API
 references use scoped declaration exemptions; local values and aggregate members
 do not hide references in other functions. These remain lexical heuristics.
+# Private test state
+
+Unity's mutable state and assertion jump buffer are private static objects. Its
+public result accessor returns counter values by copy. Repeated UnityBegin calls
+record a failure rather than resetting the runner. GCC/Clang compilation uses
+hidden visibility and no common symbols; TCC/MSVC retain private static storage.
+This prevents direct state writes and symbol shadowing from changing the oracle.
+The receipt verifies harness completion and rejects stdout forgery. These are
+limited integrity mitigations: candidate and assertions still share an address
+space, so arbitrary native memory corruption or invasive runtime interposition
+requires a separate-process oracle redesign. Container/bwrap isolation protects
+the host and does not establish that separate-process oracle boundary.
+

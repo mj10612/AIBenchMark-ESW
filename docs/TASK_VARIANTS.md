@@ -1,6 +1,6 @@
 # Task authoring, held-out suites, and contamination controls
 
-The bundled dataset has 13 tasks, 114 Unity cases, and 47 mandatory reviewed
+The bundled dataset has 15 tasks, 147 Unity cases, and 63 mandatory reviewed
 mutants. Its prompts, APIs, tests, starters, and references are public. A passing
 result can reflect recall; these controls provide audit evidence, not a proof
 that training contamination was absent.

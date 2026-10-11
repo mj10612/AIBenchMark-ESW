@@ -1,0 +1,5 @@
+cmake_minimum_required(VERSION 3.16)
+project(can_frame_tests C)
+set(CMAKE_C_STANDARD 99)
+add_executable(test_runner test_can_frame.c ../reference/can_frame.c ../../../third_party/unity/unity.c)
+target_include_directories(test_runner PRIVATE ../include ../../../third_party/unity)

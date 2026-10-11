@@ -1,0 +1,20 @@
+{
+  "id": "tier2_windowed_watchdog",
+  "name": "Windowed Watchdog and Heartbeat Coordinator",
+  "tier": 2,
+  "category": "fsm_and_protocols",
+  "target_standard": "c99",
+  "description": "Coordinate eight caller-owned task heartbeats, inclusive watchdog windows and latched early/late/starvation faults across tick rollover.",
+  "limits": {
+    "max_flash_bytes": 4096,
+    "max_ram_bytes": 256,
+    "timeout_seconds": 5
+  },
+  "weights": {
+    "functional": 0.6,
+    "memory": 0.2,
+    "safety": 0.2
+  },
+  "entry_file": "src/windowed_watchdog.c",
+  "reference_file": "reference/windowed_watchdog.c"
+}
