@@ -16,8 +16,9 @@ def _mask_line(line, in_comment):
             end = len(line) if closing < 0 else closing + 2
             in_comment = closing < 0
         elif line.startswith("/*", index):
-            in_comment = True
-            continue
+            closing = line.find("*/", index + 2)
+            end = len(line) if closing < 0 else closing + 2
+            in_comment = closing < 0
         elif line.startswith("//", index):
             end = len(line)
         elif line[index] in "\"'":

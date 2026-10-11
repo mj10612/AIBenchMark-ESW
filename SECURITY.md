@@ -33,7 +33,7 @@ scrubbing does not restrict access to host files or other processes in native
 or process mode.
 
 
-Native execution captures a bounded output prefix in a temporary file and owns
+Native execution captures a bounded output prefix from a non-seekable pipe and owns
 Windows Job/POSIX process groups. Opt-in process mode adds CPU and memory caps.
 Filesystem and network access remain available; a POSIX descendant deliberately
 calling setsid can escape the original group. Run untrusted code inside an
@@ -93,4 +93,6 @@ proxy rather than a sum of mutually exclusive deployment architectures.
 nondeterminism, recursion, possible VLAs/alloca, math/complex dependencies and
 busy-wait loops. These approximate diagnostics are not a formal MISRA checker.
 `--warnings` adds compiler findings to safety scoring; both switches are off by
-default and included in evaluation provenance.
+default and included in evaluation provenance. Named allocation and host-API
+references use scoped declaration exemptions; local values and aggregate members
+do not hide references in other functions. These remain lexical heuristics.

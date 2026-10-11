@@ -13,7 +13,7 @@ from typing import Optional, Tuple
 from aibenchmark_esw.models import TaskConfig, CompilationResult, TestResult
 from aibenchmark_esw.resources import data_root
 from aibenchmark_esw.sandbox.c_source import mask_noncode
-from aibenchmark_esw.sandbox.process_runner import run_bounded, OutputLimitExceeded, ExecutionCancelled
+from aibenchmark_esw.sandbox.process_runner import run_bounded, OutputLimitExceeded, ExecutionCancelled, ExecutionCleanupError
 
 
 def _timeout_output(error: subprocess.TimeoutExpired) -> str:
@@ -194,7 +194,7 @@ class ExecutionSandbox:
         except subprocess.TimeoutExpired as error:
             return CompilationResult(False, _timeout_output(error), error_message="Compilation timed out",
                                      effective_standard=standard)
-        except (OutputLimitExceeded, ExecutionCancelled) as error:
+        except (OutputLimitExceeded, ExecutionCancelled, ExecutionCleanupError) as error:
             log = error.output.decode(locale.getpreferredencoding(False), errors="backslashreplace")
             return CompilationResult(False, log + "\n" + str(error), error_message=str(error),
                                      effective_standard=standard)
@@ -333,7 +333,7 @@ class ExecutionSandbox:
                 # Partial records are diagnostics only; a timeout never completes
                 # a suite, even if its buffered output resembles a valid summary.
                 test_result = TestResult(output=_timeout_output(error), completed=False)
-            except (OutputLimitExceeded, ExecutionCancelled) as error:
+            except (OutputLimitExceeded, ExecutionCancelled, ExecutionCleanupError) as error:
                 output = error.output.decode(locale.getpreferredencoding(False), errors="backslashreplace")
                 test_result = TestResult(output=output + "\n" + str(error), completed=False)
             except OSError as error:

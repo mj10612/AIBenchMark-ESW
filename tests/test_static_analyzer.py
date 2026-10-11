@@ -57,13 +57,11 @@ void disabled_else(void){calloc(1,1);}
         self.assertEqual(metrics.error_count, 0)
         self.assertEqual(metrics.warning_count, 0)
 
-    def test_named_allocator_policy_stays_conservative_for_bindings(self):
-        # Documented lexical policy: narrowing this to direct calls regresses
-        # macro aliases and function-pointer allocation (issue #13).
+    def test_allocator_local_values_are_exempt_without_hiding_api_bindings(self):
         with TemporaryDirectory() as directory:
             source = Path(directory) / "source.c"
             source.write_text("void f(void){int free=3; (void)free;}\n")
-            self.assertEqual(StaticAnalyzer("off").analyze(source).error_count, 1)
+            self.assertEqual(StaticAnalyzer("off").analyze(source).error_count, 0)
 
     def test_host_capabilities_are_flagged_with_aliases_and_ignore_member_access(self):
         with TemporaryDirectory() as directory:

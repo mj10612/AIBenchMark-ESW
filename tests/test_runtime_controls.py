@@ -14,7 +14,7 @@ from unittest.mock import Mock, patch
 from aibenchmark_esw.dataset import DatasetLoader
 from aibenchmark_esw.models import CompilationResult
 from aibenchmark_esw.sandbox.executor import ExecutionSandbox
-from aibenchmark_esw.sandbox.process_runner import run_bounded, OutputLimitExceeded, ExecutionCancelled, _stop_posix_group
+from aibenchmark_esw.sandbox.process_runner import run_bounded, OutputLimitExceeded, ExecutionCancelled, ExecutionCleanupError, _stop_posix_group
 from compiler_tools import find_clang
 
 
@@ -156,6 +156,46 @@ int main(void){UNITY_BEGIN();RUN_TEST(test_ok);return UNITY_END();}
         self.assertEqual(caught.exception.output, b"x" * 4096)
         self.assertIn("truncated", str(caught.exception))
 
+    def test_seeking_or_truncating_stdout_cannot_reset_output_accounting(self):
+        source = ('import os\n'
+                  'while True:\n'
+                  ' for operation in (lambda:os.lseek(1,0,0),lambda:os.ftruncate(1,0)):\n'
+                  '  try: operation()\n'
+                  '  except OSError: pass\n'
+                  ' os.write(1,b"x"*512)\n')
+        with self.assertRaises(OutputLimitExceeded) as caught:
+            run_bounded([sys.executable, "-c", source], timeout=3, max_output_bytes=4096)
+        self.assertEqual(caught.exception.output, b"x" * 4096)
+
+    @unittest.skipIf(os.name == "nt", "POSIX group cleanup regression")
+    def test_cleanup_failure_retains_bounded_sanitizer_diagnostics(self):
+        for timeout in (False, True):
+            def denied(process):
+                _stop_posix_group(process)
+                raise PermissionError("injected group denial")
+            source = 'import os,time;os.write(1,b"AddressSanitizer: sentinel\\n")'
+            if timeout:
+                source += ';time.sleep(4)'
+            with self.subTest(timeout=timeout), patch(
+                    "aibenchmark_esw.sandbox.process_runner._stop_posix_group", side_effect=denied):
+                with self.assertRaises(ExecutionCleanupError) as caught:
+                    run_bounded([sys.executable, "-c", source], timeout=0.5, max_output_bytes=4096)
+            self.assertIn(b"AddressSanitizer: sentinel", caught.exception.output)
+            self.assertIn("cleanup failed", str(caught.exception))
+            if timeout:
+                self.assertIn("timeout", str(caught.exception))
+
+    def test_executor_keeps_cleanup_failure_and_diagnostics(self):
+        executor = ExecutionSandbox()
+        task = DatasetLoader().get_task("tier1_crc16")
+        with TemporaryDirectory() as directory, patch(
+                "aibenchmark_esw.sandbox.executor.run_bounded",
+                side_effect=ExecutionCleanupError(b"AddressSanitizer: sentinel", PermissionError("denied"))):
+            result = executor.compile_object(task, "int x;", Path(directory))
+        self.assertFalse(result.success)
+        self.assertIn("AddressSanitizer: sentinel", result.output)
+        self.assertIn("cleanup failed", result.output)
+
     def test_cancellation_event_stops_execution(self):
         cancelled = threading.Event()
         cancelled.set()
@@ -205,6 +245,39 @@ int main(void){UNITY_BEGIN();RUN_TEST(test_ok);return UNITY_END();}
         self.assertFalse(result.completed)
         self.assertIn("output truncated", result.output)
         self.assertLess(len(result.output), 1200)
+
+    def test_candidate_fseek_stdout_cannot_bypass_output_limit(self):
+        loader = DatasetLoader()
+        task = loader.get_task("tier1_crc16")
+        source = '#include <stdio.h>\n' + loader.get_reference_solution(task.id)
+        source = source.replace("return crc;", 'for (;;) { fseek(stdout,0,SEEK_SET); '
+                                'puts("' + 'x' * 512 + '"); fflush(stdout); } return crc;', 1)
+        compiled, result = ExecutionSandbox(max_output_bytes=1024).compile_and_test(task, source)
+        self.addCleanup(compiled.cleanup)
+        self.assertTrue(compiled.success, compiled.output)
+        self.assertFalse(result.completed)
+        self.assertIn("output truncated", result.output)
+        self.assertLess(len(result.output), 1200)
+
+    @unittest.skipUnless(os.name == "nt", "Windows Job descendant cleanup regression")
+    def test_windows_overflow_releases_workspace_handles_before_returning(self):
+        with TemporaryDirectory() as directory:
+            root = Path(directory)
+            for index in range(8):
+                work = root / str(index)
+                work.mkdir()
+                held = work / "held-file"
+                source = ('import subprocess,sys,os\n'
+                          'p=subprocess.Popen([sys.executable,"-c",'
+                          '"import sys,time;f=open(sys.argv[1],\'w\');print(\'ready\',flush=True);time.sleep(5)",'
+                          'sys.argv[1]],stdout=subprocess.PIPE)\n'
+                          'p.stdout.readline()\n'
+                          'while True:os.write(1,b"x"*65536)\n')
+                with self.assertRaises(OutputLimitExceeded):
+                    run_bounded([sys.executable, "-c", source, str(held)],
+                                timeout=3, max_output_bytes=1024, cwd=work)
+                held.unlink()
+                work.rmdir()
 
     def test_unsupported_sanitizer_toolchain_fails_explicitly(self):
         task = DatasetLoader().get_task("tier1_crc16")

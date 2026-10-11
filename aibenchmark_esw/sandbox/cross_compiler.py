@@ -9,7 +9,7 @@ import tempfile
 from pathlib import Path
 
 from aibenchmark_esw.models import CompilationResult
-from aibenchmark_esw.sandbox.process_runner import run_bounded, OutputLimitExceeded, ExecutionCancelled
+from aibenchmark_esw.sandbox.process_runner import run_bounded, OutputLimitExceeded, ExecutionCancelled, ExecutionCleanupError
 
 
 class CrossCompiler:
@@ -69,7 +69,7 @@ class CrossCompiler:
             return CompilationResult(success, log,
                 binary_path=output if success else None, error_message=None if success else "Target compilation failed",
                 effective_standard=task.target_standard)
-        except (OutputLimitExceeded, ExecutionCancelled, subprocess.TimeoutExpired) as error:
+        except (OutputLimitExceeded, ExecutionCancelled, ExecutionCleanupError, subprocess.TimeoutExpired) as error:
             captured = error.output or b""
             log = captured.decode(locale.getpreferredencoding(False), errors="backslashreplace") if isinstance(captured, bytes) else captured
             return CompilationResult(False, log + "\n" + str(error), error_message="Target compilation bounded or cancelled",
