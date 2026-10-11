@@ -1,6 +1,7 @@
 """POSIX resource-limit launcher; no preexec_fn in parallel evaluators."""
 import os
 import resource
+import signal
 import sys
 
 
@@ -11,6 +12,8 @@ def limit(kind, value):
 
 
 if __name__ == "__main__":
+    # Python ignores SIGXFSZ at startup; restore it before exec'ing native code.
+    signal.signal(signal.SIGXFSZ, signal.SIG_DFL)  # type: ignore[attr-defined]
     cpu, memory, processes = map(int, sys.argv[1:4])
     if cpu:
         limit(resource.RLIMIT_CPU, cpu)  # type: ignore[attr-defined]

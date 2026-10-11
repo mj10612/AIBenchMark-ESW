@@ -24,6 +24,8 @@ existing per-task score threshold policy and do not depend on significance.
 These are exploratory task-level differences. Tasks are a fixed, heterogeneous
 benchmark; bootstrap intervals assume exchangeable task pairs. They do not
 estimate stochastic generation noise or prove that a model is superior.
+The signed-rank null assumes independent paired differences symmetric about zero;
+see the [SciPy Wilcoxon reference](https://docs.scipy.org/doc/scipy/reference/generated/scipy.stats.wilcoxon.html).
 
 `eval --solution` and `run --save-solutions` record persistent candidate paths and
 content hashes. Export from a repository root:
@@ -41,3 +43,4 @@ IDs; separately mapped files remain distinct. Missing or mismatched mappings are
 diagnostic-only results without guessed locations or code-scanning fingerprints.
 Commit candidate sources if publishing findings to code scanning. Exports never
 upload sources or SARIF automatically.
+See [GitHub's SARIF source-location and fingerprint requirements](https://docs.github.com/en/code-security/reference/code-scanning/sarif-files/sarif-support).

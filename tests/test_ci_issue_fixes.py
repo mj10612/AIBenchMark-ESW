@@ -91,6 +91,8 @@ class TestCIIssueFixes(unittest.TestCase):
         bad = copy.deepcopy(report)
         bad['tasks'][0]['scores'].update(safety=97, total=99.4)
         bad['tasks'][0]['safety_metrics']['warning_count'] = 1
+        for field in ('tier_weighted_score', 'tier_weight_policy', 'by_tier', 'by_category'):
+            bad.pop(field, None)
         with self.assertRaisesRegex(ValueError, 'regression'):
             verify_baseline(bad)
         subset = copy.deepcopy(report)
@@ -99,6 +101,8 @@ class TestCIIssueFixes(unittest.TestCase):
         subset['metadata']['selected_tasks'] = selected
         subset['metadata']['scoring_policy']['tasks'] = {task_id: subset['metadata']['scoring_policy']['tasks'][task_id] for task_id in selected}
         subset.pop('generation_summary', None)
+        for field in ('tier_weighted_score', 'tier_weight_policy', 'by_tier', 'by_category'):
+            subset.pop(field, None)
         subset['metadata'].update(current_fingerprints(task_ids=selected))
         verify_baseline(subset, reference=report)
 

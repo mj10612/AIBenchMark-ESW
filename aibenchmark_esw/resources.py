@@ -28,9 +28,11 @@ def asset_manifest():
     return json.loads((Path(__file__).resolve().parent / 'schemas/asset-manifest.json').read_text(encoding='utf-8'))['assets']
 
 
-def _verify(directory, prefix):
+def _verify(directory, prefix, only=None):
     directory = Path(directory).resolve()
     expected = {key[len(prefix):]: value for key, value in asset_manifest().items() if key.startswith(prefix)}
+    if only is not None:
+        expected = {key: value for key, value in expected.items() if key in only}
     if not expected:
         return ['Trusted asset manifest has no entries for ' + prefix]
     errors = []
@@ -41,7 +43,7 @@ def _verify(directory, prefix):
                 errors.append('Trusted asset integrity mismatch: ' + prefix + name)
         except OSError:
             errors.append('Trusted asset unreadable or missing: ' + prefix + name)
-    for path in directory.rglob('*'):
+    for path in directory.rglob('*') if only is None else ():
         if path.is_file() and path.suffix in ('.c', '.h', '.inc', '.json') and path.relative_to(directory).as_posix() not in expected:
             if not any(part in ('build', 'CMakeFiles', '__pycache__') for part in path.relative_to(directory).parts):
                 errors.append('Unlisted trusted asset: ' + prefix + path.relative_to(directory).as_posix())
@@ -52,7 +54,7 @@ def unity_integrity_errors(directory):
     return _verify(directory, 'third_party/unity/')
 
 
-def task_integrity_errors(directory):
+def task_integrity_errors(directory, *, config_only=False):
     original = Path(directory).absolute()
     directory = original.resolve()
     trusted = (data_root() / 'tasks').resolve()
@@ -60,4 +62,4 @@ def task_integrity_errors(directory):
         return ['Trusted task directory escapes its data root: ' + str(original)]
     if directory.parent != trusted:
         return []  # Explicit external datasets/variants are recorded by fingerprint, not declared bundled-trusted.
-    return _verify(directory, 'tasks/' + directory.name + '/')
+    return _verify(directory, 'tasks/' + directory.name + '/', only={'task.json'} if config_only else None)

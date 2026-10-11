@@ -82,7 +82,7 @@ def report_html(results, model_name, metadata=None):
     group_fields = ['scope', 'group', 'count', 'task_attempts', 'mean_score', 'pass_at_1_pct']
     group_table = '<h2>Tier and category breakdown</h2>' + _table(group_fields, ['<tr>' + ''.join('<td>' + _escape(row[field]) + '</td>' for field in group_fields) + '</tr>' for row in group_rows])
     return _document('AIBenchMark-ESW: ' + model_name, '<p>' + _escape('; '.join(warnings)) + '</p>' +
-                     '<p>Tier-weighted score: ' + _escape(groups['tier_weighted_score']) + '; flat score: ' + _escape(BenchmarkReporter.to_json_dict(results, model_name)['overall_score']) + '</p>' + group_table +
+                     '<p>Tier-weighted score' + (' (first sample)' if (metadata or {}).get('sampling') else '') + ': ' + _escape(groups['tier_weighted_score']) + '; flat score: ' + _escape(BenchmarkReporter.to_json_dict(results, model_name)['overall_score']) + '</p>' + group_table +
                      '<pre>' + _escape('\n'.join(sampling + measurements)) + '</pre>' +
                      _table(['Task', 'Tier', 'Category', 'Status', 'Standard', 'Weights F/M/S', 'Score', 'Functional', 'Memory', 'Safety', 'Flash', 'RAM', 'Time', 'Details'], rows) +
                      '<details open><summary>Reproducibility metadata</summary><pre>' + _escape(json.dumps(metadata or {}, indent=2)) + '</pre></details>')

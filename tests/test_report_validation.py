@@ -15,6 +15,8 @@ class TestReportValidation(unittest.TestCase):
         data = json.loads(Path("results/baseline.json").read_text(encoding="utf-8"))
         # These fixtures deliberately exercise the pre-policy legacy path.
         data["metadata"].pop("scoring_policy", None)
+        for field in ('tier_weighted_score', 'tier_weight_policy', 'by_tier', 'by_category'):
+            data.pop(field, None)
         return data
 
     def test_invalid_flags_counts_measurements_and_scores_are_rejected(self):

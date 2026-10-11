@@ -60,7 +60,9 @@ class DatasetLoader:
 
             try:
                 from aibenchmark_esw.resources import task_integrity_errors
-                integrity = task_integrity_errors(task_dir)
+                # Verify metadata while loading; selected task assets are fully
+                # verified by preflight and again immediately before compilation.
+                integrity = task_integrity_errors(task_dir, config_only=True)
                 if integrity:
                     raise ValueError("; ".join(integrity))
                 with open(task_json, encoding="utf-8") as f:

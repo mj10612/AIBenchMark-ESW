@@ -20,6 +20,8 @@ from aibenchmark_esw.provenance import text_sha256
 
 class TestPairedGroupedSarif(unittest.TestCase):
     def test_exact_p_values_ties_zeros_effect_and_bootstrap(self):
+        # Published SciPy example, with distinct nonzero paired ranks.
+        self.assertEqual(paired_statistics([6, 8, 14, 16, 23, 24, 28, 29, 41, -48, 49, 56, 60, -67, 75])['p_value'], 0.041259765625)
         same = paired_statistics([0, 0, 0])
         self.assertEqual(same['p_value'], 1)
         self.assertEqual(same['cohens_dz'], 0)
@@ -98,6 +100,9 @@ class TestPairedGroupedSarif(unittest.TestCase):
             mapping = {result.task_id: saved.relative_to(root).as_posix()}
             first = json.loads(generate_sarif([result, second], source_root=root, source_mapping=mapping))['runs'][0]['results']
             self.assertEqual(len(first), 1)
+            result.provenance['candidate_source'] = str(saved)
+            absolute = json.loads(generate_sarif([result], source_root=root))['runs'][0]['results'][0]
+            self.assertEqual(first[0]['partialFingerprints'], absolute['partialFingerprints'])
             self.assertEqual(first[0]['properties']['sample_run_ids'], ['first', 'second'])
             self.assertIn('%20', first[0]['locations'][0]['physicalLocation']['artifactLocation']['uri'])
             rerun = json.loads(generate_sarif([second], source_root=root, source_mapping=mapping))['runs'][0]['results'][0]

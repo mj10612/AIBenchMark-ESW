@@ -81,8 +81,7 @@ f=fopen("permitted", "w");if(!f)return 0;fclose(f);return 1;}
             (root / 'tasks/tier1_crc16/include/crc16.h').write_text('/* forged API */', encoding='utf-8')
             with patch('aibenchmark_esw.resources.data_root', return_value=root), patch('aibenchmark_esw.dataset.data_root', return_value=root), patch.object(cli.LLMClient, 'generate_solution') as generate:
                 with redirect_stdout(io.StringIO()), redirect_stderr(io.StringIO()):
-                    with self.assertRaisesRegex(ValueError, 'integrity'):
-                        cli.cmd_run(cli.build_parser().parse_args(['run', '--model', 'mock', '--tasks', 'tier1_crc16']))
+                    self.assertEqual(cli.cmd_run(cli.build_parser().parse_args(['run', '--model', 'mock', '--tasks', 'tier1_crc16'])), 1)
                 generate.assert_not_called()
 
     @unittest.skipUnless(os.name == 'nt', 'Actual Windows Job active-process cap')
@@ -123,6 +122,41 @@ print(json.dumps(len(children)),flush=True)
             result = run_bounded([sys.executable, '-c', 'open("large", "wb").write(b"x" * 17000000)'], cwd=directory, timeout=5, max_output_bytes=4096, isolation='process')
             self.assertNotEqual(result.returncode, 0)
             self.assertLessEqual((Path(directory) / 'large').stat().st_size, 16777216)
+
+    @unittest.skipIf(os.name == 'nt' or getattr(os, 'geteuid', lambda: 1)() == 0, 'Requires unprivileged POSIX RLIMIT_NPROC enforcement')
+    def test_actual_fork_loop_is_bounded(self):
+        code = '''import os,signal,json
+children=[]
+try:
+ for _ in range(100):
+  try: pid=os.fork()
+  except OSError: break
+  if pid==0: signal.pause();os._exit(0)
+  children.append(pid)
+ print(json.dumps(len(children)),flush=True)
+finally:
+ for pid in children: os.kill(pid,signal.SIGKILL);os.waitpid(pid,0)
+'''
+        result = run_bounded([sys.executable, '-c', code], timeout=10, max_output_bytes=4096, isolation='process')
+        self.assertEqual(result.returncode, 0, result.stdout)
+        self.assertLessEqual(json.loads(result.stdout), 63)
+
+    @unittest.skipUnless(os.environ.get('AIBENCHMARK_TEST_CONTAINER') == '1' or os.environ.get('AIBENCHMARK_TEST_BWRAP') == '1', 'Explicit real containment integration required')
+    def test_actual_contained_candidate_large_file_is_terminated(self):
+        from dataclasses import replace
+        mode = 'container' if os.environ.get('AIBENCHMARK_TEST_CONTAINER') == '1' else 'bwrap'
+        with TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / 'tests').mkdir()
+            (root / 'tests/test_quota.c').write_text('#include "unity.h"\nvoid quota(void);void setUp(void){}void tearDown(void){}void test_quota(void){quota();}int main(void){UNITY_BEGIN();RUN_TEST(test_quota);return UNITY_END();}', encoding='utf-8')
+            task = replace(DatasetLoader().get_task('tier1_crc16'), task_dir=root)
+            code = '#include <stdio.h>\nvoid quota(void){char b[4096]={0};FILE *f=fopen("large","wb");if(!f)return;setvbuf(f,NULL,_IONBF,0);for(int i=0;i<4352;i++)fwrite(b,1,sizeof b,f);fclose(f);}'
+            compiled, tests = ExecutionSandbox(isolation=mode, compiler_path='gcc').compile_and_test(task, code)
+            self.addCleanup(compiled.cleanup)
+            self.assertTrue(compiled.success, compiled.output)
+            self.assertFalse(tests.completed)
+            self.assertFalse(tests.passed)
+            self.assertIn(tests.returncode, (-25, 153))
 
     def test_runtime_mounts_read_only_workspace_and_bounded_scratch(self):
         from aibenchmark_esw.sandbox.containment import ContainmentBackend

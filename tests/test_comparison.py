@@ -25,6 +25,8 @@ class TestComparison(unittest.TestCase):
             "platform": {"system": "Windows", "machine": "AMD64"},
             "generation_settings": {"temperature": None, "max_tokens": 4096, "request_timeout_seconds": 60},
         }
+        for field in ("tier_weighted_score", "tier_weight_policy", "by_tier", "by_category"):
+            data.pop(field, None)  # Editable legacy fixture, without optional derived groups.
         return data
 
     def test_comparison_keeps_failed_tasks_in_denominator_and_recomputes_summaries(self):

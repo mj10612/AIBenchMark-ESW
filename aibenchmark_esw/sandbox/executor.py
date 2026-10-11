@@ -142,19 +142,19 @@ class ExecutionSandbox:
     def execution_settings(self):
         return {"compile_timeout_seconds": self.compile_timeout_seconds,
                 "max_output_bytes": self.max_output_bytes, "isolation": self.isolation,
-                "memory_limit_bytes": self.memory_limit_bytes, "sanitizers": list(self.sanitizers),
+                "memory_limit_bytes": self.memory_limit_bytes or (536870912 if self.isolation == "container" else None), "sanitizers": list(self.sanitizers),
                 "compiler_warnings": self.warnings, "warning_flags": self.warning_flags(),
                 "containment": self.containment.settings() if self.containment else None,
                 "candidate_environment": "minimal-v1",
                 "oracle_policy": "private-unity-state-v1",
                 "hardening": {"policy": self.hardening, "compile_flags": self.hardening_flags(True),
                               "binary_flags": self.hardening_flags(), "available": bool(self.hardening_flags())},
-                "resource_limits": {"process_count": 64 if os.name == "nt" or self.isolation != "native" else None,
+                "resource_limits": {"process_count": 64 if os.name == "nt" or self.isolation == "container" or self.isolation in ("process", "bwrap") and getattr(os, "getuid", lambda: 0)() != 0 else None,
                                     "file_size_bytes": 16777216 if os.name != "nt" or self.containment else None,
                                     "core_bytes": 0 if os.name != "nt" or self.containment else None,
                                     "open_files": 256 if os.name != "nt" or self.containment else None},
                 "process_backend": "windows-job" if os.name == "nt" else "posix-session",
-                "cpu_limit": "task-timeout" if self.isolation == "process" else None,
+                "cpu_limit": "task-timeout" if self.isolation in ("process", "bwrap") else None,
                 "footprint": self.cross.settings() if self.cross else {"target": "host", "measurement": "host-object"}}
 
     def _candidate_environment(self, scratch: Path):

@@ -62,7 +62,7 @@ class BenchmarkReporter:
         version = data.get("schema_version", 1)
         if isinstance(version, bool) or not isinstance(version, int) or version not in (1, 2):
             raise ValueError(f"Unsupported report schema version: {version}")
-        for field in ("overall_score", "pass_at_1_pct"):
+        for field in ("overall_score", "pass_at_1_pct", "tier_weighted_score"):
             value = data.get(field)
             if field in data and (isinstance(value, bool) or not isinstance(value, (float, int)) or not 0 <= value <= 100):
                 raise ValueError(f"{field} must be a finite score from 0 to 100")
@@ -74,6 +74,9 @@ class BenchmarkReporter:
             value = (data.get("metadata") or {}).get(key)
             if value is not None and not isinstance(value, dict):
                 raise ValueError(f"Metadata {key} must be an object")
+        categories = (data.get('metadata') or {}).get('task_categories') or {}
+        if any(not isinstance(key, str) or not key.strip() or not isinstance(value, str) or not value.strip() for key, value in categories.items()):
+            raise ValueError('Task categories must map nonempty task names to category strings')
         if "generation_summary" in data:
             from aibenchmark_esw.metrics.measurements import measurement_summary
             summary = data["generation_summary"]
@@ -257,6 +260,15 @@ class BenchmarkReporter:
                         raise ValueError('generation_summary disagrees with task/sample measurements: ' + key)
         from aibenchmark_esw.metrics.groups import grouped_scores
         expected_groups = grouped_scores(results, data.get('metadata'))
+        for scope in ('by_tier', 'by_category'):
+            if scope in data:
+                if not isinstance(data[scope], dict):
+                    raise ValueError(scope + ' must be a group object')
+                for values in data[scope].values():
+                    if (not isinstance(values, dict)
+                            or any(type(values.get(key)) is not int for key in ('count', 'task_attempts'))
+                            or any(isinstance(values.get(key), bool) or not isinstance(values.get(key), (int, float)) for key in ('mean_score', 'pass_at_1_pct'))):
+                        raise ValueError(scope + ' contains invalid group measurements')
         for field in ('tier_weighted_score', 'tier_weight_policy', 'by_tier', 'by_category'):
             if field in data and data[field] != expected_groups[field]:
                 raise ValueError(field + ' disagrees with task results')

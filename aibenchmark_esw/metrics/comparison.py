@@ -265,7 +265,8 @@ def comparison_regressions(comparison, baseline_model=None, regression_threshold
 
 
 def render_comparison(comparison, format_name="markdown", *, baseline_model=None, regression_threshold=0.0):
-    comparison = _baseline_views(comparison, baseline_model)
+    if 'task_rows' in comparison:
+        comparison = _baseline_views(comparison, baseline_model)
     if format_name == "html":
         from aibenchmark_esw.metrics.exports import summary_html
         return summary_html("Model comparison", comparison["models"], comparison)
