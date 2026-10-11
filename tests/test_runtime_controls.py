@@ -238,6 +238,10 @@ int main(void){UNITY_BEGIN();RUN_TEST(test_ok);return UNITY_END();}
             output.write_bytes(b"fixture")
             return CompilationResult(True, "", binary_path=output, effective_standard="c99")
         def execute_fixture(command, **kwargs):
+            environment = kwargs["env"]
+            self.assertEqual(environment["ASAN_OPTIONS"], "halt_on_error=1:abort_on_error=1:detect_leaks=0")
+            self.assertEqual(environment["UBSAN_OPTIONS"], "halt_on_error=1:print_stacktrace=1")
+            self.assertNotIn("AIBENCHMARK_TEST_SECRET", environment)
             wrapper = next(Path(command[0]).parent.glob("aibenchmark_tests_*.c")).read_text()
             token = wrapper.split("AIBenchMark-ESW:", 1)[1].split(":END", 1)[0]
             output = ("file.c:1:test:PASS\n1 Tests 0 Failures 0 Ignored\n"

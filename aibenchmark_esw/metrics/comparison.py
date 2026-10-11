@@ -63,7 +63,7 @@ def compare_runs(reports, *, _allow_repeated_models=False, _check_generation=Tru
         if not known_analysis:
             warnings.append(f"{model}: static-analysis configuration/version is unknown.")
         warnings.extend(f"{model}: {warning}" for warning in BenchmarkReporter.analysis_warnings(results))
-        warnings.extend(f"{model}: {warning}" for warning in BenchmarkReporter.scoring_warnings(results))
+        warnings.extend(f"{model}: {warning}" for warning in BenchmarkReporter.scoring_warnings(results, metadata))
         if not host.get("release"):
             warnings.append(f"{model}: host OS release is unknown; compatibility cannot be fully checked.")
         runs.append((report, results, tasks, metadata, complete_provenance))

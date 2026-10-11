@@ -63,7 +63,7 @@ def report_html(results, model_name, metadata=None):
                    'static analysis': result.safety_metrics.__dict__, 'generation': result.generation, 'provenance': result.provenance}
         cells.append('<td><details><summary>Diagnostics and provenance</summary><pre>' + _escape(json.dumps(details, indent=2, default=str)) + '</pre></details></td>')
         rows.append(f'<tr data-status="{status}" data-tier="{result.tier}" data-category="{_escape(category)}" data-score="{result.scores.total_score}">' + ''.join(cells) + '</tr>')
-    warnings = BenchmarkReporter.analysis_warnings(results) + BenchmarkReporter.scoring_warnings(results)
+    warnings = BenchmarkReporter.analysis_warnings(results) + BenchmarkReporter.scoring_warnings(results, metadata)
     from aibenchmark_esw.metrics.measurements import render_measurements
     measurements = render_measurements(results, (metadata or {}).get('collection_generation_summary'))
     sampling = BenchmarkReporter.sampling_lines(metadata)

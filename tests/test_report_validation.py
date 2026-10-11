@@ -59,6 +59,49 @@ class TestReportValidation(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "zero scores"):
             BenchmarkReporter.from_json_dict(data)
 
+    def test_present_limits_and_weights_require_every_field(self):
+        from aibenchmark_esw.report_schema import validate_report_structure
+
+        for name in ("limits", "weights"):
+            original = self.report()["tasks"][0][name]
+            for missing in (tuple(original), *((key,) for key in original)):
+                data = self.report()
+                for key in missing:
+                    del data["tasks"][0][name][key]
+                with self.subTest(name=name, missing=missing):
+                    with self.assertRaisesRegex(ValueError, "Missing " + name + " fields"):
+                        BenchmarkReporter.from_json_dict(data)
+                    with self.assertRaisesRegex(ValueError, "Report schema violation"):
+                        validate_report_structure(data)
+
+    def test_legacy_limits_warn_even_when_present(self):
+        data = self.report()
+        results = BenchmarkReporter.from_json_dict(data)
+        self.assertTrue(BenchmarkReporter.scoring_warnings(results))
+        for render in (BenchmarkReporter.generate_cli_table,
+                       BenchmarkReporter.generate_markdown, BenchmarkReporter.generate_html):
+            with self.subTest(render=render.__name__):
+                self.assertIn("unverifiable", render(results, data["model_name"], data["metadata"]))
+
+        data = json.loads(Path("results/baseline.json").read_text(encoding="utf-8"))
+        results = BenchmarkReporter.from_json_dict(data)
+        self.assertEqual(BenchmarkReporter.scoring_warnings(results, data["metadata"]), [])
+        del data["metadata"]["scoring_policy"]["tasks"][results[0].task_id]
+        warnings = BenchmarkReporter.scoring_warnings(results, data["metadata"])
+        self.assertIn(results[0].task_id, " ".join(warnings))
+
+    def test_absent_and_null_legacy_limits_weights_remain_unknown(self):
+        for omit in (True, False):
+            data = self.report()
+            for task in data["tasks"]:
+                for name in ("limits", "weights"):
+                    if omit:
+                        task.pop(name, None)
+                    else:
+                        task[name] = None
+            results = BenchmarkReporter.from_json_dict(data)
+            self.assertTrue(all(result.limits is None and result.weights is None for result in results))
+
     def test_rounded_partial_scores_and_valid_legacy_reports_still_load(self):
         data = self.report()
         task = data["tasks"][0]

@@ -60,6 +60,7 @@ class TestProvenance(unittest.TestCase):
         self.assertEqual(len(metadata["dataset_sha256"]), 64)
         self.assertEqual(len(metadata["evaluator_sha256"]), 64)
         self.assertEqual(metadata["selected_tasks"], ["tier1_crc16"])
+        self.assertEqual(metadata["execution_settings"]["candidate_environment"], "minimal-v1")
 
     def test_candidate_hash_normalizes_newlines(self):
         self.assertEqual(text_sha256("int x;\r\n"), text_sha256("int x;\n"))

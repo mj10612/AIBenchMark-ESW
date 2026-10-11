@@ -148,7 +148,11 @@
                                 "maximum": 1
                               }
                             },
-                            "required": [],
+                            "required": [
+                              "functional",
+                              "memory",
+                              "safety"
+                            ],
                             "additionalProperties": false
                           },
                           "limits": {
@@ -167,7 +171,11 @@
                                 "minimum": 1
                               }
                             },
-                            "required": [],
+                            "required": [
+                              "max_flash_bytes",
+                              "max_ram_bytes",
+                              "timeout_seconds"
+                            ],
                             "additionalProperties": false
                           }
                         }
@@ -440,7 +448,11 @@
                     "maximum": 1
                   }
                 },
-                "required": [],
+                "required": [
+                  "functional",
+                  "memory",
+                  "safety"
+                ],
                 "additionalProperties": false
               },
               {
@@ -466,7 +478,11 @@
                     "minimum": 1
                   }
                 },
-                "required": [],
+                "required": [
+                  "max_flash_bytes",
+                  "max_ram_bytes",
+                  "timeout_seconds"
+                ],
                 "additionalProperties": false
               },
               {
@@ -579,7 +595,11 @@
                       "maximum": 1
                     }
                   },
-                  "required": [],
+                  "required": [
+                    "functional",
+                    "memory",
+                    "safety"
+                  ],
                   "additionalProperties": false
                 },
                 "limits": {
@@ -598,7 +618,11 @@
                       "minimum": 1
                     }
                   },
-                  "required": [],
+                  "required": [
+                    "max_flash_bytes",
+                    "max_ram_bytes",
+                    "timeout_seconds"
+                  ],
                   "additionalProperties": false
                 }
               }

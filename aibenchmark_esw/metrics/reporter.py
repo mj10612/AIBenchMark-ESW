@@ -1,5 +1,6 @@
 from typing import List, Dict, Any
 from typing import Optional
+from dataclasses import asdict
 from aibenchmark_esw.metrics.validation import validate_task_result, validate_composite_score, validate_run_state
 from aibenchmark_esw.models import (
     TaskEvaluationResult, TestResult, SizeMetrics, StaticSafetyMetrics, DimensionScores, TaskWeights, TaskLimits,
@@ -143,7 +144,7 @@ class BenchmarkReporter:
                     raise ValueError("Task limits/weights disagree with recorded scoring_policy")
                 # Corroborate a bundled task only when its fingerprint identifies
                 # the local configuration; external datasets remain portable.
-                from dataclasses import asdict, replace
+                from dataclasses import replace
                 from aibenchmark_esw.dataset import DatasetLoader
                 from aibenchmark_esw.provenance import task_sha256
                 from aibenchmark_esw.resources import data_root
@@ -282,9 +283,7 @@ class BenchmarkReporter:
         if measurements:
             md += ["", "### Generation measurements", "", *measurements]
 
-        warnings = BenchmarkReporter.analysis_warnings(results) + BenchmarkReporter.scoring_warnings(results)
-        if not (metadata or {}).get("scoring_policy"):
-            warnings.append("Legacy scoring policy is unverifiable; limits and weights are report-supplied.")
+        warnings = BenchmarkReporter.analysis_warnings(results) + BenchmarkReporter.scoring_warnings(results, metadata)
         if warnings:
             md += ["", "### Validation and analysis coverage", ""]
             md += [f"- {warning}" for warning in warnings]
@@ -330,7 +329,7 @@ class BenchmarkReporter:
         lines.append(f"Final Score{qualifier}: {avg_total:.2f}/100.0 | Pass@1{qualifier}: {pass_at_1:.1f}%")
         lines.append("=" * 110)
         lines += [f"Warning: {warning}" for warning in
-                  BenchmarkReporter.analysis_warnings(results) + BenchmarkReporter.scoring_warnings(results)]
+                  BenchmarkReporter.analysis_warnings(results) + BenchmarkReporter.scoring_warnings(results, metadata)]
         warning = BenchmarkReporter.run_warning(metadata)
         if warning:
             lines.append(warning)
@@ -338,8 +337,6 @@ class BenchmarkReporter:
             lines.append(f"Offline replay; origin run {(metadata or {}).get('origin_run_id')}; fixed sources, no new generation or spend.")
         if (metadata or {}).get("unreadable_assets"):
             lines.append("Dataset provenance is incomplete because some input assets were unreadable.")
-        if not (metadata or {}).get("scoring_policy"):
-            lines.append("Warning: Legacy scoring policy is unverifiable; limits and weights are report-supplied.")
         for result in results:
             for finding in result.safety_metrics.findings:
                 lines.append(f"[{result.task_id}] {finding['engine']} / {finding['rule_id']} / {finding['severity']}: "
@@ -390,12 +387,22 @@ class BenchmarkReporter:
         return warnings
 
     @staticmethod
-    def scoring_warnings(results: List[TaskEvaluationResult]) -> List[str]:
+    def scoring_warnings(results: List[TaskEvaluationResult],
+                         metadata: Optional[Dict[str, Any]] = None) -> List[str]:
         missing = [result.task_id for result in results
                    if result.compiled and result.test_result.completed
                    and result.size_metrics.measured and result.limits is None]
-        return (["Memory scores cannot be independently verified without recorded task limits: "
-                 + ", ".join(missing) + "."] if missing else [])
+        warnings = (["Memory scores cannot be independently verified without recorded task limits: "
+                     + ", ".join(missing) + "."] if missing else [])
+        policy_tasks = ((metadata or {}).get("scoring_policy") or {}).get("tasks", {})
+        unverified = [result.task_id for result in results if result.limits is not None
+                      and policy_tasks.get(result.task_id) != {
+                          "limits": asdict(result.limits),
+                          "weights": asdict(result.weights) if result.weights is not None else None}]
+        if unverified or not (metadata or {}).get("scoring_policy"):
+            warnings.append("Legacy scoring policy is unverifiable; limits and weights are report-supplied."
+                            + (" Unverified tasks: " + ", ".join(unverified) + "." if unverified else ""))
+        return warnings
 
     @staticmethod
     def to_json_dict(results: List[TaskEvaluationResult], model_name: str,

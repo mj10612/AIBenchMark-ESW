@@ -112,9 +112,20 @@ class ExecutionSandbox:
                 "memory_limit_bytes": self.memory_limit_bytes, "sanitizers": list(self.sanitizers),
                 "compiler_warnings": self.warnings, "warning_flags": self.warning_flags(),
                 "containment": self.containment.settings() if self.containment else None,
+                "candidate_environment": "minimal-v1",
                 "process_backend": "windows-job" if os.name == "nt" else "posix-session",
                 "cpu_limit": "task-timeout" if self.isolation == "process" else None,
                 "footprint": self.cross.settings() if self.cross else {"target": "host", "measurement": "host-object"}}
+
+    def _candidate_environment(self, scratch: Path):
+        """Pass only runtime essentials; keep provider and host configuration private."""
+        allowed = ("PATH", "SystemRoot", "WINDIR", "ComSpec") if os.name == "nt" else ("PATH",)
+        environment = {name: os.environ[name] for name in allowed if name in os.environ}
+        environment.update(HOME=str(scratch), TMPDIR=str(scratch), TEMP=str(scratch), TMP=str(scratch))
+        if self.sanitizers:
+            environment["ASAN_OPTIONS"] = "halt_on_error=1:abort_on_error=1:detect_leaks=0"
+            environment["UBSAN_OPTIONS"] = "halt_on_error=1:print_stacktrace=1"
+        return environment
 
     def _find_c_compiler(self) -> str:
         for cmd in ["gcc", "clang", "tcc", "cl"]:
@@ -293,15 +304,9 @@ class ExecutionSandbox:
             comp_result._workspace = workspace
             retained = True
             try:
-                environment = None
-                if self.sanitizers:
-                    environment = os.environ.copy()
-                    # Explicitly prevent recovery or redirected diagnostics from
-                    # inherited host sanitizer configuration.
-                    environment["ASAN_OPTIONS"] = "halt_on_error=1:abort_on_error=1:detect_leaks=0"
-                    environment["UBSAN_OPTIONS"] = "halt_on_error=1:print_stacktrace=1"
                 scratch = work_dir / "scratch"
                 scratch.mkdir(exist_ok=True)
+                environment = self._candidate_environment(scratch)
                 receipt = work_dir / "harness.receipt"
                 runner = self._run_contained if self.containment else run_bounded
                 proc = runner([str(binary_path), str(receipt)], timeout=task.limits.timeout_seconds,

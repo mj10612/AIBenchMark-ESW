@@ -1,4 +1,5 @@
 import unittest
+import os
 import subprocess
 import sys
 from pathlib import Path
@@ -33,6 +34,42 @@ class TestExecutionSandbox(unittest.TestCase):
         self.assertTrue(test_res.passed)
         self.assertEqual(test_res.failed_tests, 0)
         self.assertGreater(test_res.passed_tests, 0)
+
+    def test_candidate_does_not_inherit_host_secrets(self):
+        source = '''#include <stdlib.h>
+#include <stdio.h>
+int answer(void) {
+    const char *names[] = {"AIBENCHMARK_TEST_SECRET", "OPENAI_API_KEY",
+                          "ANTHROPIC_API_KEY", "ASAN_OPTIONS", "UBSAN_OPTIONS"};
+    unsigned int i;
+    for (i = 0; i < sizeof(names) / sizeof(names[0]); ++i) {
+        const char *value = getenv(names[i]);
+        if (value) { printf("LEAK:%s\\n", value); return 0; }
+    }
+    return 7;
+}
+'''
+        for isolation in ("native", "process"):
+            with self.subTest(isolation=isolation), TemporaryDirectory() as directory:
+                root = Path(directory)
+                (root / "tests").mkdir()
+                (root / "tests/test_environment.c").write_text(
+                    '#include "unity.h"\nint answer(void);\n'
+                    'void setUp(void) {}\nvoid tearDown(void) {}\n'
+                    'void test_environment(void) { TEST_ASSERT_EQUAL_INT(7, answer()); }\n'
+                    'int main(void) { UNITY_BEGIN(); RUN_TEST(test_environment); return UNITY_END(); }\n',
+                    encoding="utf-8")
+                task = replace(self.loader.get_task("tier1_crc16"), task_dir=root)
+                names = ("AIBENCHMARK_TEST_SECRET", "OPENAI_API_KEY", "ANTHROPIC_API_KEY",
+                         "ASAN_OPTIONS", "UBSAN_OPTIONS")
+                executor = ExecutionSandbox(isolation=isolation)
+                with patch.dict(os.environ, dict.fromkeys(names, "offline-sentinel-never-publish")):
+                    compiled, result = executor.compile_and_test(task, source)
+                self.addCleanup(compiled.cleanup)
+                self.assertTrue(compiled.success, compiled.output)
+                self.assertTrue(result.passed, result.output)
+                self.assertNotIn("offline-sentinel-never-publish", result.output)
+                self.assertEqual(executor.execution_settings()["candidate_environment"], "minimal-v1")
 
     def test_compile_and_fail_starter_stub(self):
         task = self.loader.get_task("tier1_crc16")

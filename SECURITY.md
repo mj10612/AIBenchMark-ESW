@@ -23,6 +23,15 @@ or sensitive mounted files. Native/process mode does not restrict filesystem,
 network or child-process access. Provider evaluations require opt-in API access; CI runs
 only checked-in test fixtures and golden references without provider credentials.
 
+Candidate binaries receive a minimal environment rather than inheriting the
+benchmark process's provider keys and other configuration. Only `PATH` and, on
+Windows, `SystemRoot`, `WINDIR` and `ComSpec` are copied; home and temporary paths
+point to the evaluation scratch directory. Sanitizer options are explicitly set
+when enabled. Reports record `execution_settings.candidate_environment` as
+`minimal-v1`. Compilation still uses the toolchain environment. Environment
+scrubbing does not restrict access to host files or other processes in native
+or process mode.
+
 
 Native execution captures a bounded output prefix in a temporary file and owns
 Windows Job/POSIX process groups. Opt-in process mode adds CPU and memory caps.
