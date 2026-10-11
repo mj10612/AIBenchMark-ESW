@@ -15,7 +15,7 @@ from aibenchmark_esw.models import (
 
 class TestDocumentedScoringContract(unittest.TestCase):
     def task(self):
-        return TaskConfig("contract", "contract", 1, "test", "c99", "", TaskLimits(1000, 200),
+        return TaskConfig("contract", "contract", 1, "general", "c99", "", TaskLimits(1000, 200),
                           TaskWeights(), "solution.c", Path("."))
 
     def test_unused_ram_cannot_compensate_excess_flash_or_vice_versa(self):
