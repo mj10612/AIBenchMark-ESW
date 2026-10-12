@@ -4,7 +4,7 @@
     "run_id": "219480ebcf514451a1daa561ee8d4d95",
     "created_at_utc": "2026-10-11T05:40:13.447584+00:00",
     "benchmark_version": "0.1.0",
-    "evaluator_sha256": "f1b3c788846ed55d30d3ab3c1bafad0fb7f60718e33d942a8101019dec607a84",
+    "evaluator_sha256": "178a7c839229fe7facf15b4bc6142a465e273cc0a5b0df770abcdf7f135afe3c",
     "python_version": "3.11.15",
     "platform": {
       "system": "Windows",

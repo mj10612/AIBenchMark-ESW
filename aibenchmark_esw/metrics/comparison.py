@@ -66,7 +66,7 @@ def compare_runs(reports, *, _allow_repeated_models=False, _check_generation=Tru
         results = BenchmarkReporter.from_json_dict(report)
         model = report.get("model_name")
         if "samples" in report and not report["samples"]:
-            raise ValueError(f"Cannot compare collection without completed samples: {model}")
+            raise ValueError(f"Cannot compare unfinished collection without completed samples: {model}")
         if (not isinstance(model, str) or not model.strip()
                 or (model in models and not _allow_repeated_models)):
             raise ValueError("Reports must have distinct, nonempty model names")
@@ -161,8 +161,6 @@ def compare_runs(reports, *, _allow_repeated_models=False, _check_generation=Tru
     for report, results, _, _, provenance in runs:
         sample_results = [BenchmarkReporter.from_json_dict(sample) for sample in report['samples']] if 'samples' in report else [results]
         if 'samples' in report:
-            if not report['samples']:
-                raise ValueError('Cannot compare an unfinished collection with no completed samples')
             compare_runs(report['samples'], _allow_repeated_models=True)
         all_results = [result for sample in sample_results for result in sample]
         tokens, durations = [], []
