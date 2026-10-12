@@ -56,7 +56,7 @@ jobs:
         with:
           python-version: ${{ matrix.python }}
           cache: pip
-          cache-dependency-path: pyproject.toml
+          cache-dependency-path: uv.lock
       - name: Install Linux compilers
         if: runner.os == 'Linux'
         run: |
@@ -91,14 +91,14 @@ jobs:
           Expand-Archive $archive -DestinationPath $destination
           (Join-Path $destination 'tcc') | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
       - name: Install development dependencies
-        run: python -m pip install -e ".[dev]"
+        run: python .github/scripts/install_locked.py
       - name: Validate required task assets
         run: aibenchmark-esw validate
       - name: Check published evidence fingerprints
         run: python -m aibenchmark_esw.baseline_check results/baseline.json
       - name: Lint and type-check Python
         run: |
-          ruff check aibenchmark_esw
+          ruff check aibenchmark_esw tests
           mypy aibenchmark_esw
       - name: Run full suite including distribution validation
         run: |
@@ -107,6 +107,12 @@ jobs:
           coverage xml -o artifacts/coverage.xml
       - name: Check mutation adequacy
         run: aibenchmark-esw mutations --output artifacts/mutations.json
+      - name: Check TCC C11 task readiness and preflight
+        if: runner.os == 'Windows'
+        run: |
+          aibenchmark-esw doctor --tasks tier4_dma_buffer --check-references
+          aibenchmark-esw run --model baseline --tasks tier4_dma_buffer --preflight --quiet
+          aibenchmark-esw run --model baseline --preflight --quiet --output artifacts/tcc-preflight.json
       - name: Check cross-target object evidence
         if: runner.os == 'Linux'
         run: |
@@ -118,7 +124,10 @@ jobs:
           aibenchmark-esw run --model baseline --target arm:cortex-m0 --cross-compiler clang --output artifacts/arm-all-tasks.json
           aibenchmark-esw run --model baseline --target avr:atmega328p --cross-compiler avr-gcc --output artifacts/avr-all-tasks.json
       - name: Record reference baseline
-        run: aibenchmark-esw run --model baseline --output artifacts/baseline.json
+        run: |
+          aibenchmark-esw run --model baseline --output artifacts/baseline.json
+          python -m aibenchmark_esw.baseline_check artifacts/baseline.json results/baseline.json
+          python .github/scripts/check_documentation.py artifacts/baseline.json
       - name: Render reference report
         shell: bash
         run: aibenchmark-esw report --results artifacts/baseline.json --format markdown > artifacts/baseline.md
@@ -144,13 +153,13 @@ jobs:
         with:
           python-version: '3.11'
           cache: pip
-          cache-dependency-path: pyproject.toml
+          cache-dependency-path: uv.lock
       - name: Install cppcheck and its library configuration
         run: |
           sudo apt-get update
           sudo apt-get install --yes cppcheck gcc
       - name: Install benchmark
-        run: python -m pip install -e .
+        run: python .github/scripts/install_locked.py
       - name: Validate actual analyzer execution and diagnostics
         run: |
           cppcheck --version
@@ -170,7 +179,7 @@ jobs:
         with:
           python-version: '3.11'
           cache: pip
-          cache-dependency-path: pyproject.toml
+          cache-dependency-path: uv.lock
       - name: Initialize installed Visual Studio toolchain
         shell: pwsh
         run: |
@@ -189,7 +198,7 @@ jobs:
           }
       - name: Install benchmark and validate native MSVC evaluation
         run: |
-          python -m pip install -e ".[dev]"
+          python .github/scripts/install_locked.py
           aibenchmark-esw validate
           aibenchmark-esw run --model baseline --compiler cl --allow-standard-fallback --output artifacts/msvc-baseline.json
           aibenchmark-esw mutations --compiler cl --allow-standard-fallback --output artifacts/msvc-mutations.json
@@ -216,12 +225,12 @@ jobs:
         with:
           python-version: '3.11'
           cache: pip
-          cache-dependency-path: pyproject.toml
+          cache-dependency-path: uv.lock
       - name: Install compilers and benchmark
         run: |
           sudo apt-get update
-          sudo apt-get install --yes gcc clang
-          python -m pip install -e ".[dev]"
+          sudo apt-get install --yes gcc clang bubblewrap
+          python .github/scripts/install_locked.py
       - name: Exercise real sanitizer runtimes
         run: |
           python -m unittest discover -s tests -p test_runtime_controls.py -v
@@ -232,8 +241,19 @@ jobs:
         run: |
           docker pull gcc:14
           python -m unittest discover -s tests -p test_containment.py -v
+          python -m unittest discover -s tests -p test_asset_and_resource_security.py -v
           aibenchmark-esw run --model baseline --isolation container --container-engine docker --container-image gcc:14 --memory-limit-bytes 536870912 --output artifacts/container-baseline.json
           aibenchmark-esw validate-report artifacts/container-baseline.json
+      - name: Exercise real bubblewrap boundaries
+        env:
+          AIBENCHMARK_TEST_BWRAP: '1'
+        run: |
+          sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
+          bwrap --version
+          python -m unittest discover -s tests -p test_real_bwrap.py -v
+          python -m unittest discover -s tests -p test_asset_and_resource_security.py -v
+          aibenchmark-esw run --model baseline --isolation bwrap --compiler gcc --output artifacts/bwrap-baseline.json
+          aibenchmark-esw validate-report artifacts/bwrap-baseline.json
       - name: Upload containment evidence
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1

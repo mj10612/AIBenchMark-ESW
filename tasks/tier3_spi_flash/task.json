@@ -2,9 +2,9 @@
   "id": "tier3_spi_flash",
   "name": "Bounded SPI NOR Flash Driver",
   "tier": 3,
-  "category": "firmware",
+  "category": "device_drivers",
   "target_standard": "c99",
-  "description": "Bounded SPI NOR Flash Driver",
+  "description": "Implement a bounded SPI NOR driver with ordered readiness/WREN transactions, 24-bit addresses, page splitting and timeout propagation.",
   "limits": {
     "max_flash_bytes": 3072,
     "max_ram_bytes": 128,

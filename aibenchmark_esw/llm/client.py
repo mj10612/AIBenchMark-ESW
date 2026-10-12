@@ -3,13 +3,22 @@ import copy
 import math
 import re
 import time
-from typing import Optional, List, Dict, Any, Set
+from typing import Any, Optional
+
+from aibenchmark_esw.llm.costs import (
+    BudgetExceededError,
+    PricingUnknownError,
+    model_info,
+    pricing,
+    token_upper_bound,
+    usage_cost,
+    valid_cost,
+)
 from aibenchmark_esw.sandbox.c_source import mask_noncode
-from aibenchmark_esw.llm.costs import BudgetExceededError, pricing, token_upper_bound, usage_cost, valid_cost
 
 
 def is_fatal_provider_error(error):
-    if type(error).__name__ in {"ContextWindowExceededError", "ContentPolicyViolationError", "BadRequestError"}:
+    if isinstance(error, PricingUnknownError) or type(error).__name__ in {"ContextWindowExceededError", "ContentPolicyViolationError", "BadRequestError"}:
         return False
     status = getattr(error, "status_code", None)
     return (isinstance(error, (ImportError, BudgetExceededError))
@@ -18,12 +27,23 @@ def is_fatal_provider_error(error):
             or (isinstance(status, int) and status in (401, 403, 404)))
 
 
-def _transient(error):
+def is_transient_provider_error(error):
     status = getattr(error, "status_code", None)
     return (isinstance(error, (TimeoutError, ConnectionError))
             or type(error).__name__ in {"Timeout", "APITimeoutError", "RateLimitError",
                                        "APIConnectionError", "ServiceUnavailableError"}
             or (isinstance(status, int) and (status in (408, 409, 429) or 500 <= status < 600)))
+
+
+def _pre_response_error(error):
+    status = getattr(error, 'status_code', None)
+    return (isinstance(error, ConnectionError)
+            or type(error).__name__ in {'RateLimitError', 'APIConnectionError', 'ServiceUnavailableError'}
+            or (isinstance(status, int) and (status in (408, 429) or 500 <= status < 600)))
+
+
+class ContextWindowError(ValueError):
+    """A measured prompt exceeds the model's published context limit."""
 
 
 class LLMClient:
@@ -32,7 +52,7 @@ class LLMClient:
                  request_timeout: float = 60.0, max_retries: int = 0,
                  retry_backoff_seconds: float = 1.0, prompt_strategy: str = "single",
                  review_turn: bool = False, input_cost_per_million=None,
-                 output_cost_per_million=None, budget=None):
+                 output_cost_per_million=None, budget=None, repair_turns=0):
         if temperature is not None and (isinstance(temperature, bool)
                 or not isinstance(temperature, (int, float))
                 or not math.isfinite(temperature) or not 0 <= temperature <= 2):
@@ -53,16 +73,19 @@ class LLMClient:
             raise ValueError("prompt_strategy must be single or plan")
         if not isinstance(review_turn, bool):
             raise ValueError("review_turn must be a boolean")
+        if isinstance(repair_turns, bool) or not isinstance(repair_turns, int) or not 0 <= repair_turns <= 10:
+            raise ValueError('repair_turns must be an integer between 0 and 10')
         self.model_name, self.api_key = model_name, api_key
         self.temperature, self.max_tokens = temperature, max_tokens
         self.request_timeout = request_timeout
         self.max_retries, self.retry_backoff_seconds = max_retries, retry_backoff_seconds
         self.prompt_strategy, self.review_turn = prompt_strategy, review_turn
+        self.repair_turns = repair_turns
         pricing(None, model_name, input_cost_per_million, output_cost_per_million)
         self.input_cost_per_million, self.output_cost_per_million = input_cost_per_million, output_cost_per_million
         self.budget = budget
         self.last_generation: Any = None
-        self.expected_functions: Set[str] = set()
+        self.expected_functions: set[str] = set()
         self.cancel_event = None
 
     def settings(self):
@@ -70,12 +93,13 @@ class LLMClient:
                 "request_timeout_seconds": self.request_timeout,
                 "max_retries": self.max_retries, "retry_backoff_seconds": self.retry_backoff_seconds,
                 "prompt_strategy": self.prompt_strategy, "review_turn": self.review_turn,
+                'repair_turns': self.repair_turns, 'context_window_policy': 'trim-optional-once-v1',
                 "input_cost_per_million": self.input_cost_per_million,
                 "output_cost_per_million": self.output_cost_per_million}
 
     def build_prompt(self, task_prompt: str, header_code: str, starter_code: str,
                      target_standard: str = "c99", prompt_overrides=None,
-                     system_prompt: Optional[str] = None) -> List[Dict[str, str]]:
+                     system_prompt: Optional[str] = None) -> list[dict[str, str]]:
         if target_standard not in ("c99", "c11", "c17"):
             raise ValueError("target_standard must be c99, c11, or c17")
         overrides = prompt_overrides or {}
@@ -110,7 +134,35 @@ class LLMClient:
         if self.cancel_event is not None and self.cancel_event.is_set():
             raise InterruptedError("Generation cancelled")
 
-    def _complete(self, provider, messages):
+    def _trim_optional(self, messages):
+        if len(messages) <= 3:
+            return False
+        last = messages[-1]
+        messages[:] = messages[:2] + ([last] if last['role'] == 'user' else [])
+        self.last_generation['context_trimmed'] = True
+        return True
+
+    def _context_check(self, provider, messages):
+        info = model_info(provider, self.model_name)
+        limit = info.get('max_input_tokens') or info.get('max_tokens')
+        count = getattr(provider, 'token_counter', None)
+        if not callable(count) or isinstance(limit, bool) or not isinstance(limit, int) or limit <= 0:
+            return
+        try:
+            tokens = count(model=self.model_name, messages=messages)
+        except Exception:
+            return
+        if isinstance(tokens, bool) or not isinstance(tokens, int) or tokens < 0:
+            return
+        available = limit if info.get('max_input_tokens') else limit - (self.max_tokens or 0)
+        if tokens > available:
+            if self._trim_optional(messages):
+                self._context_check(provider, messages)
+                return
+            raise ContextWindowError(f'Prompt requires {tokens} tokens, context allows {available}; reduce task/header content or --max-tokens')
+
+    def _complete(self, provider, messages, turn_kind='implement', context_retry=False):
+        self._context_check(provider, messages)
         kwargs = {"model": self.model_name, "messages": copy.deepcopy(messages), "timeout": self.request_timeout}
         if self.temperature is not None:
             kwargs["temperature"] = self.temperature
@@ -129,13 +181,16 @@ class LLMClient:
                 estimate = (token_upper_bound(messages) * prices["input_per_token"]
                             + self.max_tokens * prices["output_per_token"]) if prices else None
                 reservation = self.budget.reserve(estimate)
-            record: Dict[str, Any] = {"turn": len(self.last_generation["request_messages"]),
+            record: dict[str, Any] = {"turn": len(self.last_generation["request_messages"]),
                       "attempt": attempt + 1, "latency_seconds": None, "error": None,
                       "cost_usd": None, "budget_charge_usd": reservation, "usage": None}
             self.last_generation["attempts"].append(record)
             start = time.perf_counter()
+            delay = None
+            settlement = None
             try:
                 response = provider.completion(**kwargs)
+                record['latency_seconds'] = round(time.perf_counter() - start, 6)
                 usage = getattr(response, "usage", None)
                 record["usage"] = {name: getattr(usage, name, None) for name in
                     ("prompt_tokens", "completion_tokens", "total_tokens")} if usage is not None else None
@@ -156,20 +211,35 @@ class LLMClient:
                     record["pricing"] = prices
                 break
             except Exception as error:
+                record['latency_seconds'] = round(time.perf_counter() - start, 6)
                 record["error"] = type(error).__name__
-                if not _transient(error) or is_fatal_provider_error(error) or attempt >= self.max_retries:
+                if _pre_response_error(error):
+                    settlement = 0.0
+                    record['budget_charge_policy'] = 'pre-response-error-zero'
+                elif type(error).__name__ in {'ContextWindowExceededError', 'ContextWindowError'}:
+                    settlement = 0.0
+                else:
+                    record['budget_charge_policy'] = 'unknown-attempt-full-reservation'
+                if type(error).__name__ == 'ContextWindowExceededError' and not context_retry and self._trim_optional(messages):
+                    record['context_retry'] = True
+                    delay = 0
+                elif not is_transient_provider_error(error) or is_fatal_provider_error(error) or attempt >= self.max_retries:
                     raise
-                delay = min(60.0, self.retry_backoff_seconds * 2 ** attempt)
-                record["retry_delay_seconds"] = delay
+                else:
+                    delay = min(60.0, self.retry_backoff_seconds * 2 ** attempt)
+                    record["retry_delay_seconds"] = delay
+            finally:
+                if self.budget is not None:
+                    charge = record['cost_usd'] if record['cost_usd'] is not None else settlement
+                    self.budget.settle(reservation, charge)
+                    record["budget_charge_usd"] = charge if charge is not None else reservation
+            if record.get('context_retry'):
+                return self._complete(provider, messages, turn_kind, context_retry=True)
+            if delay is not None:
                 if self.cancel_event is None:
                     time.sleep(delay)
                 elif self.cancel_event.wait(delay):
                     raise InterruptedError("Generation cancelled")
-            finally:
-                record["latency_seconds"] = round(time.perf_counter() - start, 6)
-                if self.budget is not None:
-                    self.budget.settle(reservation, record["cost_usd"])
-                    record["budget_charge_usd"] = record["cost_usd"] if record["cost_usd"] is not None else reservation
         if not response.choices:
             raise ValueError("Model returned no completion choices")
         choice = response.choices[0]
@@ -179,6 +249,7 @@ class LLMClient:
         usage = getattr(response, "usage", None)
         tokens = copy.deepcopy(record["usage"])
         turn = {"resolved_model": getattr(response, "model", None),
+                '_turn_kind': turn_kind, 'number': len(self.last_generation['turns']) + 1,
                 "finish_reason": getattr(choice, "finish_reason", None),
                 "usage": tokens, "response_text": raw_text, "cost_usd": record["cost_usd"]}
         self.last_generation["turns"].append(turn)
@@ -207,8 +278,10 @@ class LLMClient:
             usage_coverage=coverage, cost_usd=sum(costs) if complete else None,
             known_cost_usd=sum(costs) if costs else None, cost_complete=complete,
             budget_charge_usd=sum(item.get("budget_charge_usd", 0) for item in attempts))
+        durations = [item['latency_seconds'] for item in attempts if valid_cost(item.get('latency_seconds'))]
+        self.last_generation['latency_seconds'] = sum(durations) if attempts and len(durations) == len(attempts) else None
 
-    def generate_solution(self, messages: List[Dict[str, str]]) -> str:
+    def generate_solution(self, messages: list[dict[str, str]]) -> str:
         self.last_generation = {"requested_model": self.model_name, "resolved_model": None,
                                 **self.settings(), "latency_seconds": None, "finish_reason": None,
                                 "usage": None, "attempts": [], "turns": [],
@@ -223,18 +296,30 @@ class LLMClient:
             if self.prompt_strategy == "plan":
                 conversation.append({"role": "user", "content":
                     "Provide a short implementation plan listing the public API, edge cases, and validation checks. Do not produce code yet."})
-                self._complete(litellm, conversation)
+                self._complete(litellm, conversation, 'plan')
                 conversation.append({"role": "user", "content":
                     "Now provide only the complete C implementation that meets the task contract, inside a c code block."})
             raw_text = self._complete(litellm, conversation)
             if self.review_turn:
                 conversation.append({"role": "user", "content":
                     "Review the implementation against the API and boundary cases. Return only the corrected complete C implementation in a c code block."})
-                raw_text = self._complete(litellm, conversation)
+                raw_text = self._complete(litellm, conversation, 'review')
             return self.extract_c_code(raw_text, self.expected_functions)
         finally:
             self._summarize_measurements()
-            self.last_generation["latency_seconds"] = round(time.perf_counter() - start, 6)
+            self.last_generation['elapsed_wall_seconds'] = round(time.perf_counter() - start, 6)
+
+    def repair_solution(self, diagnostics):
+        """Continue the public conversation after a failed compilation."""
+        import litellm
+        conversation = copy.deepcopy(self.last_generation['messages'])
+        conversation.append({'role': 'user', 'content':
+            'The implementation failed to compile. Fix these compiler diagnostics and return only the complete C implementation in a c code block.\n'
+            + diagnostics[:2048]})
+        try:
+            return self.extract_c_code(self._complete(litellm, conversation, 'repair'), self.expected_functions)
+        finally:
+            self._summarize_measurements()
 
     @staticmethod
     def extract_c_code(response_text: Optional[str], expected_functions=None) -> str:

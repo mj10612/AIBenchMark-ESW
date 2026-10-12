@@ -2,7 +2,7 @@ import io
 import json
 import unittest
 from argparse import Namespace
-from contextlib import redirect_stdout, redirect_stderr
+from contextlib import redirect_stderr, redirect_stdout
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from unittest.mock import MagicMock, patch

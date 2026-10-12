@@ -5,6 +5,10 @@
   "description": "Structural contract. Python additionally validates scoring, task policy, suite consistency and run state.",
   "type": "object",
   "properties": {
+    "tier_weighted_score": {"type": "number", "minimum": 0, "maximum": 100},
+    "tier_weight_policy": {"const": "proportional-to-tier-v1"},
+    "by_tier": {"type": "object"},
+    "by_category": {"type": "object"},
     "generation_summary": {"type": "object"},
     "samples": {
       "type": "array",
@@ -17,7 +21,9 @@
         "completed": {"type": "integer", "minimum": 0},
         "pending": {"type": "array", "items": {"type": "integer", "minimum": 0}, "uniqueItems": true},
         "pass_k": {"type": "array", "items": {"type": "integer", "minimum": 1}, "uniqueItems": true},
-        "statistics": {"type": "object"}
+        "statistics": {"type": "object"},
+        "active_sample": {"type": ["integer", "null"], "minimum": 0},
+        "active_report": {"allOf": [{"$ref": "#"}, {"not": {"required": ["samples"]}}]}
       },
       "required": ["requested", "completed", "pending"]
     },
@@ -148,7 +154,11 @@
                                 "maximum": 1
                               }
                             },
-                            "required": [],
+                            "required": [
+                              "functional",
+                              "memory",
+                              "safety"
+                            ],
                             "additionalProperties": false
                           },
                           "limits": {
@@ -167,7 +177,11 @@
                                 "minimum": 1
                               }
                             },
-                            "required": [],
+                            "required": [
+                              "max_flash_bytes",
+                              "max_ram_bytes",
+                              "timeout_seconds"
+                            ],
                             "additionalProperties": false
                           }
                         }
@@ -440,7 +454,11 @@
                     "maximum": 1
                   }
                 },
-                "required": [],
+                "required": [
+                  "functional",
+                  "memory",
+                  "safety"
+                ],
                 "additionalProperties": false
               },
               {
@@ -466,7 +484,11 @@
                     "minimum": 1
                   }
                 },
-                "required": [],
+                "required": [
+                  "max_flash_bytes",
+                  "max_ram_bytes",
+                  "timeout_seconds"
+                ],
                 "additionalProperties": false
               },
               {
@@ -579,7 +601,11 @@
                       "maximum": 1
                     }
                   },
-                  "required": [],
+                  "required": [
+                    "functional",
+                    "memory",
+                    "safety"
+                  ],
                   "additionalProperties": false
                 },
                 "limits": {
@@ -598,7 +624,11 @@
                       "minimum": 1
                     }
                   },
-                  "required": [],
+                  "required": [
+                    "max_flash_bytes",
+                    "max_ram_bytes",
+                    "timeout_seconds"
+                  ],
                   "additionalProperties": false
                 }
               }

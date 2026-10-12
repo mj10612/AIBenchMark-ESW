@@ -1,12 +1,11 @@
 from aibenchmark_esw.models import (
-    TaskConfig,
     CompilationResult,
-    TestResult,
+    DimensionScores,
     SizeMetrics,
     StaticSafetyMetrics,
-    DimensionScores,
+    TaskConfig,
+    TestResult,
 )
-
 
 SCORING_FORMULA_VERSION = "functional-gated-v1"
 SAFETY_ERROR_PENALTY = 15

@@ -9,7 +9,7 @@ def _same_file(first, second):
         first.exists() and second.exists() and first.samefile(second))
 
 
-def _input_files(roots):
+def input_files(roots):
     """Scan aliases once, including linked roots, without following cycles."""
     pending, visited = list(roots), set()
     while pending:
@@ -41,7 +41,7 @@ def validate_output_paths(outputs, protected_files=(), protected_roots=()):
     inputs = [Path(path) for path in protected_files]
     # Existing output files may be hard links to inputs outside their root.
     if any(path.exists() for path in outputs):
-        inputs.extend(_input_files(root for root in roots if root.is_dir()))
+        inputs.extend(input_files(root for root in roots if root.is_dir()))
     for index, path in enumerate(outputs):
         if path.is_dir():
             raise IsADirectoryError(f"Output must be a file: {path}")

@@ -4,16 +4,14 @@ import os
 import shutil
 import subprocess
 from pathlib import Path
-from typing import Any, Dict
 from tempfile import TemporaryDirectory
+from typing import Any
 
 from aibenchmark_esw.dataset import validate_task_assets
 from aibenchmark_esw.models import TaskConfig
 from aibenchmark_esw.reference_cache import ReferenceCache
-from aibenchmark_esw.sandbox.process_runner import run_bounded
 from aibenchmark_esw.sandbox.size_analyzer import SizeAnalyzer
 from aibenchmark_esw.sandbox.static_analyzer import StaticAnalyzer
-
 
 _FIXTURE_SOURCE = '''#include "doctor.h"
 int32_t doctor_add(int32_t left, int32_t right) { return left + right; }
@@ -27,7 +25,7 @@ int main(void) { UNITY_BEGIN(); RUN_TEST(test_trusted_arithmetic); return UNITY_
 '''
 
 
-def run_doctor(tasks, loader, executor, check_references=False, reference_cache=None):
+def run_doctor(tasks, loader, executor, check_references=False, reference_cache=None, analyzer=None):
     """Check offline evaluation readiness without generation or persistent writes.
 
     Compiler/Unity/selected assets and fixture execution are required. A missing
@@ -36,7 +34,7 @@ def run_doctor(tasks, loader, executor, check_references=False, reference_cache=
     the supplied cache with the following evaluation when requested.
     """
     tasks = list(tasks)
-    report: Dict[str, Any] = {"passed": True, "checks": [], "selected_tasks": [task.id for task in tasks],
+    report: dict[str, Any] = {"passed": True, "checks": [], "selected_tasks": [task.id for task in tasks],
               "check_references": bool(check_references), "effective_standards": {}}
 
     def record(name, passed, detail, required=True, **extra):
@@ -47,16 +45,14 @@ def run_doctor(tasks, loader, executor, check_references=False, reference_cache=
 
     record("selection", bool(tasks), f"{len(tasks)} selected task(s)")
     compiler = str(executor.compiler_path)
-    resolved = shutil.which(compiler) or (str(Path(compiler).resolve()) if Path(compiler).is_file() else None)
+    resolved = compiler if executor.containment else (
+        shutil.which(compiler) or (str(Path(compiler).resolve()) if Path(compiler).is_file() else None))
     record("compiler", bool(resolved), resolved or f"Compiler not found: {compiler}")
     if resolved:
-        name = Path(compiler).stem.lower()
         try:
-            version = run_bounded([compiler, "/?" if name == "cl" else "-v" if name == "tcc" else "--version"],
-                                  timeout=5, max_output_bytes=65536)
-            text = version.stdout.decode("utf-8", errors="replace").strip()
-            record("compiler_version", version.returncode == 0 and bool(text),
-                   text.splitlines()[0] if text else "Compiler did not report a version", required=False)
+            identity = executor.compiler_identity()
+            record("compiler_version", bool(identity["version"]),
+                   identity["version"] or "Compiler did not report a version", required=False)
         except (OSError, subprocess.SubprocessError) as error:
             record("compiler_version", False, error, required=False)
 
@@ -68,6 +64,8 @@ def run_doctor(tasks, loader, executor, check_references=False, reference_cache=
                 unity_errors.append(f"Empty Unity asset: {path}")
         except (OSError, UnicodeError) as error:
             unity_errors.append(f"Unreadable Unity asset {path}: {error}")
+    from aibenchmark_esw.resources import unity_integrity_errors
+    unity_errors += unity_integrity_errors(executor.unity_dir)
     record("unity", not unity_errors, "; ".join(unity_errors) or "Unity sources and headers are readable")
 
     valid_assets = {}
@@ -76,7 +74,8 @@ def run_doctor(tasks, loader, executor, check_references=False, reference_cache=
         valid_assets[task.id] = not errors
         record(f"assets:{task.id}", not errors, "; ".join(errors) or "Required task assets are readable")
 
-    analyzer = StaticAnalyzer()
+    analyzer = analyzer or StaticAnalyzer()
+    report["static_analysis"] = analyzer.configuration()
     configured = os.environ.get("AIBENCHMARK_ESW_CPPCHECK")
     with TemporaryDirectory(prefix="aibenchmark_doctor_") as directory:
         root = Path(directory)
@@ -89,7 +88,7 @@ def run_doctor(tasks, loader, executor, check_references=False, reference_cache=
         source = root / "doctor.c"
         source.write_text(_FIXTURE_SOURCE, encoding="utf-8")
         if analyzer.cppcheck_cmd:
-            metrics = analyzer.analyze(source, [include], "c99")
+            metrics = analyzer.analyze(source, [include], "c99", executor=executor)
             success = metrics.cppcheck_status == "completed"
             record("analyzer", success,
                    "Configured cppcheck successfully analyzed the trusted fixture" if success else
@@ -109,12 +108,16 @@ def run_doctor(tasks, loader, executor, check_references=False, reference_cache=
                                                "limits": {"timeout_seconds": 3}}, root)
                 code = _FIXTURE_SOURCE
                 if standard in ("c11", "c17"):
-                    code += '_Static_assert(sizeof(int32_t) == 4, "32-bit fixture type");\n'
+                    code += ('#if defined(__TINYC__)\n'
+                             'typedef char doctor_int32_size[sizeof(int32_t) == 4 ? 1 : -1];\n'
+                             '#else\n_Static_assert(sizeof(int32_t) == 4, "32-bit fixture type");\n#endif\n')
                 compiled, tested = executor.compile_and_test(fixture, code, root / standard / "tests")
                 try:
                     success = compiled.success and tested.completed and tested.passed
                     effective = compiled.effective_standard
                     report["effective_standards"][standard] = effective
+                    if Path(compiler).stem.lower() == "tcc" and standard in ("c11", "c17"):
+                        report["c11_capabilities"] = "TCC subset; _Static_assert fixture uses a typedef fallback"
                     record(f"compile_run:{standard}", success,
                            f"Trusted fixture compiled and passed using {effective}" if success else
                            compiled.output if not compiled.success else tested.output)

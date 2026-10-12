@@ -41,15 +41,25 @@ def _name(value, name):
 
 
 def validate_task_result(item, default_model):
-    from aibenchmark_esw.models import SizeMetrics, StaticSafetyMetrics, TaskWeights, TaskLimits
+    from aibenchmark_esw.models import (
+        SizeMetrics,
+        StaticSafetyMetrics,
+        TaskLimits,
+        TaskWeights,
+    )
     for name, model in (("size_metrics", SizeMetrics), ("safety_metrics", StaticSafetyMetrics),
                         ("weights", TaskWeights), ("limits", TaskLimits)):
         value = item.get(name)
         if value is not None:
             _object(value, name)
-            unknown = set(value) - {field.name for field in fields(model)}
+            expected = {field.name for field in fields(model)}
+            unknown = set(value) - expected
             if unknown:
                 raise ValueError(f"Unknown {name} fields: {', '.join(sorted(unknown))}")
+            if name in ("limits", "weights"):
+                missing = expected - set(value)
+                if missing:
+                    raise ValueError(f"Missing {name} fields: {', '.join(sorted(missing))}")
     for name in ("generation", "provenance"):
         if item.get(name) is not None:
             _object(item[name], "Task " + name)

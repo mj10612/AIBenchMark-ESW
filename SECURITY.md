@@ -23,8 +23,17 @@ or sensitive mounted files. Native/process mode does not restrict filesystem,
 network or child-process access. Provider evaluations require opt-in API access; CI runs
 only checked-in test fixtures and golden references without provider credentials.
 
+Candidate binaries receive a minimal environment rather than inheriting the
+benchmark process's provider keys and other configuration. Only `PATH` and, on
+Windows, `SystemRoot`, `WINDIR` and `ComSpec` are copied; home and temporary paths
+point to the evaluation scratch directory. Sanitizer options are explicitly set
+when enabled. Reports record `execution_settings.candidate_environment` as
+`minimal-v1`. Compilation still uses the toolchain environment. Environment
+scrubbing does not restrict access to host files or other processes in native
+or process mode.
 
-Native execution captures a bounded output prefix in a temporary file and owns
+
+Native execution captures a bounded output prefix from a non-seekable pipe and owns
 Windows Job/POSIX process groups. Opt-in process mode adds CPU and memory caps.
 Filesystem and network access remain available; a POSIX descendant deliberately
 calling setsid can escape the original group. Run untrusted code inside an
@@ -58,7 +67,13 @@ network, dropped capabilities, `no-new-privileges`, the non-root workspace owner
 uid/gid (65534 when the host runs as root or on Windows), a process quota,
 one CPU, a private bounded `/tmp`, optional memory quota and the task deadline.
 Compiler diagnostics and test output share the configured output cap. The
-named container is forcibly removed after execution, including timeout or
+host workspace stays private (directories 0700, data 0600); root hosts transfer
+ownership to the container uid rather than granting access to other host users.
+Cppcheck uses the selected containment backend, a bounded output pipe, a 512 MiB
+memory limit and a maximum of 200 diagnostics. Exceeding either diagnostic cap
+marks cppcheck incomplete and retains builtin analysis with a visible warning.
+The byte cap is configured by `--max-output-bytes`.
+The named container is forcibly removed after execution, including timeout or
 cancellation; killing the engine client alone is insufficient. Docker/Podman
 daemon access is a trusted administrative capability, and kernel/engine defects
 remain outside this boundary. Prefer rootless Podman/Docker and a disposable VM
@@ -70,6 +85,14 @@ private `/proc`, `/dev` and `/tmp`, and the sole writable evaluation workspace.
 Home directories and the checkout are not mounted. It requires working user
 namespaces and bubblewrap; it does not silently relax unavailable restrictions.
 System libraries and compiler files within those system roots remain readable.
+
+CI exercises Ubuntu 24.04's packaged bubblewrap and kernel with unprivileged user
+namespaces enabled. The isolated CI job sets
+`kernel.apparmor_restrict_unprivileged_userns=0` to permit that boundary on the
+disposable runner; production hosts must configure an equivalent explicit policy.
+The job records `bwrap --version`, verifies host files/provider environment/network
+are inaccessible, runs namespace-descendant timeout coverage, and saves a real
+bwrap baseline artifact. Missing runtime/namespace support fails explicitly.
 
 Footprint defaults to a host object, not an MCU image. Opt-in AVR/ARM/RISC-V compilation
 measures allocated target-object sections with target-scoped budgets; it excludes
@@ -84,4 +107,58 @@ proxy rather than a sum of mutually exclusive deployment architectures.
 nondeterminism, recursion, possible VLAs/alloca, math/complex dependencies and
 busy-wait loops. These approximate diagnostics are not a formal MISRA checker.
 `--warnings` adds compiler findings to safety scoring; both switches are off by
-default and included in evaluation provenance.
+default and included in evaluation provenance. Named allocation and host-API
+references use scoped declaration exemptions; local values and aggregate members
+do not hide references in other functions. These remain lexical heuristics.
+# Private test state
+
+Bundled data is preferred over adjacent checkout-shaped directories. A development
+checkout must declare this project; overriding installed bundled data requires
+`AIBENCHMARK_ESW_DEV_CHECKOUT=1`. The package's SHA-256 asset manifest verifies
+bundled prompts, configs, APIs, test suites, starters, references and Unity before
+generation/compilation. Missing, modified, escaping or unlisted source inputs fail
+closed. Explicit external datasets/variants are fingerprinted separately and do
+not acquire bundled-trusted status. The manifest assumes the installed Python
+package is protected; it is not a signed defense against an attacker who can edit
+the evaluator itself. Reviewed asset edits require
+`python .github/scripts/update_asset_manifest.py` before committing source.
+
+`--hardening auto` enables GCC/Clang stack protection and FORTIFY; Linux executables
+also use PIE, RELRO, immediate binding and a non-executable stack. MSVC/clang-cl
+use SDL, Control Flow Guard, ASLR and DEP. `off` permits explicit opt-out;
+`required` rejects TCC, whose auto mode records unavailable support. Exact flags
+are recorded for comparison compatibility. Freestanding cross-target footprint
+objects retain their separate target policy. These mitigations protect against
+harness bugs and do not establish an oracle boundary. See the
+[GCC instrumentation options](https://gcc.gnu.org/onlinedocs/gcc/Instrumentation-Options.html).
+
+POSIX launches cap individual files at 16 MiB, disable core dumps and cap open
+files at 256. Process/bwrap mode uses RLIMIT_NPROC: Linux caps the UID total at
+64; macOS adds a budget of 64 above the current UID population because desktop
+and CI users often already exceed 64 processes. Both include unrelated processes,
+so concurrent launches share the allowance; neither constrains privileged users.
+Native Windows Jobs cap the job at 64 active processes; Windows native has no
+RLIMIT_FSIZE/core equivalent and reports those controls unavailable. Native
+execution still permits host files/network access. Docker/Podman use a 512 MiB
+default memory cap with no additional swap, 64 container PIDs/threads through the
+container cgroup, and explicit fsize/core/nofile limits. Docker NPROC is omitted
+because its host-UID scope interferes with unrelated processes; the cgroup caps
+each container independently. Container/bwrap runtime workspaces are read-only
+with 64 MiB scratch and /tmp tmpfs mounts. A narrow writable receipt file is capped
+by the file-size limit. Compilation workspaces remain writable for trusted compiler
+outputs. POSIX per-file limits do not bound total native disk use; choose external
+containment for hostile code. See [Docker resource controls](https://docs.docker.com/reference/cli/docker/container/run/)
+and [Windows Job limits](https://learn.microsoft.com/en-us/windows/win32/api/winnt/ns-winnt-jobobject_basic_limit_information).
+
+
+Unity's mutable state and assertion jump buffer are private static objects. Its
+public result accessor returns counter values by copy. Repeated UnityBegin calls
+record a failure rather than resetting the runner. GCC/Clang compilation uses
+hidden visibility and no common symbols; TCC/MSVC retain private static storage.
+This prevents direct state writes and symbol shadowing from changing the oracle.
+The receipt verifies harness completion and rejects stdout forgery. These are
+limited integrity mitigations: candidate and assertions still share an address
+space, so arbitrary native memory corruption or invasive runtime interposition
+requires a separate-process oracle redesign. Container/bwrap isolation protects
+the host and does not establish that separate-process oracle boundary.
+

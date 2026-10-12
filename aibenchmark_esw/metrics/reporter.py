@@ -1,8 +1,20 @@
-from typing import List, Dict, Any
-from typing import Optional
-from aibenchmark_esw.metrics.validation import validate_task_result, validate_composite_score, validate_run_state
+from dataclasses import asdict
+from typing import Any, Optional
+
+from aibenchmark_esw.metrics.text import markdown_text
+from aibenchmark_esw.metrics.validation import (
+    validate_composite_score,
+    validate_run_state,
+    validate_task_result,
+)
 from aibenchmark_esw.models import (
-    TaskEvaluationResult, TestResult, SizeMetrics, StaticSafetyMetrics, DimensionScores, TaskWeights, TaskLimits,
+    DimensionScores,
+    SizeMetrics,
+    StaticSafetyMetrics,
+    TaskEvaluationResult,
+    TaskLimits,
+    TaskWeights,
+    TestResult,
 )
 
 
@@ -20,7 +32,7 @@ class BenchmarkReporter:
                 and tests.failed_tests == tests.ignored_tests == 0)
 
     @staticmethod
-    def _weight_summary(results: List[TaskEvaluationResult], dimension: str) -> str:
+    def _weight_summary(results: list[TaskEvaluationResult], dimension: str) -> str:
         if any(result.weights is None for result in results):
             return "Unknown (legacy report)"
         values = {getattr(result.weights, dimension) for result in results}
@@ -44,13 +56,13 @@ class BenchmarkReporter:
         return result.effective_standard
 
     @staticmethod
-    def from_json_dict(data: Dict[str, Any]) -> List[TaskEvaluationResult]:
+    def from_json_dict(data: dict[str, Any]) -> list[TaskEvaluationResult]:
         if not isinstance(data, dict) or not isinstance(data.get("tasks"), list):
             raise ValueError("Results must be an object containing a tasks array")
         version = data.get("schema_version", 1)
         if isinstance(version, bool) or not isinstance(version, int) or version not in (1, 2):
             raise ValueError(f"Unsupported report schema version: {version}")
-        for field in ("overall_score", "pass_at_1_pct"):
+        for field in ("overall_score", "pass_at_1_pct", "tier_weighted_score"):
             value = data.get(field)
             if field in data and (isinstance(value, bool) or not isinstance(value, (float, int)) or not 0 <= value <= 100):
                 raise ValueError(f"{field} must be a finite score from 0 to 100")
@@ -62,6 +74,9 @@ class BenchmarkReporter:
             value = (data.get("metadata") or {}).get(key)
             if value is not None and not isinstance(value, dict):
                 raise ValueError(f"Metadata {key} must be an object")
+        categories = (data.get('metadata') or {}).get('task_categories') or {}
+        if any(not isinstance(key, str) or not key.strip() or not isinstance(value, str) or not value.strip() for key, value in categories.items()):
+            raise ValueError('Task categories must map nonempty task names to category strings')
         if "generation_summary" in data:
             from aibenchmark_esw.metrics.measurements import measurement_summary
             summary = data["generation_summary"]
@@ -74,7 +89,9 @@ class BenchmarkReporter:
                     raise ValueError("Invalid generation_summary measurement: " + key)
         results = []
         samples = data.get("samples")
-        if samples is not None:
+        if 'sampling' in data and 'samples' not in data:
+            raise ValueError('sampling requires a samples array')
+        if 'samples' in data:
             if not isinstance(samples, list):
                 raise ValueError("samples must be an array of independent reports")
             for sample in samples:
@@ -92,7 +109,7 @@ class BenchmarkReporter:
                     or any(isinstance(index, bool) or not isinstance(index, int) or not 0 <= index < requested for index in pending)
                     or len(set(pending)) != len(pending) or len(pending) != requested - completed):
                 raise ValueError("sampling counts and pending indexes must match the independent samples")
-            if (data.get("metadata") or {}).get("run_status") == "completed" and pending:
+            if (data.get("metadata") or {}).get("run_status") == "completed" and (pending or not samples):
                 raise ValueError("Completed sampling collections cannot contain pending samples")
             active_sample = sampling.get("active_sample")
             if active_sample is not None and (isinstance(active_sample, bool) or not isinstance(active_sample, int)
@@ -113,6 +130,19 @@ class BenchmarkReporter:
                         or sample.get("model_name") != data.get("model_name")
                         or {item["task_id"] for item in sample["tasks"]} != task_ids):
                     raise ValueError("Independent samples must be completed reports with the same model and task set")
+                from aibenchmark_esw.metrics.comparison import (
+                    validate_collection_conditions,
+                )
+                validate_collection_conditions(data, sample)
+            active = sampling.get('active_report')
+            if active is not None:
+                if not isinstance(active, dict) or 'samples' in active or active_sample is None:
+                    raise ValueError('active_report must describe the active pending sample')
+                BenchmarkReporter.from_json_dict(active)
+                from aibenchmark_esw.metrics.comparison import (
+                    validate_collection_conditions,
+                )
+                validate_collection_conditions(data, active)
             if "statistics" in sampling:
                 from aibenchmark_esw.sampling import sampling_statistics
                 expected_statistics = sampling_statistics(samples, pass_k)
@@ -121,7 +151,11 @@ class BenchmarkReporter:
         policy = (data.get("metadata") or {}).get("scoring_policy")
         local_loader = None
         if policy is not None:
-            from aibenchmark_esw.metrics.scorer import SCORING_FORMULA_VERSION, SAFETY_ERROR_PENALTY, SAFETY_WARNING_PENALTY
+            from aibenchmark_esw.metrics.scorer import (
+                SAFETY_ERROR_PENALTY,
+                SAFETY_WARNING_PENALTY,
+                SCORING_FORMULA_VERSION,
+            )
             if (not isinstance(policy, dict) or policy.get("formula_version") != SCORING_FORMULA_VERSION
                     or policy.get("safety_error_penalty") != SAFETY_ERROR_PENALTY
                     or policy.get("safety_warning_penalty") != SAFETY_WARNING_PENALTY
@@ -143,7 +177,8 @@ class BenchmarkReporter:
                     raise ValueError("Task limits/weights disagree with recorded scoring_policy")
                 # Corroborate a bundled task only when its fingerprint identifies
                 # the local configuration; external datasets remain portable.
-                from dataclasses import asdict, replace
+                from dataclasses import replace
+
                 from aibenchmark_esw.dataset import DatasetLoader
                 from aibenchmark_esw.provenance import task_sha256
                 from aibenchmark_esw.resources import data_root
@@ -198,12 +233,50 @@ class BenchmarkReporter:
             raise ValueError("Duplicate task IDs in a report")
         validate_run_state(data.get("metadata") or {}, results)
         from aibenchmark_esw.metrics.measurements import measurement_summary
-        measurement_summary(results)  # Validate optional measurements before consumers.
+        expected_summary = measurement_summary(results)
+        if 'samples' in data:
+            assert isinstance(samples, list)
+            measured = [item for sample in samples for item in BenchmarkReporter.from_json_dict(sample)]
+            active = data['sampling'].get('active_report')
+            if active is not None:
+                measured += BenchmarkReporter.from_json_dict(active)
+            expected_summary = measurement_summary(measured)
+        if 'generation_summary' in data:
+            import math
+            # Old interrupted collections may include spending from an active
+            # child saved only beside the wrapper. Keep it explicitly unverified.
+            unverifiable = ('samples' in data and data['sampling'].get('active_sample') is not None
+                            and data['sampling'].get('active_report') is None)
+            if not unverifiable:
+                for key, expected in expected_summary.items():
+                    recorded = data['generation_summary'].get(key)
+                    if expected is None or recorded is None:
+                        matches = expected is recorded
+                    else:
+                        matches = math.isclose(recorded, expected, rel_tol=1e-9, abs_tol=1e-6)
+                        if isinstance(expected, int) and key not in ('total_cost_usd', 'known_cost_usd'):
+                            matches = matches and isinstance(recorded, int) and not isinstance(recorded, bool)
+                    if not matches:
+                        raise ValueError('generation_summary disagrees with task/sample measurements: ' + key)
+        from aibenchmark_esw.metrics.groups import grouped_scores
+        expected_groups = grouped_scores(results, data.get('metadata'))
+        for scope in ('by_tier', 'by_category'):
+            if scope in data:
+                if not isinstance(data[scope], dict):
+                    raise ValueError(scope + ' must be a group object')
+                for values in data[scope].values():
+                    if (not isinstance(values, dict)
+                            or any(type(values.get(key)) is not int for key in ('count', 'task_attempts'))
+                            or any(isinstance(values.get(key), bool) or not isinstance(values.get(key), (int, float)) for key in ('mean_score', 'pass_at_1_pct'))):
+                        raise ValueError(scope + ' contains invalid group measurements')
+        for field in ('tier_weighted_score', 'tier_weight_policy', 'by_tier', 'by_category'):
+            if field in data and data[field] != expected_groups[field]:
+                raise ValueError(field + ' disagrees with task results')
         return results
 
     @staticmethod
-    def generate_markdown(results: List[TaskEvaluationResult], model_name: str,
-                          metadata: Optional[Dict[str, Any]] = None) -> str:
+    def generate_markdown(results: list[TaskEvaluationResult], model_name: str,
+                          metadata: Optional[dict[str, Any]] = None) -> str:
         if not results:
             return "No benchmark results available."
 
@@ -212,13 +285,18 @@ class BenchmarkReporter:
         all_passed_tasks = sum(1 for r in results if BenchmarkReporter._all_tests_passed(r))
 
         avg_func = sum(r.scores.functional_score for r in results) / total_tasks
-        avg_mem = sum(r.scores.memory_score for r in results) / total_tasks
-        avg_safe = sum(r.scores.safety_score for r in results) / total_tasks
+        from aibenchmark_esw.metrics.measurements import (
+            dimension_summary,
+            dimension_text,
+        )
+        dimensions = dimension_summary(results)
+        avg_mem = dimension_text(dimensions['memory'])
+        avg_safe = dimension_text(dimensions['safety'])
         avg_total = sum(r.scores.total_score for r in results) / total_tasks
 
         md = []
-        md.append(f"# AIBenchMark-ESW Benchmark Report: `{model_name}`\n")
-        md += BenchmarkReporter.sampling_lines(metadata)
+        md.append(f"# AIBenchMark-ESW Benchmark Report: {markdown_text(model_name)}\n")
+        md += [markdown_text(line) for line in BenchmarkReporter.sampling_lines(metadata)]
         warning = BenchmarkReporter.run_warning(metadata)
         if warning:
             md.append(f"**{warning}**\n")
@@ -230,6 +308,10 @@ class BenchmarkReporter:
         qualifier = " (first sample)" if (metadata or {}).get('sampling') else ""
         md.append(f"- **Pass@1 (All Tests Passed){qualifier}**: {all_passed_tasks}/{total_tasks} ({all_passed_tasks/total_tasks*100:.1f}%)")
         md.append(f"- **Overall AIBenchMark-ESW Score{qualifier}**: **{avg_total:.2f} / 100.0**\n")
+        from aibenchmark_esw.metrics.groups import breakdown_markdown, grouped_scores
+        groups = grouped_scores(results, metadata)
+        md.append(f"- **Tier-weighted score{qualifier}**: **{groups['tier_weighted_score']:.2f} / 100.0** (weights proportional to tier)")
+        md += breakdown_markdown([dict(model=model_name, **groups)])
 
         if metadata:
             compiler = metadata.get("compiler") or {}
@@ -251,8 +333,10 @@ class BenchmarkReporter:
         md.append("| Dimension | Average Score | Weight |")
         md.append("| :--- | :--- | :--- |")
         md.append(f"| **Functional Correctness** | {avg_func:.2f} / 100 | {BenchmarkReporter._weight_summary(results, 'functional')} |")
-        md.append(f"| **Memory Efficiency** | {avg_mem:.2f} / 100 | {BenchmarkReporter._weight_summary(results, 'memory')} |")
-        md.append(f"| **Safety & Code Rules** | {avg_safe:.2f} / 100 | {BenchmarkReporter._weight_summary(results, 'safety')} |")
+        md.append(f"| **Memory Efficiency** | {avg_mem} / 100 | {BenchmarkReporter._weight_summary(results, 'memory')} |")
+        md.append(f"| **Safety & Code Rules** | {avg_safe} / 100 | {BenchmarkReporter._weight_summary(results, 'safety')} |")
+        md.append(f"Measured dimensions: memory {dimensions['memory_measured_attempts']}/{total_tasks}, "
+                  f"safety {dimensions['safety_measured_attempts']}/{total_tasks} task attempts.\n")
         md.append(f"| **Composite Score** | **{avg_total:.2f} / 100** | 100% |\n")
 
         md.append("### Detailed Task Breakdown")
@@ -270,7 +354,7 @@ class BenchmarkReporter:
             safe_str = f"Err:{r.safety_metrics.error_count}, Warn:{r.safety_metrics.warning_count}"
             score_str = f"**{r.scores.total_score:.1f}**"
             time_str = f"{r.execution_time_sec:.2f}s"
-            md.append(f"| {r.tier} | `{r.task_id}` | {BenchmarkReporter._standard(r)} | {BenchmarkReporter._task_weights(r)} | {status_comp} | {test_str} | {mem_str} | {safe_str} | {score_str} | {time_str} |")
+            md.append(f"| {r.tier} | {markdown_text(r.task_id)} | {BenchmarkReporter._standard(r)} | {BenchmarkReporter._task_weights(r)} | {status_comp} | {test_str} | {mem_str} | {safe_str} | {score_str} | {time_str} |")
 
         for r in results:
             if r.footprint_target != "host" and r.limits is not None:
@@ -282,25 +366,23 @@ class BenchmarkReporter:
         if measurements:
             md += ["", "### Generation measurements", "", *measurements]
 
-        warnings = BenchmarkReporter.analysis_warnings(results) + BenchmarkReporter.scoring_warnings(results)
-        if not (metadata or {}).get("scoring_policy"):
-            warnings.append("Legacy scoring policy is unverifiable; limits and weights are report-supplied.")
+        warnings = BenchmarkReporter.analysis_warnings(results) + BenchmarkReporter.scoring_warnings(results, metadata)
         if warnings:
             md += ["", "### Validation and analysis coverage", ""]
-            md += [f"- {warning}" for warning in warnings]
+            md += [f"- {markdown_text(warning)}" for warning in warnings]
         findings = [(result.task_id, finding) for result in results for finding in result.safety_metrics.findings]
         if findings:
             md += ["", "### Static-analysis findings", ""]
             for task_id, finding in findings:
-                message = finding["message"].replace("|", "\\|").replace("\n", " ")
-                md.append(f"- `{task_id}` [{finding['engine']} / {finding['rule_id']} / {finding['severity']}] "
-                          f"{finding['file']}:{finding.get('line') or '?'}: {message}")
+                message = markdown_text(finding['message'])
+                md.append(f"- `{markdown_text(task_id)}` [{markdown_text(finding['engine'])} / {markdown_text(finding['rule_id'])} / {markdown_text(finding['severity'])}] "
+                          f"{markdown_text(finding['file'])}:{finding.get('line') or '?'}: {message}")
 
         return "\n".join(md)
 
     @staticmethod
-    def generate_cli_table(results: List[TaskEvaluationResult], model_name: str,
-                           metadata: Optional[Dict[str, Any]] = None) -> str:
+    def generate_cli_table(results: list[TaskEvaluationResult], model_name: str,
+                           metadata: Optional[dict[str, Any]] = None) -> str:
         lines = []
         lines.append("=" * 110)
         lines.append(f" AIBenchMark-ESW Benchmark Results - Model: {model_name}")
@@ -328,9 +410,11 @@ class BenchmarkReporter:
         pass_at_1 = sum(1 for r in results if BenchmarkReporter._all_tests_passed(r)) / max(1, len(results)) * 100.0
         qualifier = " (first sample)" if (metadata or {}).get('sampling') else ""
         lines.append(f"Final Score{qualifier}: {avg_total:.2f}/100.0 | Pass@1{qualifier}: {pass_at_1:.1f}%")
+        from aibenchmark_esw.metrics.groups import grouped_scores
+        lines.append(f"Tier-weighted score{qualifier}: {grouped_scores(results, metadata)['tier_weighted_score']:.2f}/100.0")
         lines.append("=" * 110)
         lines += [f"Warning: {warning}" for warning in
-                  BenchmarkReporter.analysis_warnings(results) + BenchmarkReporter.scoring_warnings(results)]
+                  BenchmarkReporter.analysis_warnings(results) + BenchmarkReporter.scoring_warnings(results, metadata)]
         warning = BenchmarkReporter.run_warning(metadata)
         if warning:
             lines.append(warning)
@@ -338,8 +422,6 @@ class BenchmarkReporter:
             lines.append(f"Offline replay; origin run {(metadata or {}).get('origin_run_id')}; fixed sources, no new generation or spend.")
         if (metadata or {}).get("unreadable_assets"):
             lines.append("Dataset provenance is incomplete because some input assets were unreadable.")
-        if not (metadata or {}).get("scoring_policy"):
-            lines.append("Warning: Legacy scoring policy is unverifiable; limits and weights are report-supplied.")
         for result in results:
             for finding in result.safety_metrics.findings:
                 lines.append(f"[{result.task_id}] {finding['engine']} / {finding['rule_id']} / {finding['severity']}: "
@@ -362,7 +444,7 @@ class BenchmarkReporter:
             lines.append(f"{task_id}: {stats['attempts']} samples; {stats['passed']} passes; mean score {stats['mean_score']}; "
                          f"sample SD {stats.get('sample_stddev')}; approximate 95% mean interval {stats.get('approximate_95pct_mean_interval')}; "
                          f"Pass@k (%) {json.dumps(pass_k, sort_keys=True)}")
-        lines.append('Intervals use a normal approximation; descriptive and especially unreliable for small samples.')
+        lines.append('Intervals use Student-t critical values and assume independent samples; one-sample intervals are unavailable.')
         return lines + ['']
 
     @staticmethod
@@ -370,13 +452,17 @@ class BenchmarkReporter:
         metadata = metadata or {}
         if metadata.get("run_status") in ("running", "interrupted", "aborted"):
             if metadata.get('sampling'):
-                return f"Run status: {metadata['run_status']}; {len(metadata['sampling']['pending'])} samples pending. This collection is unfinished."
+                sampling = metadata['sampling']
+                warning = f"Run status: {metadata['run_status']}; {len(sampling['pending'])} samples pending. This collection is unfinished."
+                if sampling.get('active_sample') is not None and sampling.get('active_report') is None:
+                    warning += ' Active sample measurements are unverified because its report is not embedded; spending is a recorded subtotal.'
+                return warning
             return (f"Run status: {metadata['run_status']}; {len(metadata.get('pending_tasks', []))} "
                     "tasks pending (included as zero). This run is unfinished.")
         return None
 
     @staticmethod
-    def analysis_warnings(results: List[TaskEvaluationResult]) -> List[str]:
+    def analysis_warnings(results: list[TaskEvaluationResult]) -> list[str]:
         warnings = []
         for result in results:
             similarity = (result.generation or {}).get('reference_similarity_warning')
@@ -390,16 +476,27 @@ class BenchmarkReporter:
         return warnings
 
     @staticmethod
-    def scoring_warnings(results: List[TaskEvaluationResult]) -> List[str]:
+    def scoring_warnings(results: list[TaskEvaluationResult],
+                         metadata: Optional[dict[str, Any]] = None) -> list[str]:
         missing = [result.task_id for result in results
                    if result.compiled and result.test_result.completed
                    and result.size_metrics.measured and result.limits is None]
-        return (["Memory scores cannot be independently verified without recorded task limits: "
-                 + ", ".join(missing) + "."] if missing else [])
+        warnings = (["Memory scores cannot be independently verified without recorded task limits: "
+                     + ", ".join(missing) + "."] if missing else [])
+        policy_tasks = ((metadata or {}).get("scoring_policy") or {}).get("tasks", {})
+        unverified = [result.task_id for result in results if result.limits is not None
+                      and policy_tasks.get(result.task_id) != {
+                          "limits": asdict(result.limits),
+                          "weights": asdict(result.weights) if result.weights is not None else None}]
+        if unverified or not (metadata or {}).get("scoring_policy"):
+            warnings.append("Legacy scoring policy is unverifiable; limits and weights are report-supplied."
+                            + (" Unverified tasks: " + ", ".join(unverified) + "." if unverified else ""))
+        return warnings
 
     @staticmethod
-    def to_json_dict(results: List[TaskEvaluationResult], model_name: str,
-                     metadata: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+    def to_json_dict(results: list[TaskEvaluationResult], model_name: str,
+                     metadata: Optional[dict[str, Any]] = None) -> dict[str, Any]:
+        from aibenchmark_esw.metrics.groups import grouped_scores
         from aibenchmark_esw.metrics.measurements import measurement_summary
         return {
             "schema_version": 2,
@@ -409,4 +506,5 @@ class BenchmarkReporter:
             "pass_at_1_pct": round(sum(1 for r in results if BenchmarkReporter._all_tests_passed(r)) / max(1, len(results)) * 100.0, 2),
             "tasks": [r.to_dict() for r in results],
             "generation_summary": measurement_summary(results),
+            **grouped_scores(results, metadata),
         }

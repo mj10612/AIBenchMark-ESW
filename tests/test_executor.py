@@ -1,10 +1,12 @@
-import unittest
+import os
 import subprocess
 import sys
+import unittest
+from dataclasses import replace
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from unittest.mock import patch
-from dataclasses import replace
+
 from aibenchmark_esw.dataset import DatasetLoader
 from aibenchmark_esw.sandbox.executor import ExecutionSandbox
 from aibenchmark_esw.sandbox.process_runner import run_bounded
@@ -33,6 +35,42 @@ class TestExecutionSandbox(unittest.TestCase):
         self.assertTrue(test_res.passed)
         self.assertEqual(test_res.failed_tests, 0)
         self.assertGreater(test_res.passed_tests, 0)
+
+    def test_candidate_does_not_inherit_host_secrets(self):
+        source = '''#include <stdlib.h>
+#include <stdio.h>
+int answer(void) {
+    const char *names[] = {"AIBENCHMARK_TEST_SECRET", "OPENAI_API_KEY",
+                          "ANTHROPIC_API_KEY", "ASAN_OPTIONS", "UBSAN_OPTIONS"};
+    unsigned int i;
+    for (i = 0; i < sizeof(names) / sizeof(names[0]); ++i) {
+        const char *value = getenv(names[i]);
+        if (value) { printf("LEAK:%s\\n", value); return 0; }
+    }
+    return 7;
+}
+'''
+        for isolation in ("native", "process"):
+            with self.subTest(isolation=isolation), TemporaryDirectory() as directory:
+                root = Path(directory)
+                (root / "tests").mkdir()
+                (root / "tests/test_environment.c").write_text(
+                    '#include "unity.h"\nint answer(void);\n'
+                    'void setUp(void) {}\nvoid tearDown(void) {}\n'
+                    'void test_environment(void) { TEST_ASSERT_EQUAL_INT(7, answer()); }\n'
+                    'int main(void) { UNITY_BEGIN(); RUN_TEST(test_environment); return UNITY_END(); }\n',
+                    encoding="utf-8")
+                task = replace(self.loader.get_task("tier1_crc16"), task_dir=root)
+                names = ("AIBENCHMARK_TEST_SECRET", "OPENAI_API_KEY", "ANTHROPIC_API_KEY",
+                         "ASAN_OPTIONS", "UBSAN_OPTIONS")
+                executor = ExecutionSandbox(isolation=isolation)
+                with patch.dict(os.environ, dict.fromkeys(names, "offline-sentinel-never-publish")):
+                    compiled, result = executor.compile_and_test(task, source)
+                self.addCleanup(compiled.cleanup)
+                self.assertTrue(compiled.success, compiled.output)
+                self.assertTrue(result.passed, result.output)
+                self.assertNotIn("offline-sentinel-never-publish", result.output)
+                self.assertEqual(executor.execution_settings()["candidate_environment"], "minimal-v1")
 
     def test_compile_and_fail_starter_stub(self):
         task = self.loader.get_task("tier1_crc16")
@@ -209,7 +247,7 @@ int main(void) {
     def test_test_timeout_preserves_records_without_parsing_them_as_completed(self):
         task = self.loader.get_task("tier1_crc16")
         for as_bytes in (False, True):
-            def timeout_after_compile(command, **kwargs):
+            def timeout_after_compile(command, as_bytes=as_bytes, **kwargs):
                 if len(command) != 2:
                     return run_bounded(command, **kwargs)
                 token = Path(command[0]).parent.glob("aibenchmark_tests_*.c")

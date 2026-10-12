@@ -1,13 +1,13 @@
 import importlib.util
+import json
 import os
 import shutil
 import subprocess
 import sys
-import unittest
-import zipfile
-import venv
 import tarfile
-import json
+import unittest
+import venv
+import zipfile
 from email.parser import BytesParser
 from pathlib import Path
 from tempfile import TemporaryDirectory
@@ -33,9 +33,9 @@ class TestPackaging(unittest.TestCase):
         cls.work = Path(cls.temporary.name)
         cls.source = cls.work / "project"
         cls.source.mkdir()
-        for name in ["pyproject.toml", "setup.py", "MANIFEST.in", "README.md", "LICENSE", "NOTICE"]:
+        for name in ["pyproject.toml", "setup.py", "MANIFEST.in", "README.md", "LICENSE", "NOTICE", 'CONTRIBUTING.md', 'SECURITY.md', 'action.yml', 'uv.lock']:
             shutil.copy2(cls.root / name, cls.source / name)
-        for name in ["aibenchmark_esw", "tasks", "third_party"]:
+        for name in ["aibenchmark_esw", "tasks", "third_party", 'docs', '.github']:
             shutil.copytree(cls.root / name, cls.source / name, ignore=shutil.ignore_patterns("__pycache__"))
         artifacts = cls.source / "tasks/tier1_crc16/tests/build"
         for filename in ("CMakeCache.txt", "test_runner.exe", "test_crc16.c.obj", "CMakeFiles/CompilerIdC/CMakeCCompilerId.c"):
@@ -76,6 +76,10 @@ class TestPackaging(unittest.TestCase):
             names = archive.getnames()
             self.assertFalse(any("/tests/build/" in name for name in names), "sdist artifact filtering")
             self.assertTrue(any(name.endswith("schemas/report-v2.schema.json") for name in names), "sdist schema")
+            for filename in ('CONTRIBUTING.md', 'SECURITY.md', 'action.yml', 'docs/GITHUB_ACTION.md',
+                             '.github/workflows/ci.yml', '.github/scripts/install_locked.py', 'uv.lock'):
+                self.assertTrue(any(name.endswith('/' + filename) for name in names), filename)
+            self.assertFalse(any('/docs/superpowers/' in name for name in names))
 
     def test_wheel_contains_dataset_unity_subpackages_and_schema(self):
         with zipfile.ZipFile(self.installed_wheel) as archive:

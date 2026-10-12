@@ -15,7 +15,10 @@ class TestCheckpointDurability(unittest.TestCase):
         fake_os.name = "posix"
         fake_os.O_DIRECTORY = getattr(os, "O_DIRECTORY", 0)
         fake_os.O_RDONLY = os.O_RDONLY
-        fake_os.open.side_effect = lambda *args: events.append("directory-open") or 987654
+        for name in ('O_WRONLY', 'O_CREAT', 'O_EXCL'):
+            setattr(fake_os, name, getattr(os, name))
+        fake_os.open.side_effect = lambda *args: (os.open(*args) if len(args) == 3 else
+                                                   events.append("directory-open") or 987654)
         fake_os.close.side_effect = lambda *args: events.append("directory-close")
         def fsync(fd):
             if fd == 987654:

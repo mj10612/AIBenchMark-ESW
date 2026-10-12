@@ -1,27 +1,33 @@
 """Additional target-object evidence; Unity suites continue to run on the host."""
 
+import locale
 import os
 import re
 import shutil
 import subprocess
-import locale
 import tempfile
 from pathlib import Path
 
 from aibenchmark_esw.models import CompilationResult
-from aibenchmark_esw.sandbox.process_runner import run_bounded, OutputLimitExceeded, ExecutionCancelled
+from aibenchmark_esw.sandbox.process_runner import (
+    ExecutionCancelled,
+    ExecutionCleanupError,
+    OutputLimitExceeded,
+    run_bounded,
+)
 
 
 class CrossCompiler:
     def __init__(self, target, compiler=None, timeout=30, max_output_bytes=1048576,
-                 isolation="native", memory_limit_bytes=None, runner=None):
-        if not re.fullmatch(r"(?:avr:atmega[0-9]+[a-z]*|arm:cortex-m(?:0plus|[0347])|riscv:rv(?:32(?:i|imc|imac|ec)|64(?:gc|imac)))", target):
-            raise ValueError("Target must be AVR ATmega, ARM Cortex-M0/M0plus/M3/M4/M7, or RISC-V rv32i/imc/imac/ec/rv64gc/imac")
+                 isolation="native", memory_limit_bytes=None, runner=None, warnings=False, finding_parser=None):
+        if not re.fullmatch(r"(?:avr:atmega[0-9]+[a-z]*|arm:cortex-m(?:0plus|[0347]|23|33|55|85)|riscv:rv(?:32(?:i|imc|imac|ec)|64(?:gc|imac)))", target):
+            raise ValueError("Target must be AVR ATmega, ARM Cortex-M0/M0plus/M3/M4/M7/M23/M33/M55/M85, or RISC-V rv32i/imc/imac/ec/rv64gc/imac")
         self.max_output_bytes, self.isolation, self.memory_limit_bytes = max_output_bytes, isolation, memory_limit_bytes
         self.cancel_event, self.runner = None, runner
         self.target, self.timeout = target, timeout
         architecture, self.cpu = target.split(":")
         commands = (["avr-gcc"] if architecture == "avr" else ["arm-none-eabi-gcc"] if architecture == "arm"
+                    else ["riscv64-unknown-elf-gcc", "riscv-none-elf-gcc"] if self.cpu.startswith("rv64")
                     else ["riscv32-unknown-elf-gcc", "riscv-none-elf-gcc", "riscv64-unknown-elf-gcc"])
         command = commands[0]
         selected = compiler or os.environ.get("AIBENCHMARK_ESW_CROSS_CC") or next(
@@ -29,6 +35,10 @@ class CrossCompiler:
         if not selected:
             raise ValueError(f"Cross compiler unavailable: install {command}/Clang or set AIBENCHMARK_ESW_CROSS_CC")
         self.compiler = str(Path(selected).resolve()) if Path(selected).is_file() else selected
+        if self.cpu.startswith("rv64") and "riscv32" in Path(self.compiler).stem:
+            raise ValueError("RV64 target requires an RV64-capable toolchain; selected riscv32 compiler")
+        self.warning_flags = ["-Wall", "-Wextra", "-Wconversion", "-Wshadow"] if warnings else []
+        self.finding_parser = finding_parser
         self.abi = None
         if architecture == "riscv":
             self.abi = ("ilp32e" if self.cpu == "rv32ec" else "ilp32" if self.cpu.startswith("rv32")
@@ -54,10 +64,11 @@ class CrossCompiler:
     def settings(self):
         return {"target": self.target, "compiler": self.compiler, "version": self.version,
                 "name": Path(self.compiler).name, "isa": self.cpu, "abi": self.abi,
-                "flags": self.flags, "stamp": self.stamp, "measurement": "target-object"}
+                "flags": self.flags, "warning_flags": self.warning_flags,
+                "stamp": self.stamp, "measurement": "target-object"}
 
     def compile(self, task, source, output):
-        command = [self.compiler, *self.flags, f"-std={task.target_standard}", "-I",
+        command = [self.compiler, *self.flags, *self.warning_flags, f"-std={task.target_standard}", "-I",
                    str(task.task_dir.resolve() / "include"), "-c", str(source), "-o", str(output)]
         try:
             runner = self.runner or run_bounded
@@ -66,10 +77,11 @@ class CrossCompiler:
                             memory_limit_bytes=self.memory_limit_bytes, cancel_event=self.cancel_event)
             log = result.stdout.decode(locale.getpreferredencoding(False), errors="backslashreplace")
             success = result.returncode == 0 and output.is_file()
+            findings = self.finding_parser(log, [source]) if self.finding_parser else []
             return CompilationResult(success, log,
                 binary_path=output if success else None, error_message=None if success else "Target compilation failed",
-                effective_standard=task.target_standard)
-        except (OutputLimitExceeded, ExecutionCancelled, subprocess.TimeoutExpired) as error:
+                effective_standard=task.target_standard, findings=findings, warning_flags=self.warning_flags)
+        except (OutputLimitExceeded, ExecutionCancelled, ExecutionCleanupError, subprocess.TimeoutExpired) as error:
             captured = error.output or b""
             log = captured.decode(locale.getpreferredencoding(False), errors="backslashreplace") if isinstance(captured, bytes) else captured
             return CompilationResult(False, log + "\n" + str(error), error_message="Target compilation bounded or cancelled",

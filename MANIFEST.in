@@ -1,3 +1,7 @@
 recursive-include tasks *.json *.md *.h *.c *.inc *.bin CMakeLists.txt
 recursive-include third_party *.h *.c CMakeLists.txt
 include NOTICE
+include CONTRIBUTING.md SECURITY.md action.yml uv.lock
+recursive-include docs *.md
+prune docs/superpowers
+recursive-include .github *.yml *.yaml *.py

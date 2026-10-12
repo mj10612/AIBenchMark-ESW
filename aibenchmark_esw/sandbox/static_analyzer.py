@@ -1,12 +1,70 @@
+import math
 import os
+import re
 import shutil
 import subprocess
-import re
-import math
 from pathlib import Path
-from typing import Optional, List
+from typing import Optional
+
 from aibenchmark_esw.models import StaticSafetyMetrics
 from aibenchmark_esw.sandbox.c_source import code_tokens, mask_noncode, original_line
+from aibenchmark_esw.sandbox.process_runner import run_bounded
+
+
+def _balanced_end(text, start, opening="{", closing="}"):
+    depth = 0
+    for position in range(start, len(text)):
+        depth += (text[position] == opening) - (text[position] == closing)
+        if depth == 0:
+            return position + 1
+    return len(text)
+
+
+def _reference_sites(masked):
+    # Preserve offsets while masking all levels of aggregate member declarations.
+    storage = list(masked)
+    for aggregate in re.finditer(r"\b(?:struct|union)\s*\w*\s*\{", masked):
+        end = _balanced_end(masked, aggregate.end() - 1)
+        storage[aggregate.start():end] = [" " if c not in "\r\n" else c
+                                          for c in masked[aggregate.start():end]]
+    text = "".join(storage)
+    braces, scopes = [], []
+    for position, char in enumerate(text):
+        if char == "{":
+            braces.append(position)
+        elif char == "}" and braces:
+            scopes.append((braces.pop(), position + 1))
+    functions = [match for match in re.finditer(r"\b(\w+)\s*\([^;{}]*\)\s*\{", text)
+                 if match.group(1) not in {"if", "while", "for", "switch"}]
+
+    def scope_at(position):
+        parameter_scope = [(match.start(), _balanced_end(text, match.end() - 1)) for match in functions
+                           if match.start() <= position < match.end()]
+        enclosing = parameter_scope or [(start, end) for start, end in scopes if start < position < end]
+        return min(enclosing, key=lambda pair: pair[1] - pair[0]) if enclosing else (0, len(text))
+
+    shadows = []
+    control_words = {"return", "case", "goto", "else", "sizeof", "break", "continue"}
+    for declaration in re.finditer(r"\b([A-Za-z_]\w*)\s+(?:\*\s*)*([A-Za-z_]\w*)\s*(?=[=;,)\[])", text):
+        if declaration.group(1) not in control_words:
+            shadows.append((declaration.group(2), declaration.start(2), *scope_at(declaration.start(2))))
+    for pointer in re.finditer(r"\b\w+\s*\(\s*\*\s*(\w+)\s*\)", text):
+        shadows.append((pointer.group(1), pointer.start(1), *scope_at(pointer.start(1))))
+    for definition in functions:
+        prefix = text[max(text.rfind(";", 0, definition.start()), text.rfind("}", 0, definition.start())) + 1:definition.start()]
+        if re.search(r"\bstatic\b", prefix):
+            shadows.append((definition.group(1), 0, 0, len(text)))
+    tokens = list(re.finditer(r"[A-Za-z_]\w*|->|[^\s]", text))
+    sites: dict = {}
+    for index, token in enumerate(tokens):
+        name, position = token.group(), token.start()
+        if index and tokens[index - 1].group() in (".", "->"):
+            continue
+        if any(name == declared and start <= position < end and position >= declaration
+               for declared, declaration, start, end in shadows):
+            continue
+        sites.setdefault(name, position)
+    return sites
 
 
 class StaticAnalyzer:
@@ -14,27 +72,32 @@ class StaticAnalyzer:
         rules = ["allocation-reference", "misra.15.1", "floating-types", "misra.4.6",
                  "host-process", "host-network", "host-filesystem"]
         if self.extended_rules:
-            rules += ["stdio", "nonlocal-control", "nondeterminism", "misra.17.2", "misra.18.8",
+            rules += ["stdio", "nonlocal-control", "nondeterminism", "misra.17.2", "misra.18.8", "alloca",
                       "heavy-library", "busy-wait"]
-        return {"version": 2, "builtin_rules": rules, "extended_rules": self.extended_rules,
+        return {"version": 4, "builtin_rules": rules, "extended_rules": self.extended_rules,
+                "max_output_bytes": self.max_output_bytes, "max_findings": 200,
                 "timeout_seconds": self.timeout_seconds,
                 "basic_type_exceptions": ["plain int (status/main APIs)", "plain char (character data)"],
                 "cppcheck_enabled": ["warning", "style", "performance", "portability"],
                 "inconclusive": True, "standard": "task effective standard",
                 "error_severities": ["error"], "warning_severities": ["warning", "style", "performance", "portability"]}
 
-    def __init__(self, cppcheck_cmd: Optional[str] = None, timeout_seconds=30, extended_rules=False):
+    def __init__(self, cppcheck_cmd: Optional[str] = None, timeout_seconds=30, extended_rules=False,
+                 max_output_bytes=1048576):
         if (isinstance(timeout_seconds, bool) or not isinstance(timeout_seconds, (int, float))
                 or not math.isfinite(timeout_seconds) or timeout_seconds <= 0):
             raise ValueError("timeout_seconds must be finite and positive")
         self.timeout_seconds, self.extended_rules = timeout_seconds, extended_rules
+        if isinstance(max_output_bytes, bool) or not isinstance(max_output_bytes, int) or max_output_bytes <= 0:
+            raise ValueError("max_output_bytes must be a positive integer")
+        self.max_output_bytes = max_output_bytes
         self.last_cppcheck_timeout = False
         configured = cppcheck_cmd if cppcheck_cmd is not None else os.environ.get("AIBENCHMARK_ESW_CPPCHECK")
         self.cppcheck_cmd = None if configured == "off" else configured or shutil.which("cppcheck")
         self.last_cppcheck_error: Optional[str] = None
 
-    def analyze(self, source_path: Path, include_dirs: Optional[List[Path]] = None,
-                standard: str = "c99") -> StaticSafetyMetrics:
+    def analyze(self, source_path: Path, include_dirs: Optional[list[Path]] = None,
+                standard: str = "c99", executor=None) -> StaticSafetyMetrics:
         """
         Always check embedded rules; add cppcheck diagnostics when available.
         """
@@ -42,7 +105,7 @@ class StaticAnalyzer:
         metrics.cppcheck_status = "disabled" if not self.cppcheck_cmd else "not_run"
         if self.cppcheck_cmd and source_path.exists():
             self.last_cppcheck_error = None
-            cppcheck_metrics = self._run_cppcheck(source_path, include_dirs, standard)
+            cppcheck_metrics = self._run_cppcheck(source_path, include_dirs, standard, executor)
             if cppcheck_metrics is not None:
                 metrics.cppcheck_status = "completed"
                 metrics.error_count += cppcheck_metrics.error_count
@@ -54,8 +117,8 @@ class StaticAnalyzer:
                 metrics.cppcheck_diagnostic = self.last_cppcheck_error or "cppcheck did not complete"
         return metrics
 
-    def _run_cppcheck(self, source_path: Path, include_dirs: Optional[List[Path]] = None,
-                      standard: str = "c99") -> Optional[StaticSafetyMetrics]:
+    def _run_cppcheck(self, source_path: Path, include_dirs: Optional[list[Path]] = None,
+                      standard: str = "c99", executor=None) -> Optional[StaticSafetyMetrics]:
         self.last_cppcheck_timeout = False
         try:
             assert self.cppcheck_cmd is not None
@@ -70,17 +133,21 @@ class StaticAnalyzer:
             for directory in include_dirs or []:
                 cmd += ["-I", str(directory)]
             cmd.append(str(source_path))
-            proc = subprocess.run(cmd, capture_output=True, text=True, errors="backslashreplace",
-                                  timeout=self.timeout_seconds, stdin=subprocess.DEVNULL)
+            runner = executor._run_contained if executor and executor.containment else run_bounded
+            proc = runner(cmd, timeout=self.timeout_seconds, max_output_bytes=self.max_output_bytes,
+                          cwd=str(source_path.parent), isolation="process",
+                          memory_limit_bytes=536870912,
+                          cancel_event=getattr(executor, "cancel_event", None))
+            output = (proc.stdout + (proc.stderr or b"")).decode("utf-8", errors="backslashreplace")
             if proc.returncode != 0:
-                self.last_cppcheck_error = f"cppcheck exited with {proc.returncode}: {(proc.stdout + proc.stderr).strip()}"
+                self.last_cppcheck_error = f"cppcheck exited with {proc.returncode}: {output.strip()}"
                 return None
             errors = 0
             warnings = 0
             violations = []
-            findings = []
+            findings: list = []
 
-            for line in proc.stderr.splitlines():
+            for line in output.splitlines():
                 if line.startswith("error:"):
                     errors += 1
                     violations.append(line.strip())
@@ -89,6 +156,9 @@ class StaticAnalyzer:
                     violations.append(line.strip())
                 else:
                     continue
+                if len(findings) >= 200:
+                    self.last_cppcheck_error = "cppcheck finding limit exceeded (200); analysis is incomplete"
+                    return None
                 parts = line.split(":", 2)
                 location = re.match(r"(.*):(\d+):(.*)", parts[2]) if len(parts) == 3 else None
                 findings.append({"rule_id": parts[1], "engine": "cppcheck", "severity": parts[0],
@@ -102,7 +172,7 @@ class StaticAnalyzer:
                 violations=violations,
                 findings=findings,
             )
-        except (OSError, subprocess.TimeoutExpired, UnicodeError) as error:
+        except (OSError, subprocess.SubprocessError, UnicodeError, ValueError) as error:
             self.last_cppcheck_timeout = isinstance(error, subprocess.TimeoutExpired)
             self.last_cppcheck_error = str(error)
             return None
@@ -111,7 +181,7 @@ class StaticAnalyzer:
         if not source_path.exists():
             return StaticSafetyMetrics()
 
-        with open(source_path, "r", encoding="utf-8", errors="ignore") as f:
+        with open(source_path, encoding="utf-8", errors="ignore") as f:
             code = f.read()
 
         errors = 0
@@ -126,11 +196,9 @@ class StaticAnalyzer:
         identifiers = set(tokens)
         masked = mask_noncode(code)
         # Struct declarations and member accesses name storage, not allocators.
-        no_structs = re.sub(r"\b(?:struct|union)\s*\w*\s*\{[^{}]*\}", lambda m: " " * len(m.group()), masked)
-        allocation_tokens = re.findall(r"[A-Za-z_]\w*|->|[^\s]", no_structs)
-        allocation_references = {token for index, token in enumerate(allocation_tokens)
-                                 if index == 0 or allocation_tokens[index - 1] not in (".", "->")}
-        if allocation_references.intersection({"malloc", "calloc", "realloc", "free"}):
+        reference_sites = _reference_sites(masked)
+        references = set(reference_sites)
+        if references.intersection({"malloc", "calloc", "realloc", "free"}):
             errors += 1
             violations.append("MISRA-C Violation: Dynamic memory allocation API reference (malloc/calloc/realloc/free) detected.")
 
@@ -145,9 +213,7 @@ class StaticAnalyzer:
             violations.append("Notice: Floating-point types used in resource-constrained task.")
 
         # 4. Standard variable types instead of fixed-width (MISRA Rule 4.6)
-        pairs = set(zip(tokens, tokens[1:]))
-        if (identifiers.intersection({"long", "short"}) or
-                pairs.intersection({(sign, kind) for sign in ("unsigned", "signed") for kind in ("int", "char", "short", "long")})):
+        if identifiers.intersection({"long", "short", "unsigned", "signed"}):
             warnings += 1
             violations.append("MISRA-C Rule 4.6: Basic numerical types should use fixed-width typedefs.")
 
@@ -155,15 +221,6 @@ class StaticAnalyzer:
         # like allocation aliases. Object member access is not a host API call.
         # Local declarations include typedef-based parameters/callbacks. A
         # lexical check is deliberately conservative, not a complete C parser.
-        declared = {match.group(1) for match in re.finditer(
-            r"\b(?:[A-Za-z_]\w*)\s+(?:\*\s*)*([A-Za-z_]\w*)\s*(?=[=;,)]|\([^;{}]*\)\s*\{)", no_structs)
-                    if match.group().split()[0] not in ("return", "case", "goto")}
-        references = {token for index, token in enumerate(tokens)
-                      if (index == 0 or tokens[index - 1] not in (".", "->"))
-                      and token not in declared
-                      and ((index + 1 < len(tokens) and tokens[index + 1] == "(")
-                           or (index > 0 and tokens[index - 1] in ("&", "=")))}
-        references |= set(re.findall(r"(?m)^\s*#\s*define\s+\w+\s+(\w+)\b", masked))
         categories = {
             "process execution": {"system", "popen", "_popen", "fork", "vfork", "posix_spawn",
                                   "posix_spawnp", "execl", "execlp", "execle", "execv", "execvp",
@@ -200,11 +257,15 @@ class StaticAnalyzer:
             else:
                 category = next(name for name in categories if name in message)
                 rule, severity, names = "builtin.host-" + category.split()[0], "error", categories[category]
-            match = re.search(r"\b(?:" + "|".join(re.escape(name) for name in sorted(names)) + r")\b", masked)
+            if severity == "error":
+                position = min((reference_sites[name] for name in names if name in reference_sites), default=None)
+            else:
+                match = re.search(r"\b(?:" + "|".join(re.escape(name) for name in sorted(names)) + r")\b", masked)
+                position = match.start() if match else None
             findings.append({"rule_id": rule, "engine": "builtin", "severity": severity, "message": message,
-                             "file": source_path.name, "line": original_line(code, match.start()) if match else None})
+                             "file": source_path.name, "line": original_line(code, position) if position is not None else None})
         if self.extended_rules:
-            for rule, position, message in self._extended_findings(masked, headers, references):
+            for rule, position, message in self._extended_findings(masked, headers, reference_sites):
                 warnings += 1
                 violations.append(message)
                 findings.append({"rule_id": "builtin." + rule, "engine": "builtin", "severity": "warning",
@@ -217,19 +278,18 @@ class StaticAnalyzer:
             findings=findings,
         )
 
-    def _extended_findings(self, masked, headers, references):
+    def _extended_findings(self, masked, headers, reference_sites):
         groups = {"stdio": {"printf", "fprintf", "sprintf", "snprintf", "vprintf", "vfprintf", "vsprintf", "vsnprintf",
                             "puts", "fputs", "putchar", "fputc", "putc", "scanf", "fscanf", "sscanf", "vscanf", "vfscanf",
                             "vsscanf", "getchar", "getc", "fgets", "gets", "perror"},
                   "nonlocal-control": {"exit", "_Exit", "abort", "atexit", "quick_exit", "at_quick_exit",
                                        "setjmp", "longjmp", "signal", "raise"},
                   "nondeterminism": {"rand", "srand", "time", "clock"},
-                  "misra.18.8": {"alloca", "_alloca"}}
+                  "alloca": {"alloca", "_alloca"}}
         for rule, names in groups.items():
-            found = references & names
+            found = set(reference_sites) & names
             if found:
-                match = re.search(r"\b(?:" + "|".join(sorted(found)) + r")\b", masked)
-                yield rule, match.start() if match else None, "Embedded safety: " + rule + " API reference (" + ", ".join(sorted(found)) + ")"
+                yield rule, min(reference_sites[name] for name in found), "Embedded safety: " + rule + " API reference (" + ", ".join(sorted(found)) + ")"
         if headers & {"math.h", "complex.h"}:
             yield "heavy-library", None, "Embedded safety: math/complex library dependency"
         # Capture definitions and their balanced bodies, then detect call-graph
@@ -259,13 +319,23 @@ class StaticAnalyzer:
         recursive = sorted(name for name in graph if cyclic(name))
         if recursive:
             yield "misra.17.2", locations[recursive[0]], "MISRA-C Rule 17.2: Recursive call cycle (" + ", ".join(recursive) + ")"
-        vla = next((match for match in re.finditer(r"\b(?:[A-Za-z_]\w*)\s+\w+\s*\[([^\]]+)\]", masked)
-                    if any(not name.isupper() for name in re.findall(r"\b[A-Za-z_]\w*\b", match.group(1)))), None)
+        def variable_bound(expression):
+            for size in reversed(list(re.finditer(r"\bsizeof\s*\(", expression))):
+                end = _balanced_end(expression, size.end() - 1, "(", ")")
+                expression = expression[:size.start()] + "0" + expression[end:]
+            return any(not name.isupper() for name in re.findall(r"\b[A-Za-z_]\w*\b", expression))
+        vla = next((match for match in re.finditer(r"\b([A-Za-z_]\w*)\s+\w+\s*\[([^\]]+)\]", masked)
+                    if match.group(1) not in {"return", "else", "case", "goto", "sizeof"}
+                    and variable_bound(match.group(2))), None)
         if vla:
             yield "misra.18.8", vla.start(), "MISRA-C Rule 18.8: Possible variable-length array"
-        busy = re.search(r"\bwhile\s*\(\s*(?:1|true)\s*\)|\bfor\s*\(\s*;\s*;\s*\)", masked)
-        if busy:
+        for busy in re.finditer(r"\bwhile\s*\(\s*(?:1|true)\s*\)|\bfor\s*\(\s*;\s*;\s*\)", masked):
             # A lexical advisory; loops with an explicit escape are accepted.
-            tail = masked[busy.end():]
-            if not re.search(r"\b(?:break|return)\b", tail):
+            start = busy.end()
+            while start < len(masked) and masked[start].isspace():
+                start += 1
+            end = (_balanced_end(masked, start) if start < len(masked) and masked[start] == "{"
+                   else masked.find(";", start) + 1)
+            body = masked[start:end]
+            if not re.search(r"\b(?:break|return|goto)\b", body):
                 yield "busy-wait", busy.start(), "Embedded safety: Unbounded busy-wait loop"

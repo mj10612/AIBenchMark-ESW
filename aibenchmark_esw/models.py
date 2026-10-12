@@ -1,8 +1,11 @@
-from dataclasses import asdict, dataclass, field
 import math
 import re
-from typing import Optional, List, Dict, Any
+from dataclasses import asdict, dataclass, field
 from pathlib import Path, PureWindowsPath
+from typing import Any, Optional
+
+CATEGORIES = frozenset({'general', 'core_fundamentals', 'fsm_and_protocols', 'device_drivers',
+                        'bug_fix_and_safety', 'fixed_point_control', 'flash_management', 'concurrency'})
 
 
 @dataclass
@@ -48,13 +51,15 @@ class TaskConfig:
     task_dir: Path
     prompt: str = ""
     reference_file: Optional[str] = None
-    prompt_overrides: Dict[str, Any] = field(default_factory=dict)
-    target_limits: Dict[str, TaskLimits] = field(default_factory=dict)
+    prompt_overrides: dict[str, Any] = field(default_factory=dict)
+    target_limits: dict[str, TaskLimits] = field(default_factory=dict)
 
     def __post_init__(self):
         for name in ("name", "category", "description"):
             if not isinstance(getattr(self, name), str):
                 raise ValueError(f"Task {name} must be a string")
+        if self.category not in CATEGORIES:
+            raise ValueError('Task category must be one of: ' + ', '.join(sorted(CATEGORIES)))
         if not isinstance(self.prompt_overrides, dict):
             raise ValueError("prompt_overrides must be an object")
         unknown = set(self.prompt_overrides) - {"allow_dynamic_memory", "extra_rules"}
@@ -91,7 +96,7 @@ class TaskConfig:
         return self.task_dir / (self.reference_file or f"reference/{Path(self.entry_file).name}")
 
     @classmethod
-    def from_dict(cls, data: Dict[str, Any], task_dir: Path, prompt: str = "") -> "TaskConfig":
+    def from_dict(cls, data: dict[str, Any], task_dir: Path, prompt: str = "") -> "TaskConfig":
         if not isinstance(data, dict):
             raise ValueError("Task metadata must be a JSON object")
         limits_data = data.get("limits", {})
@@ -147,8 +152,8 @@ class CompilationResult:
     binary_path: Optional[Path] = None
     error_message: Optional[str] = None
     effective_standard: Optional[str] = None
-    findings: List[Dict[str, Any]] = field(default_factory=list)
-    warning_flags: List[str] = field(default_factory=list)
+    findings: list[dict[str, Any]] = field(default_factory=list)
+    warning_flags: list[str] = field(default_factory=list)
     _workspace: Optional[Any] = field(default=None, repr=False, compare=False)
 
     def cleanup(self) -> None:
@@ -184,10 +189,10 @@ class SizeMetrics:
 class StaticSafetyMetrics:
     error_count: int = 0
     warning_count: int = 0
-    violations: List[str] = field(default_factory=list)
+    violations: list[str] = field(default_factory=list)
     cppcheck_status: Optional[str] = None
     cppcheck_diagnostic: Optional[str] = None
-    findings: List[Dict[str, Any]] = field(default_factory=list)
+    findings: list[dict[str, Any]] = field(default_factory=list)
 
 
 @dataclass
@@ -220,14 +225,14 @@ class TaskEvaluationResult:
     weights: Optional[TaskWeights] = None
     target_standard: Optional[str] = None
     effective_standard: Optional[str] = None
-    generation: Optional[Dict[str, Any]] = None
-    provenance: Optional[Dict[str, Any]] = None
+    generation: Optional[dict[str, Any]] = None
+    provenance: Optional[dict[str, Any]] = None
     limits: Optional[TaskLimits] = None
     candidate_time_sec: Optional[float] = None
     reference_validation_time_sec: Optional[float] = None
     footprint_target: str = "host"
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "task_id": self.task_id,
             "tier": self.tier,

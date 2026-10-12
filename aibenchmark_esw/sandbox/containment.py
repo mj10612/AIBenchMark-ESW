@@ -5,7 +5,10 @@ are copied into it before invocation, so containers never mount the checkout.
 Docker/Podman images must already be present; resolved image IDs pin execution.
 """
 
+import csv
+import io
 import os
+import re
 import shutil
 import subprocess
 import uuid
@@ -49,14 +52,17 @@ class ContainmentBackend:
                 "image_digest": self.image_digest, "network": "none", "root_filesystem": "read-only",
                 "mount_scope": "ephemeral-workspace", "capabilities": "none", "no_new_privileges": True,
                 "user": self.user if self.mode == "container" else "current-user-namespace",
-                "pids_limit": 64 if self.mode == "container" else None, "cpus": 1 if self.mode == "container" else None}
+                "pids_limit": 64, "file_size_bytes": 16777216, "core_bytes": 0, "open_files": 256,
+                "process_limit_scope": "container-cgroup" if self.mode == "container" else "uid-rlimit",
+                "tmpfs_bytes": 67108864, "runtime_workspace": "read-only with bounded scratch and receipt",
+                "default_memory_bytes": 536870912 if self.mode == "container" else None, "cpus": 1 if self.mode == "container" else None}
 
     def _workspace_command(self, command, cwd):
         cwd = Path(cwd).resolve()
         # Test execution begins in empty scratch below the binary workspace.
         workspace = cwd.parent if cwd.name == "scratch" else cwd
         workspace.mkdir(parents=True, exist_ok=True)
-        workspace.chmod(0o777)
+        workspace.chmod(0o700)
         copies = workspace / ".containment-inputs"
         mapping: dict = {}
         translated = []
@@ -68,8 +74,15 @@ class ContainmentBackend:
             else:
                 prefix = ""
                 path = Path(value)
-                if value.startswith("-I") and len(value) > 2:
-                    prefix, path = "-I", Path(value[2:])
+                for flag in ("--sysroot=", "-I", "-L", "-B", "/FI", "/Fo", "/Fe", "/I"):
+                    if value.startswith(flag) and len(value) > len(flag):
+                        prefix, path = flag, Path(value[len(flag):])
+                        break
+                if value in ("/nologo", "/TC", "/c", "/O1", "/W4") or value.startswith("/std:"):
+                    path = Path(".")
+                if not prefix and value.startswith("-") and re.search(
+                        r"[A-Za-z]:[\\/]|^-+[A-Za-z-]+(?:=)?/", value):
+                    raise ValueError("Unrecognized containment path flag: " + value)
                 if path.is_absolute():
                     resolved = path.resolve()
                     if not resolved.is_relative_to(workspace):
@@ -86,29 +99,48 @@ class ContainmentBackend:
                         resolved = mapping[resolved]
                     value = prefix + "/workspace/" + resolved.relative_to(workspace).as_posix()
             translated.append(value)
-        # A non-root container needs to create compiler artifacts and receipt.
-        # Permissions apply solely to this ephemeral workspace.
-        for path in workspace.rglob("*"):
+        # Keep the tree private. Root container hosts transfer ownership to the
+        # unprivileged container identity instead of opening it to other users.
+        for path in [workspace, *workspace.rglob("*")]:
             if path.is_symlink():
                 continue
             if path.is_dir():
-                path.chmod(0o777)
+                path.chmod(0o700)
             else:
-                path.chmod(0o777 if os.access(path, os.X_OK) else 0o666)
+                path.chmod(0o700 if os.access(path, os.X_OK) else 0o600)
+            if os.name != "nt" and self.mode == "container" and os.getuid() == 0:  # type: ignore[attr-defined]
+                os.chown(path, 65534, 65534)  # type: ignore[attr-defined]  # POSIX ownership boundary.
         container_cwd = "/workspace" + ("/scratch" if cwd != workspace else "")
         return workspace, container_cwd, translated
 
     def run(self, command, *, timeout, max_output_bytes, cwd, env=None, isolation=None,
             memory_limit_bytes=None, cancel_event=None):
         workspace, inner_cwd, inner = self._workspace_command(command, cwd)
+        running_candidate = Path(cwd).name == "scratch"
         if self.mode == "container":
             name = "aibenchmark-" + uuid.uuid4().hex
+            mount = io.StringIO()
+            csv.writer(mount, lineterminator="").writerow(
+                ["type=bind", "source=" + str(workspace), "target=/workspace", *(["readonly"] if running_candidate else [])])
             invocation = [self.runtime, "run", "--rm", "--pull=never", "--name", name,
                           "--read-only", "--network=none", "--cap-drop=ALL",
                           "--security-opt=no-new-privileges", "--user=" + self.user, "--pids-limit=64", "--cpus=1",
                           "--tmpfs=/tmp:rw,nosuid,nodev,size=64m", "--mount",
-                          "type=bind,source=" + str(workspace) + ",target=/workspace",
+                          mount.getvalue(),
                           "--workdir", inner_cwd]
+            # --pids-limit bounds this container, including threads. NPROC
+            # counts the host UID across containers and can prevent runc exec
+            # even when this container has only one process.
+            invocation += ["--ulimit=fsize=16777216:16777216",
+                           "--ulimit=core=0:0", "--ulimit=nofile=256:256"]
+            if running_candidate:
+                invocation += ["--tmpfs=/workspace/scratch:rw,nosuid,nodev,size=64m,mode=0700,uid=" + self.user.split(':')[0] + ",gid=" + self.user.split(':')[1]]
+                receipt = workspace / "harness.receipt"
+                if receipt.is_file():
+                    channel = io.StringIO()
+                    csv.writer(channel, lineterminator="").writerow(["type=bind", "source=" + str(receipt), "target=/workspace/harness.receipt"])
+                    invocation += ["--mount", channel.getvalue()]
+            memory_limit_bytes = memory_limit_bytes or 536870912
             if memory_limit_bytes is not None:
                 invocation += ["--memory=" + str(memory_limit_bytes), "--memory-swap=" + str(memory_limit_bytes)]
             for key in ("ASAN_OPTIONS", "UBSAN_OPTIONS"):
@@ -131,14 +163,20 @@ class ContainmentBackend:
                         raise OSError("Container cleanup failed; runtime did not confirm removal: " + text)
         invocation = [self.runtime, "--unshare-all", "--die-with-parent", "--new-session",
                       "--cap-drop", "ALL", "--clearenv", "--setenv", "PATH", "/usr/bin:/bin",
-                      "--proc", "/proc", "--dev", "/dev", "--tmpfs", "/tmp"]
+                      "--proc", "/proc", "--dev", "/dev", "--size", "67108864", "--tmpfs", "/tmp"]
         for directory in ("/usr", "/bin", "/lib", "/lib64"):
             if Path(directory).exists():
                 invocation += ["--ro-bind", directory, directory]
         for file in ("/etc/ld.so.cache", "/etc/ld.so.conf"):
             if Path(file).is_file():
                 invocation += ["--ro-bind", file, file]
-        invocation += ["--bind", str(workspace), "/workspace", "--chdir", inner_cwd]
+        invocation += ["--ro-bind" if running_candidate else "--bind", str(workspace), "/workspace"]
+        if running_candidate:
+            invocation += ["--size", "67108864", "--tmpfs", "/workspace/scratch"]
+            receipt = workspace / "harness.receipt"
+            if receipt.is_file():
+                invocation += ["--bind", str(receipt), "/workspace/harness.receipt"]
+        invocation += ["--chdir", inner_cwd]
         for key in ("ASAN_OPTIONS", "UBSAN_OPTIONS"):
             if env and key in env:
                 invocation += ["--setenv", key, env[key]]

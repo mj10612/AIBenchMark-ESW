@@ -7,15 +7,16 @@ import threading
 import time
 import unittest
 from argparse import Namespace
-from contextlib import redirect_stdout, redirect_stderr
+from contextlib import redirect_stderr, redirect_stdout
 from dataclasses import replace
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from unittest.mock import MagicMock, patch
 
 from compiler_tools import find_clang
+
 from aibenchmark_esw import cli
-from aibenchmark_esw.baseline_check import verify_baseline, current_fingerprints
+from aibenchmark_esw.baseline_check import current_fingerprints, verify_baseline
 from aibenchmark_esw.dataset import DatasetLoader
 from aibenchmark_esw.evaluation import evaluate_task
 from aibenchmark_esw.llm.client import LLMClient
@@ -239,10 +240,13 @@ class TestWorkflowFeatures(unittest.TestCase):
 
     def test_published_fingerprint_gate_matching_and_drift(self):
         fresh = current_fingerprints()
-        verify_baseline({"metadata": fresh}, fresh)
-        bad = {**fresh, "evaluator_sha256": "stale"}
+        report = json.loads(Path('results/baseline.json').read_text(encoding='utf-8'))
+        report['metadata'].update(fresh, source_dirty=False)
+        verify_baseline(report, fresh)
+        bad = copy.deepcopy(report)
+        bad['metadata']['evaluator_sha256'] = 'stale'
         with self.assertRaisesRegex(ValueError, "stale evaluator"):
-            verify_baseline({"metadata": bad}, fresh)
+            verify_baseline(bad, fresh)
 
     @unittest.skipUnless(find_clang(), "Cross-object integration requires Clang")
     def test_real_arm_object_target_budgets_and_comparison_rejection(self):
@@ -281,16 +285,19 @@ class TestWorkflowFeatures(unittest.TestCase):
             self.assertIn("Per-task totals", rendered)
             self.assertIn("Largest gap: tier1_crc16", rendered)
             self.assertIn("Memory unavailable", rendered)
-        rows = list(csv.DictReader(io.StringIO(render_comparison(comparison, "csv-long"))))
+        exported_rows = list(csv.DictReader(io.StringIO(render_comparison(comparison, "csv-long"))))
+        rows = [row for row in exported_rows if row["scope"] == "task"]
+        self.assertTrue(any(row["scope"] == "by_tier" for row in exported_rows))
+        self.assertTrue(any(row["scope"] == "by_category" for row in exported_rows))
         self.assertEqual(len(rows), 2)
-        self.assertEqual(set(rows[0]), {"model","task_id","total","functional","memory","safety","measured","pass_at_1"})
+        self.assertTrue({"model","task_id","total","functional","memory","safety","measured","pass_at_1", "scope", "group", "tier", "category", "delta_vs_baseline"}.issubset(rows[0]))
         self.assertEqual(rows[1]["memory"], "")
         third = copy.deepcopy(reference)
         third.model_name = "three"
         comparison = compare_runs([BenchmarkReporter.to_json_dict([reference], "one"),
             BenchmarkReporter.to_json_dict([other], "two"), BenchmarkReporter.to_json_dict([third], "three")])
         self.assertEqual(comparison["largest_gap"]["high"]["model"], "three")
-        self.assertEqual(len(list(csv.DictReader(io.StringIO(render_comparison(comparison, "csv-long"))))), 3)
+        self.assertEqual(len([row for row in csv.DictReader(io.StringIO(render_comparison(comparison, "csv-long"))) if row["scope"] == "task"]), 3)
         self.assertIn("| three | 100.00 |", render_comparison(comparison))
 
     def test_eval_invalid_assets_are_retained_before_compiler_construction(self):

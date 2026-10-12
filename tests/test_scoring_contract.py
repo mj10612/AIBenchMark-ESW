@@ -3,13 +3,19 @@ from pathlib import Path
 
 from aibenchmark_esw.metrics.scorer import BenchmarkScorer
 from aibenchmark_esw.models import (
-    CompilationResult, SizeMetrics, StaticSafetyMetrics, TaskConfig, TaskLimits, TaskWeights, TestResult,
+    CompilationResult,
+    SizeMetrics,
+    StaticSafetyMetrics,
+    TaskConfig,
+    TaskLimits,
+    TaskWeights,
+    TestResult,
 )
 
 
 class TestDocumentedScoringContract(unittest.TestCase):
     def task(self):
-        return TaskConfig("contract", "contract", 1, "test", "c99", "", TaskLimits(1000, 200),
+        return TaskConfig("contract", "contract", 1, "general", "c99", "", TaskLimits(1000, 200),
                           TaskWeights(), "solution.c", Path("."))
 
     def test_unused_ram_cannot_compensate_excess_flash_or_vice_versa(self):

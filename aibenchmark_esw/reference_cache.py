@@ -4,8 +4,8 @@ import json
 import threading
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Optional
 from tempfile import TemporaryDirectory
+from typing import Optional
 
 from aibenchmark_esw.provenance import task_sha256, text_sha256
 from aibenchmark_esw.sandbox.size_analyzer import SizeAnalyzer
@@ -60,7 +60,8 @@ class ReferenceCache:
                     record = ReferenceValidation(size.flash_bytes, size.ram_bytes)
             except (OSError, ValueError) as error:
                 record = ReferenceValidation(error=str(error))
-            self._records[key] = record
+            if record.error is None:
+                self._records[key] = record
             return record, False
 
 

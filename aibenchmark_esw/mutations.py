@@ -4,15 +4,15 @@ These mutations check suite adequacy, not model quality. A compilation error or
 an incomplete execution is an invalid fixture, never evidence of a killed fault.
 """
 
-from dataclasses import dataclass
-from concurrent.futures import ThreadPoolExecutor
 import math
 import re
-from typing import List, Optional, Tuple
+from concurrent.futures import ThreadPoolExecutor
+from dataclasses import dataclass
+from typing import Optional
 
 from aibenchmark_esw.provenance import collect_run_metadata
-from aibenchmark_esw.sandbox.executor import ExecutionSandbox
 from aibenchmark_esw.sandbox.c_source import mask_noncode
+from aibenchmark_esw.sandbox.executor import ExecutionSandbox
 
 GENERATOR_VERSION = "c-operators-v1"
 
@@ -21,7 +21,7 @@ GENERATOR_VERSION = "c-operators-v1"
 class Mutation:
     name: str
     description: str
-    replacements: Tuple[Tuple[str, str], ...]
+    replacements: tuple[tuple[str, str], ...]
     offset: Optional[int] = None
 
     def apply(self, source):
@@ -42,6 +42,28 @@ def _mutation(name, description, before, after):
 
 
 MUTATIONS = {
+    "tier2_can_frame": (
+        _mutation("dlc-over-eight", "Classic CAN rejects DLC 9 without changing output.",
+                  "(raw->control&15U)>8U", "(raw->control&15U)>9U"),
+        _mutation("extended-shift", "Extended IDs use 29 bits at bit 3.",
+                  "(ext?3:21)", "(ext?4:21)"),
+        _mutation("ignore-format", "Standard and extended identifiers never share a filter.",
+                  "frame->extended==filter->extended &&", ""),
+        _mutation("remote-data", "Remote requests never publish data bytes.",
+                  "if(!frame.remote) for", "if(true) for"),
+        _mutation("clear-overrun-on-pop", "Overflow is latched until explicitly cleared.",
+                  "--q->count;return CAN_OK;", "--q->count;q->overrun=false;return CAN_OK;"),
+    ),
+    "tier2_windowed_watchdog": (
+        _mutation("naive-window", "Elapsed subtraction must survive timer rollover.",
+                  "uint32_t elapsed=now-m->origin;", "uint32_t elapsed=now < m->origin ? 0 : now-m->origin;"),
+        _mutation("carry-heartbeats", "Each refresh requires new heartbeats from every task.",
+                  "m->seen=0;\n    m->origin=now;", "m->origin=now;"),
+        _mutation("skip-starvation", "A missing registered heartbeat latches starvation.",
+                  "else if (m->seen != m->registered)", "else if (false)"),
+        _mutation("early-boundary", "The minimum window endpoint is inclusive.",
+                  "elapsed < m->window_min", "elapsed <= m->window_min"),
+    ),
     "tier1_crc16": (
         _mutation("discard-high-bit", "Bytes >= 128 must retain their high bit in the CRC.",
                   "(uint16_t)byte << 8", "(uint16_t)(byte & 0x7FU) << 8"),
@@ -123,6 +145,12 @@ MUTATIONS = {
                   "if (count > dst_capacity - output) return COBS_NO_SPACE;", ""),
     ),
     "tier4_dma_buffer": (
+        _mutation("only-sixteen-bytes", "Valid 8/24/32-byte storage must work for both halves.",
+                  "length % 8U != 0", "length != 16"),
+        _mutation("unaligned-half", "Both halves, not just the base, require alignment.",
+                  "length % 8U != 0", "length % 4U != 0"),
+        _mutation("unguarded-acquire", "Acquire must enter and leave on successful and rejected ownership paths.",
+                  "b->hal.enter(b->hal.ctx);\n    bool ok = b->owner[half] == DMA_READY;", "bool ok = b->owner[half] == DMA_READY;"),
         _mutation("steal-reader", "A DMA completion cannot steal an application-owned half.",
                   "bool ok = b->owner[half] == DMA_OWNED;", "bool ok = true;"),
         _mutation("skip-invalidation", "DMA writes require cache invalidation before publication.",
@@ -133,6 +161,12 @@ MUTATIONS = {
                   "(uintptr_t)storage % 4U != 0", "false"),
     ),
     "tier3_spi_flash": (
+        _mutation("erase-address-overflow", "An aligned address above 24 bits is still invalid.",
+                  "address > UINT32_C(0xFFFFFF) || address % 4096U", "address % 4096U"),
+        _mutation("erase-without-ready", "Erase must wait before WREN, not just after erase.",
+                  "int status = ready(d);\n    if (status != FLASH_OK) return status;\n    status = enable(d);", "int status = enable(d);"),
+        _mutation("erase-wren-error", "Erase propagates WREN errors without issuing erase.",
+                  "if (status != FLASH_OK) return status;\n    uint8_t tx[4]", "uint8_t tx[4]"),
         _mutation("cross-page", "Programs split at actual 256-byte page boundaries.",
                   "256U - (address & 255U)", "256U"),
         _mutation("little-endian-address", "NOR commands serialize 24-bit addresses most-significant byte first.",
@@ -143,6 +177,8 @@ MUTATIONS = {
                   "if (status != FLASH_OK) return status;\n        uint8_t tx[260];", "uint8_t tx[260];"),
     ),
     "tier4_uart_frame_fix": (
+        _mutation("space-without-reset", "An insufficient destination must reset exactly once.",
+                  "hal->reset(hal->ctx);", "if (error != UART_SPACE) hal->reset(hal->ctx);"),
         _mutation("skip-checksum", "Only verified frames publish caller output.",
                   "if (byte != checksum)", "if (0)"),
         _mutation("skip-reset", "Errors invoke peripheral recovery exactly once.",
@@ -197,10 +233,20 @@ def generate_mutations(source, max_mutants=20):
             number_match = re.match(r"(?:0[xX][0-9A-Fa-f]+|[0-9]+)", before)
             assert number_match is not None
             number = number_match.group()
-            value = int(number, 16 if number.lower().startswith("0x") else 10)
-            after = str(value + 1) + before[len(number):]
+            base = 16 if number.lower().startswith('0x') else 8 if len(number) > 1 and number.startswith('0') else 10
+            try:
+                value = int(number, base)
+            except ValueError:
+                continue
+            suffix = before[len(number):]
+            def literal(value, base=base, suffix=suffix):
+                if value < 0:
+                    return f'({value}{suffix})'
+                digits = (f'0x{value:X}' if base == 16 else '0' + format(value, 'o') if base == 8 and value else str(value))
+                return digits + suffix
+            after = literal(value + 1)
             kind = "increment"
-            locations.append((match.start(), before, str(value - 1) + before[len(number):], "decrement"))
+            locations.append((match.start(), before, literal(value - 1), "decrement"))
         locations.append((match.start(), before, after, kind))
     for match in re.finditer(r"\b[A-Za-z_]\w*(?:\s*->\s*\w+)*\s*(==|!=)\s*NULL\b", masked):
         locations.append((match.start(), source[match.start():match.end()], "0" if match.group(1) == "==" else "1", "null"))
@@ -210,7 +256,7 @@ def generate_mutations(source, max_mutants=20):
                   "INT32_MAX": "INT32_MIN", "UINT16_MAX": "UINT8_MAX", "UINT32_MAX": "UINT16_MAX", "SIZE_MAX": "0U"}
     for match in re.finditer(r"\b(?:" + "|".join(boundaries) + r")\b", masked):
         locations.append((match.start(), match.group(), boundaries[match.group()], "boundary"))
-    probes: List[Mutation] = []
+    probes: list[Mutation] = []
     for offset, before, after, kind in sorted(locations, key=lambda item: (item[0], item[3])):
         probes.append(Mutation(f"auto-{len(probes) + 1:04d}-{kind}",
                                f"{kind} at offset {offset}: {before} -> {after}",
@@ -244,7 +290,7 @@ def _evaluate_mutation(task, reference, mutation, executor):
     return record
 
 
-def run_mutations(tasks, loader, executor=None, *, auto=False, max_mutants=20, jobs=1, min_score=0.0):
+def run_mutations(tasks, loader, executor=None, *, auto=False, max_mutants=20, jobs=1, min_score=1.0):
     """Return a JSON-serializable adequacy report; ``passed`` controls CLI/CI exit.
 
     Only fully executed assertion failures kill a reviewed mutant. Surviving,
@@ -289,7 +335,8 @@ def run_mutations(tasks, loader, executor=None, *, auto=False, max_mutants=20, j
             if auto:
                 generated = generate_mutations(reference, max_mutants)
                 with ThreadPoolExecutor(max_workers=jobs) as pool:
-                    records = list(pool.map(lambda mutation: _evaluate_mutation(task, reference, mutation, executor), generated))
+                    records = list(pool.map(lambda mutation, task=task, reference=reference:
+                                            _evaluate_mutation(task, reference, mutation, executor), generated))
                 counts = {status: sum(record["status"] == status for record in records)
                           for status in ("killed", "survived", "invalid")}
                 valid = counts["killed"] + counts["survived"]

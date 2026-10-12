@@ -1,15 +1,16 @@
 import unittest
 from pathlib import Path
+
+from aibenchmark_esw.metrics.scorer import BenchmarkScorer
 from aibenchmark_esw.models import (
+    CompilationResult,
+    SizeMetrics,
+    StaticSafetyMetrics,
     TaskConfig,
     TaskLimits,
     TaskWeights,
-    CompilationResult,
     TestResult,
-    SizeMetrics,
-    StaticSafetyMetrics,
 )
-from aibenchmark_esw.metrics.scorer import BenchmarkScorer
 
 
 class TestBenchmarkScorer(unittest.TestCase):
@@ -18,7 +19,7 @@ class TestBenchmarkScorer(unittest.TestCase):
             id="test_task",
             name="Test Task",
             tier=1,
-            category="test",
+            category="general",
             target_standard="c99",
             description="Test task description",
             limits=TaskLimits(max_flash_bytes=1000, max_ram_bytes=200),

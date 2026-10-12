@@ -57,13 +57,11 @@ void disabled_else(void){calloc(1,1);}
         self.assertEqual(metrics.error_count, 0)
         self.assertEqual(metrics.warning_count, 0)
 
-    def test_named_allocator_policy_stays_conservative_for_bindings(self):
-        # Documented lexical policy: narrowing this to direct calls regresses
-        # macro aliases and function-pointer allocation (issue #13).
+    def test_allocator_local_values_are_exempt_without_hiding_api_bindings(self):
         with TemporaryDirectory() as directory:
             source = Path(directory) / "source.c"
             source.write_text("void f(void){int free=3; (void)free;}\n")
-            self.assertEqual(StaticAnalyzer("off").analyze(source).error_count, 1)
+            self.assertEqual(StaticAnalyzer("off").analyze(source).error_count, 0)
 
     def test_host_capabilities_are_flagged_with_aliases_and_ignore_member_access(self):
         with TemporaryDirectory() as directory:
@@ -84,7 +82,7 @@ void disabled_else(void){calloc(1,1);}
             source = Path(directory) / "candidate.c"
             source.write_text("void f(void) { malloc(1); }", encoding="utf-8")
             with patch.dict("os.environ", {"AIBENCHMARK_ESW_CPPCHECK": "off"}), \
-                    patch("aibenchmark_esw.sandbox.static_analyzer.subprocess.run") as invoke:
+                    patch("aibenchmark_esw.sandbox.static_analyzer.run_bounded") as invoke:
                 metrics = StaticAnalyzer().analyze(source)
                 invoke.assert_not_called()
                 self.assertEqual(metrics.cppcheck_status, "disabled")
@@ -114,8 +112,8 @@ void disabled_else(void){calloc(1,1);}
         with TemporaryDirectory() as directory:
             source = Path(directory) / "solution.c"
             source.write_text("#define ALLOC malloc\nvoid fn(void) { ALLOC(1); }", encoding="utf-8")
-            with patch("aibenchmark_esw.sandbox.static_analyzer.subprocess.run",
-                       return_value=subprocess.CompletedProcess([], 1, "", "invalid option")):
+            with patch("aibenchmark_esw.sandbox.static_analyzer.run_bounded",
+                       return_value=subprocess.CompletedProcess([], 1, b"", b"invalid option")):
                 metrics = StaticAnalyzer("cppcheck").analyze(source)
         self.assertEqual(metrics.error_count, 1)
         self.assertEqual(metrics.cppcheck_status, "failed")
@@ -164,8 +162,8 @@ void normal(void) {}
             source = Path(directory) / "solution.c"
             source.write_text("void fn(void) { void *ptr = malloc(16); free(ptr); }", encoding="utf-8")
             analyzer = StaticAnalyzer("cppcheck")
-            with patch("aibenchmark_esw.sandbox.static_analyzer.subprocess.run",
-                       return_value=subprocess.CompletedProcess([], 0, "", "")):
+            with patch("aibenchmark_esw.sandbox.static_analyzer.run_bounded",
+                       return_value=subprocess.CompletedProcess([], 0, b"", b"")):
                 self.assertEqual(analyzer.analyze(source).error_count, 1)
 
     def test_explicit_diagnostic_format_counts_all_enabled_severities(self):
@@ -173,8 +171,8 @@ void normal(void) {}
             source = Path(directory) / "solution.c"
             source.write_text("void fn(void) {}", encoding="utf-8")
             output = "error:uninitvar:uninitialized\nwarning:unused:unused\nstyle:style:style\nperformance:perf:perf\nportability:port:port\n"
-            with patch("aibenchmark_esw.sandbox.static_analyzer.subprocess.run",
-                       return_value=subprocess.CompletedProcess([], 0, "", output)) as run:
+            with patch("aibenchmark_esw.sandbox.static_analyzer.run_bounded",
+                       return_value=subprocess.CompletedProcess([], 0, b"", output.encode())) as run:
                 metrics = StaticAnalyzer("cppcheck").analyze(source, [Path(directory)], "c11")
             self.assertEqual(metrics.error_count, 1)
             self.assertEqual(metrics.warning_count, 4)
@@ -185,8 +183,8 @@ void normal(void) {}
         with TemporaryDirectory() as directory:
             source = Path(directory) / "solution.c"
             source.write_text("void fn(void) { goto end; end:; }", encoding="utf-8")
-            with patch("aibenchmark_esw.sandbox.static_analyzer.subprocess.run",
-                       return_value=subprocess.CompletedProcess([], 1, "", "invalid option")):
+            with patch("aibenchmark_esw.sandbox.static_analyzer.run_bounded",
+                       return_value=subprocess.CompletedProcess([], 1, b"", b"invalid option")):
                 self.assertEqual(StaticAnalyzer("cppcheck").analyze(source).warning_count, 1)
 
     def test_backend_status_distinguishes_disabled_completed_and_failed_runs(self):
@@ -196,12 +194,12 @@ void normal(void) {}
             with patch("aibenchmark_esw.sandbox.static_analyzer.shutil.which", return_value=None):
                 self.assertEqual(StaticAnalyzer().analyze(source).cppcheck_status, "disabled")
             analyzer = StaticAnalyzer("fixture-cppcheck")
-            with patch("aibenchmark_esw.sandbox.static_analyzer.subprocess.run", side_effect=OSError("tool missing")):
+            with patch("aibenchmark_esw.sandbox.static_analyzer.run_bounded", side_effect=OSError("tool missing")):
                 failed = analyzer.analyze(source)
             self.assertEqual(failed.cppcheck_status, "failed")
             self.assertIn("tool missing", failed.cppcheck_diagnostic)
-            with patch("aibenchmark_esw.sandbox.static_analyzer.subprocess.run",
-                       return_value=subprocess.CompletedProcess([], 0, "", "warning:fixture:diagnostic\n")):
+            with patch("aibenchmark_esw.sandbox.static_analyzer.run_bounded",
+                       return_value=subprocess.CompletedProcess([], 0, b"", b"warning:fixture:diagnostic\n")):
                 completed = analyzer.analyze(source)
             self.assertEqual(completed.cppcheck_status, "completed")
             self.assertEqual(completed.warning_count, 1)
@@ -212,7 +210,7 @@ void normal(void) {}
         with TemporaryDirectory() as directory:
             source = Path(directory) / "solution.c"
             source.write_text("void fn(void) { goto done; done:; }", encoding="utf-8")
-            with patch("aibenchmark_esw.sandbox.static_analyzer.subprocess.run",
+            with patch("aibenchmark_esw.sandbox.static_analyzer.run_bounded",
                        side_effect=subprocess.TimeoutExpired("cppcheck", 10)):
                 metrics = StaticAnalyzer("cppcheck").analyze(source)
             self.assertEqual(metrics.cppcheck_status, "timeout")

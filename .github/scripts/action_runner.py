@@ -44,8 +44,23 @@ def build_command(environment):
     extra=json.loads(environment.get('INPUT_EXTRA_ARGUMENTS') or '[]')
     if not isinstance(extra,list) or any(not isinstance(item,str) or '\x00' in item for item in extra):
         raise ValueError('extra-arguments must be a JSON array of argument strings')
-    if any(item.split('=',1)[0] in ('--output','--junit-output','--resume') for item in extra):
-        raise ValueError('extra-arguments cannot override artifact paths or resume another run')
+    identity = {'model', 'tasks', 'task', 'tier', 'category', 'tasks_root', 'solution', 'reference',
+                'output', 'junit_output', 'resume', 'save_solutions', 'compiler', 'jobs', 'dry_run',
+                'help', 'version'}
+    # Read aliases from this action revision, including flags added later.
+    import argparse
+    sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
+    try:
+        from aibenchmark_esw.cli import build_parser
+        parser = build_parser()
+        subcommands = next(action for action in parser._actions if isinstance(action, argparse._SubParsersAction))
+        actions = [*parser._actions, *subcommands.choices['run']._actions, *subcommands.choices['eval']._actions]
+        reserved = {flag for action in actions
+                    if action.dest in identity for flag in action.option_strings}
+    finally:
+        sys.path.pop(0)
+    if any(item.split('=',1)[0] in reserved for item in extra):
+        raise ValueError('extra-arguments cannot override dedicated identity, artifact, or control inputs')
     command += extra + ['--output',outputs['json'],'--junit-output',outputs['junit']]
     return command,outputs
 
@@ -65,6 +80,7 @@ def main():
         raise ValueError('Choose install, benchmark, or check')
     operation=sys.argv[1]
     if operation=='install':
+        build_command(os.environ)  # Validate identity before selecting optional provider dependencies.
         spec=install_spec(os.environ.get('INPUT_PACKAGE_VERSION',''),os.environ.get('INPUT_COMMAND') or 'run',
                           os.environ.get('GITHUB_ACTION_PATH'),os.environ.get('INPUT_MODEL') or 'baseline')
         return subprocess.run([sys.executable,'-m','pip','install',spec]).returncode
@@ -72,8 +88,18 @@ def main():
         return int(os.environ.get('BENCHMARK_EXIT_CODE') or '1')
     command,outputs=build_command(os.environ)
     _outputs(outputs)
-    code=subprocess.run(command).returncode
-    _outputs({'exit-code':code})
+    raw_code=subprocess.run(command).returncode
+    code=128-raw_code if raw_code<0 else raw_code
+    _outputs({'exit-code':code,'raw-exit-code':raw_code})
+    summary=os.environ.get('GITHUB_STEP_SUMMARY')
+    if summary:
+        from aibenchmark_esw.metrics.github_summary import github_summary
+        try:
+            report=json.loads(Path(outputs['json']).read_text(encoding='utf-8'))
+            with open(summary,'a',encoding='utf-8') as stream:
+                stream.write(github_summary(report)+'\n')
+        except (OSError,ValueError,TypeError,KeyError) as error:
+            print(f'Benchmark summary unavailable: {error}',file=sys.stderr)
     return code
 
 

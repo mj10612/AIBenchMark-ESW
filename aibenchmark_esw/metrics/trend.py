@@ -9,8 +9,9 @@ from collections import defaultdict
 from datetime import datetime
 
 from aibenchmark_esw.metrics.comparison import compare_runs, generation_conditions
-from aibenchmark_esw.metrics.measurements import portable_settings, generation_sequence
+from aibenchmark_esw.metrics.measurements import generation_sequence, portable_settings
 from aibenchmark_esw.metrics.reporter import BenchmarkReporter
+from aibenchmark_esw.metrics.text import csv_safe_row, markdown_text
 
 
 def trend_runs(reports, regression_threshold=0.0):
@@ -99,7 +100,7 @@ def render_trend(summary, format_name='markdown'):
         writer=csv.DictWriter(stream,fieldnames=fields,lineterminator='\n')
         writer.writeheader()
         for row in rows:
-            writer.writerow({key:json.dumps(value,sort_keys=True) if isinstance(value,(dict,list)) else value for key,value in row.items()})
+            writer.writerow(csv_safe_row({key:json.dumps(value,sort_keys=True) if isinstance(value,(dict,list)) else value for key,value in row.items()}))
         return stream.getvalue()
     if format_name not in ('markdown','cli'):
         raise ValueError('Unknown trend format: '+format_name)
@@ -109,5 +110,5 @@ def render_trend(summary, format_name='markdown'):
         lines += ['', 'Compatibility group: '+group['compatibility_sha256'], '| UTC | Model | Run | Score | Regression |','| :--- | :--- | :--- | ---: | :--- |']
         for row in group['runs']:
             cells=[row['created_at_utc'],row['model'],row['run_id'],f"{row['score']:.2f}",json.dumps(row['regressions'])]
-            lines.append('| '+' | '.join(str(cell).replace('|','\\|').replace('\n',' ') for cell in cells)+' |')
+            lines.append('| '+' | '.join(markdown_text(cell) for cell in cells)+' |')
     return '\n'.join(lines)

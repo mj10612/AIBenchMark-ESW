@@ -35,7 +35,13 @@ typedef struct {
     jmp_buf AbortFrame;
 } UNITY_STORAGE_T;
 
-extern UNITY_STORAGE_T Unity;
+/* A value copy exposes no writable pointer or assertion jump buffer. */
+typedef struct {
+    uint32_t NumberOfTests;
+    uint32_t TestFailures;
+    uint32_t TestIgnores;
+} UNITY_RESULT_T;
+UNITY_RESULT_T UnityGetResult(void);
 
 void UnityBegin(const char* filename);
 int UnityEnd(void);

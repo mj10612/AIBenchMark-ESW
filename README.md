@@ -8,7 +8,7 @@
 
 > A host-based benchmark for evaluating AI-generated embedded C using functional tests, resource budgets, and selected static safety rules.
 
-The project is in early development: 13 tasks and 113 C test cases provide a reproducible reference baseline. The published [100-point baseline](results/baseline.md) measures the bundled golden implementations; it is not an OpenAI or Claude model score. See [reproducibility](docs/REPRODUCIBILITY.md), the [roadmap](docs/ROADMAP.md), and [contributor guidance](CONTRIBUTING.md).
+The project is in early development: 15 tasks and 147 C test cases provide a reproducible reference baseline. The published [100-point baseline](results/baseline.md) measures the bundled golden implementations; it is not an OpenAI or Claude model score. See [reproducibility](docs/REPRODUCIBILITY.md), the [roadmap](docs/ROADMAP.md), and [contributor guidance](CONTRIBUTING.md).
 
 ---
 
@@ -47,14 +47,16 @@ However, **embedded systems software (firmware)** operates under fundamentally d
 | **1** | Core Fundamentals | `tier1_q15_math` | Saturating Q1.15 Arithmetic | Overflow-safe add/subtract/multiply, negative-product truncation, 16-bit-int portability |
 | **2** | FSM & Protocols | `tier2_debounce_fsm` | Noise-Immune Button Input Debounce FSM | Glitch rejection, multi-event emission (Click, Hold, Release) |
 | **2** | FSM & Protocols | `tier2_cobs_codec` | Bounded COBS packet codec | Zero-free framing, exact capacities, malformed blocks, 254-byte boundaries |
+| **2** | FSM & Protocols | `tier2_can_frame` | CAN Frame Mailbox | Standard/extended IDs, DLC/RTR validation, masked filters, bounded FIFO and latched overrun |
+| **2** | FSM & Protocols | `tier2_windowed_watchdog` | Windowed Watchdog | Rollover-safe refresh window, registered task heartbeats, latched early/late/starvation faults |
 | **2** | FSM & Protocols | `tier2_tick_timer` | Rollover-Safe Tick Timer | One-shot/periodic deadlines, missed expirations, phase retention, full-width intervals |
 | **3** | Device Drivers | `tier3_i2c_sensor` | I2C Temperature Sensor Driver with Mock HAL | Register verification, error/timeout propagation, fixed-point math |
 | **4** | Bug Fix & Safety | `tier4_bitmask_fix` | W1C Interrupt Status Register & Priority Bitmask Fix | Write-1-to-Clear race condition, bitfield isolation |
 | **2** | Fixed-point Control | `tier2_fixed_control` | Q8 PID and low-pass filter | Wide products, saturation, truncation, anti-windup |
 | **3** | Device Drivers | `tier3_spi_flash` | SPI NOR flash driver | JEDEC, 24-bit addresses, page splitting, WIP timeout |
-| **3** | Flash Update | `tier3_flash_update` | Dual-slot update state machine | CRC read-back, atomic commit, power-cut recovery |
-| **4** | DMA Ownership | `tier4_dma_buffer` | C11 double-buffer ownership | Alignment, critical sections, cache hooks, overrun |
-| **4** | Bug Fix & Recovery | `tier4_uart_frame_fix` | UART frame receiver repair | Global poll budget, checksum, recovery, output preservation |
+| **3** | Flash Management | `tier3_flash_update` | Dual-slot update state machine | CRC read-back, atomic commit, power-cut recovery |
+| **4** | Concurrency | `tier4_dma_buffer` | C11 double-buffer ownership | Alignment, critical sections, cache hooks, overrun |
+| **4** | Bug Fix & Safety | `tier4_uart_frame_fix` | UART frame receiver repair | Global poll budget, checksum, recovery, output preservation |
 
 ---
 
@@ -155,7 +157,7 @@ aibenchmark-esw compare --results results/openai.json results/claude.json \
 aibenchmark-esw eval --task tier1_crc16 --solution results/openai_sources/tier1_crc16.c
 ```
 
-Comparison requires identical task sets, weights, standards, and compatible recorded evaluator, dataset, and toolchain settings. Failed tasks remain in the denominator. Legacy files can be compared with explicit missing-provenance warnings. Token usage, generation duration, and provider cost are reported with measurement coverage; unknown costs remain unknown. Explicit input/output token prices can supplement provider pricing, and an optional spend guard records its reservations and charged amount.
+Comparison requires identical task sets, weights, standards, and compatible recorded evaluator, dataset, and toolchain settings. Failed tasks remain in the denominator. Legacy files can be compared with explicit missing-provenance warnings. Token usage, generation duration, and provider cost are reported with measurement coverage; unknown costs remain unknown. Explicit input/output token prices replace provider pricing (both flags are required), and an optional spend guard records its reservations and charged amount. See [provider accounting and repair](docs/PROVIDER_ACCOUNTING.md) for retry, cached-token, and context policies.
 
 For cross-toolchain validation, set `AIBENCHMARK_ESW_COMPILER` to a compiler executable (for example, `clang`); an explicit `--compiler` argument takes precedence. Provider settings must be supported by the selected model. A token-limit-truncated response is recorded as a generation failure.
 
@@ -197,7 +199,7 @@ The combined size ($\text{Flash} + \text{RAM}$) is compared to the measured refe
 * Missing or unreadable measurements are reported as unavailable and receive no memory points.
 * References that fail to compile, do not complete and pass every test, or exceed either resource budget produce an explicit reference-validation error and receive no memory points.
 
-Reference implementations must pass all functional tests and fit the budgets with the compiler used for comparisons. The refreshed TCC baseline scores 100/100 and passes all 113 tests. The ring buffer's Flash budget is 2048 bytes, accommodating its measured 1474-byte TCC object footprint. Its RAM footprint is legitimately zero because it uses caller-owned storage. The Q1.15 task has 16 cases, including a sweep of all 65,536 raw values for selected arithmetic identities and scaling checks; it does not exhaust all input pairs. The tick timer has 16 cases for wrap, deadline boundaries, phase retention, and missed-expiration counts; real elapsed time from its stored origin must remain below 2^32 ticks. Other compilers may produce different footprints; resource limits remain enforced for both candidates and references.
+Reference implementations must pass all functional tests and fit the budgets with the compiler used for comparisons. The refreshed TCC baseline scores 100/100 and passes all 147 tests. The ring buffer's Flash budget is 2048 bytes, accommodating its measured 1474-byte TCC object footprint. Its RAM footprint is legitimately zero because it uses caller-owned storage. The Q1.15 task has 16 cases, including a sweep of all 65,536 raw values for selected arithmetic identities and scaling checks; it does not exhaust all input pairs. The tick timer has 16 cases for wrap, deadline boundaries, phase retention, and missed-expiration counts; real elapsed time from its stored origin must remain below 2^32 ticks. Other compilers may produce different footprints; resource limits remain enforced for both candidates and references.
 
 ### 3. Static Code Safety ($S_{\text{safety}}$, 20%)
 Checks selected embedded safety rules using built-in heuristics and, when installed, `cppcheck`. These checks are not full MISRA-C certification. Penalizes:
@@ -215,12 +217,21 @@ The built-in allocation rule conservatively rejects named references to `malloc`
 ```text
 AIBenchMark-ESW/
 ├── pyproject.toml              # Python packaging & dependencies
+├── setup.py                    # Dataset packaging hook
+├── MANIFEST.in                 # Source distribution contents
+├── uv.lock                     # Locked development/provider dependencies
+├── action.yml                  # Consumer GitHub Action
+├── docs/                       # Reproducibility, policies and usage
+├── results/                    # Published reference evidence
+├── .github/                    # CI, action helpers and dependency maintenance
+├── SECURITY.md                 # Security boundary and reporting policy
 ├── README.md                   # Project documentation & quickstart
 ├── NOTICE                      # Copyright & third-party license notices
 ├── CONTRIBUTING.md             # Guide for contributing new tasks
 ├── aibenchmark_esw/            # Python benchmark orchestrator
 │   ├── cli.py                  # CLI command entry point
 │   ├── dataset.py              # Task discovery & loader
+│   ├── schemas/                # Report schema and trusted asset metadata
 │   ├── models.py               # Data models and evaluation types
 │   ├── llm/                    # LLM API adapter (LiteLLM)
 │   ├── sandbox/                # Compiler execution, size analysis, static analysis
@@ -230,6 +241,8 @@ AIBenchMark-ESW/
 │   ├── tier1_crc16/            # Tier 1: CRC16 Checksum Engine
 │   ├── tier1_q15_math/         # Tier 1: Saturating Q1.15 Arithmetic
 │   ├── tier2_debounce_fsm/     # Tier 2: Button Debounce FSM
+│   ├── tier2_can_frame/        # Tier 2: CAN Frame Mailbox
+│   ├── tier2_windowed_watchdog/ # Tier 2: Windowed Watchdog
 │   ├── tier2_tick_timer/       # Tier 2: Rollover-Safe Tick Timer
 │   ├── tier3_i2c_sensor/       # Tier 3: I2C Sensor Driver (Mock HAL)
 │   ├── tier2_cobs_codec/       # Tier 2: Bounded COBS Codec
@@ -289,7 +302,7 @@ aibenchmark-esw aggregate --results results/run1.json results/run2.json --format
 aibenchmark-esw compare --results results/model_a.json results/model_b.json --format markdown
 # Stable long-form columns: model,task_id,total,functional,memory,safety,measured,pass_at_1.
 aibenchmark-esw compare --results results/model_a.json results/model_b.json --format csv-long
-# Test adequacy against 47 reviewed faulty candidates across all 13 tasks.
+# Test adequacy against 63 reviewed faulty candidates across all 15 tasks.
 aibenchmark-esw mutations
 # Verify the published evidence corresponds to the current code and dataset.
 python -m aibenchmark_esw.baseline_check results/baseline.json

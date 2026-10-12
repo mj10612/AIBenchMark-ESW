@@ -1,29 +1,36 @@
-import sys
-import json
 import argparse
-import math
 import copy
+import json
+import math
+import os
+import sys
 import threading
-from concurrent.futures import ThreadPoolExecutor, wait, FIRST_COMPLETED
+from concurrent.futures import FIRST_COMPLETED, ThreadPoolExecutor, wait
+from dataclasses import replace
 from datetime import datetime, timezone
 from pathlib import Path
-from dataclasses import replace
-from aibenchmark_esw.models import TaskConfig
 
+from aibenchmark_esw import __version__
 from aibenchmark_esw.dataset import DatasetLoader, validate_task_assets
+from aibenchmark_esw.errors import error_diagnostic, redact
+from aibenchmark_esw.evaluation import evaluate_task, failed_evaluation
+from aibenchmark_esw.llm.client import (
+    LLMClient,
+    is_fatal_provider_error,
+    is_transient_provider_error,
+)
+from aibenchmark_esw.metrics.aggregation import aggregate_runs, render_aggregation
+from aibenchmark_esw.metrics.comparison import compare_runs, render_comparison
+from aibenchmark_esw.metrics.junit import render_junit
+from aibenchmark_esw.metrics.reporter import BenchmarkReporter
+from aibenchmark_esw.models import TaskConfig
+from aibenchmark_esw.output_paths import validate_output_paths
+from aibenchmark_esw.provenance import collect_run_metadata, text_sha256
+from aibenchmark_esw.reference_cache import ReferenceCache
+from aibenchmark_esw.report_io import atomic_write_json, atomic_write_text
+from aibenchmark_esw.resources import data_root
 from aibenchmark_esw.sandbox.executor import ExecutionSandbox
 from aibenchmark_esw.sandbox.static_analyzer import StaticAnalyzer
-from aibenchmark_esw.metrics.reporter import BenchmarkReporter
-from aibenchmark_esw.llm.client import LLMClient, is_fatal_provider_error
-from aibenchmark_esw.evaluation import evaluate_task, failed_evaluation
-from aibenchmark_esw.provenance import collect_run_metadata, text_sha256
-from aibenchmark_esw.metrics.comparison import compare_runs, render_comparison
-from aibenchmark_esw.report_io import atomic_write_json, atomic_write_text
-from aibenchmark_esw.output_paths import validate_output_paths
-from aibenchmark_esw.resources import data_root
-from aibenchmark_esw.reference_cache import ReferenceCache
-from aibenchmark_esw.metrics.aggregation import aggregate_runs, render_aggregation
-from aibenchmark_esw.metrics.junit import render_junit
 
 
 class _Parser(argparse.ArgumentParser):
@@ -80,11 +87,22 @@ def _temperature(value: str) -> float:
     return number
 
 
+def _pass_k(value):
+    try:
+        items = [int(item.strip()) for item in value.split(',')]
+    except ValueError as error:
+        raise argparse.ArgumentTypeError('must be a comma-separated list of positive integers') from error
+    if not items or any(item < 1 for item in items) or len(set(items)) != len(items):
+        raise argparse.ArgumentTypeError('must contain distinct positive integers')
+    return items
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = _Parser(
         prog="aibenchmark-esw",
         description="AIBenchMark-ESW: Open-Source Embedded AI Coding Benchmark Framework",
     )
+    parser.add_argument('--version', action='version', version=f'%(prog)s {__version__}')
     subparsers = parser.add_subparsers(dest="command", help="Command to run")
 
     # Command: list
@@ -129,6 +147,8 @@ def build_parser() -> argparse.ArgumentParser:
     run_p.add_argument("--retry-backoff", type=_backoff, default=1.0)
     run_p.add_argument("--prompt-strategy", choices=["single", "plan"], default="single")
     run_p.add_argument("--multi-turn", dest="prompt_strategy", action="store_const", const="plan")
+    run_p.add_argument('--repair-turns', type=_retries, default=0, help='Maximum compile-error repair turns (0..10; default 0)')
+    run_p.add_argument('--api-key-env', help='Environment variable containing the provider key; only the variable name is recorded')
     run_p.add_argument("--review-turn", action="store_true")
     run_p.add_argument("--system-prompt-file", type=Path, help="UTF-8 system prompt override")
     run_p.add_argument("--dry-run", action="store_true", help="Validate inputs and estimate token/cost bounds without requests or compilation")
@@ -136,14 +156,16 @@ def build_parser() -> argparse.ArgumentParser:
     run_p.add_argument("--output-cost-per-million", type=_nonnegative_float, help="Custom output token price in USD per million")
     run_p.add_argument("--max-cost-usd", type=_nonnegative_float, help="Shared conservative request budget; requires --max-tokens and known pricing")
     run_p.add_argument("--samples", type=_positive_int, default=1, help="Independent full runs per task")
-    run_p.add_argument("--pass-k", type=str, help="Comma-separated pass@k values, each <= --samples")
+    run_p.add_argument("--pass-k", type=_pass_k, help="Comma-separated pass@k values, each <= --samples")
     run_p.add_argument("--variant-seed", type=int, help="Deterministic task variant seed")
     run_p.add_argument("--heldout-tests", type=Path, help="Private per-task tests root; excluded from prompts")
 
     # Command: report
     report_p = subparsers.add_parser("report", help="Generate report from evaluation JSON")
     report_p.add_argument("--results", type=str, required=True, help="Path to results JSON file")
-    report_p.add_argument("--format", choices=["cli", "markdown", "junit", "html", "sarif"], default="cli", help="Output format")
+    report_p.add_argument("--format", choices=["cli", "markdown", "junit", "html", "sarif", 'github-summary'], default="cli", help="Output format")
+    report_p.add_argument('--source-root', type=Path, help='Repository root for verified SARIF candidate sources')
+    report_p.add_argument('--source-mapping', type=Path, help='JSON mapping of task or task:sample IDs to persistent candidate paths')
     report_p.add_argument("--output", type=Path)
     schema_p = subparsers.add_parser("validate-report", help="Validate report structure and cross-field consistency offline")
     schema_p.add_argument("results", type=Path, nargs="?")
@@ -155,6 +177,7 @@ def build_parser() -> argparse.ArgumentParser:
     compare_p.add_argument("--output", type=Path, help="Save the comparison to a file")
     compare_p.add_argument("--baseline-model", help="Baseline model for JUnit regression assertions")
     compare_p.add_argument("--regression-threshold", type=_nonnegative_float, default=0.0)
+    compare_p.add_argument('--fail-on-regression', action='store_true', help='Save evidence, then exit 3 on a measured regression')
 
     aggregate_p = subparsers.add_parser("aggregate", help="Summarize independent repeated runs offline")
     aggregate_p.add_argument("--results", nargs="+", type=Path, required=True)
@@ -164,6 +187,7 @@ def build_parser() -> argparse.ArgumentParser:
     trend_p.add_argument("--results", nargs="+", type=Path, required=True)
     trend_p.add_argument("--format", choices=["cli", "markdown", "json", "csv", "html"], default="markdown")
     trend_p.add_argument("--regression-threshold", type=_nonnegative_float, default=0.0)
+    trend_p.add_argument('--fail-on-regression', action='store_true', help='Save evidence, then exit 3 on a measured regression')
     trend_p.add_argument("--output", type=Path)
     replay_p = subparsers.add_parser("replay", help="Re-evaluate saved candidates offline with fresh evaluator provenance")
     replay_p.add_argument("--results", type=Path, required=True)
@@ -180,7 +204,7 @@ def build_parser() -> argparse.ArgumentParser:
     mutation_p.add_argument("--output", type=Path)
     mutation_p.add_argument("--auto", action="store_true", help="Generate bounded operator mutants in addition to reviewed faults")
     mutation_p.add_argument("--max-mutants", type=_positive_int, default=20)
-    mutation_p.add_argument("--jobs", type=_positive_int, default=1)
+    mutation_p.add_argument("--jobs", type=_positive_int, default=1, help='Maximum concurrent mutants within each task')
     mutation_p.add_argument("--min-score", type=_nonnegative_float, default=1.0)
     for command in (doctor_p, mutation_p, replay_p):
         command.add_argument("--compiler", type=str)
@@ -193,9 +217,11 @@ def build_parser() -> argparse.ArgumentParser:
         command.add_argument("--isolation", choices=["native", "process", "container", "bwrap"], default="native")
         command.add_argument("--container-engine", help="Docker or Podman executable")
         command.add_argument("--container-image", default="gcc:14", help="Compiler-equipped container image")
+        command.add_argument("--hardening", choices=["auto", "off", "required"], default="auto", help="Native exploit-mitigation policy; cross-target footprints retain freestanding flags")
         command.add_argument("--warnings", action="store_true", help="Score compiler warnings as additional safety findings")
-        command.add_argument("--static-analysis-timeout", type=_positive_float, default=30.0)
-        command.add_argument("--extended-safety-rules", action="store_true")
+        if command is not mutation_p:
+            command.add_argument("--static-analysis-timeout", type=_positive_float, default=30.0)
+            command.add_argument("--extended-safety-rules", action="store_true")
         command.add_argument("--memory-limit-bytes", type=_positive_int)
         command.add_argument("--sanitizers", default="", help="Comma-separated address,undefined; requires GCC/Clang")
     for command in (run_p, eval_p, replay_p):
@@ -225,12 +251,15 @@ def _new_executor(args):
         memory_limit_bytes=getattr(args, "memory_limit_bytes", None), sanitizers=sanitizers,
         target=getattr(args, "target", None), cross_compiler=getattr(args, "cross_compiler", None),
         warnings=getattr(args, "warnings", False), container_engine=getattr(args, "container_engine", None),
-        container_image=getattr(args, "container_image", "gcc:14"))
+        container_image=getattr(args, "container_image", "gcc:14"), hardening=getattr(args, "hardening", "auto"))
 
 
 def _new_analyzer(args):
-    return StaticAnalyzer(timeout_seconds=getattr(args, "static_analysis_timeout", 30.0),
-                          extended_rules=getattr(args, "extended_safety_rules", False))
+    return StaticAnalyzer(cppcheck_cmd="cppcheck" if getattr(args, "isolation", "native") == "container"
+                          and os.environ.get("AIBENCHMARK_ESW_CPPCHECK") is None else None,
+                          timeout_seconds=getattr(args, "static_analysis_timeout", 30.0),
+                          extended_rules=getattr(args, "extended_safety_rules", False),
+                          max_output_bytes=getattr(args, "max_output_bytes", 1048576))
 
 
 def _target_task(task: TaskConfig, args) -> TaskConfig:
@@ -243,7 +272,12 @@ def _target_task(task: TaskConfig, args) -> TaskConfig:
 
 
 def _new_client(args):
+    key_env = getattr(args, 'api_key_env', None)
+    api_key = os.environ.get(key_env) if key_env else None
+    if key_env and not api_key:
+        raise ValueError(f'Provider key environment variable is empty: {key_env}')
     return LLMClient(model_name=args.model, temperature=getattr(args, "temperature", None),
+        api_key=api_key, repair_turns=getattr(args, 'repair_turns', 0),
         max_tokens=getattr(args, "max_tokens", None), request_timeout=getattr(args, "request_timeout", 60),
         max_retries=getattr(args, "max_retries", 0), retry_backoff_seconds=getattr(args, "retry_backoff", 1),
         prompt_strategy=getattr(args, "prompt_strategy", "single"), review_turn=getattr(args, "review_turn", False),
@@ -253,13 +287,18 @@ def _new_client(args):
 
 
 def _benchmark_roots(args=None):
-    roots = [data_root() / "tasks", data_root() / "third_party" / "unity", Path(__file__).resolve().parent]
-    if args is not None and getattr(args, "tasks_root", None) is not None:
-        roots.append(Path(args.tasks_root))
-    if args is not None and getattr(args, "heldout_tests", None) is not None:
-        roots.append(Path(args.heldout_tests))
-    return roots + [child for root in roots[:1] + roots[3:] if root.is_dir()
+    dataset_roots = [data_root() / 'tasks']
+    for name in ('tasks_root', 'heldout_tests'):
+        if args is not None and getattr(args, name, None) is not None:
+            dataset_roots.append(Path(getattr(args, name)))
+    roots = dataset_roots + [data_root() / 'third_party' / 'unity', Path(__file__).resolve().parent]
+    return roots + [child for root in dataset_roots if root.is_dir()
                     for child in root.iterdir() if child.is_dir()]
+
+
+def _task_headers(task):
+    return '\n'.join(f'// --- {header.name} ---\n{header.read_text(encoding="utf-8")}'
+                     for header in sorted((task.task_dir / 'include').glob('*.h')))
 
 
 def _show_load_errors(loader):
@@ -312,7 +351,8 @@ def cmd_eval(args: argparse.Namespace) -> int:
     if asset_errors:
         model = "golden_reference" if args.reference else "local_solution" if args.solution else "starter_stub"
         result = failed_evaluation(task, model, "Task asset validation failed: " + "; ".join(asset_errors))
-        asset_metadata = {"run_status": "completed", "selected_tasks": [task.id], "pending_tasks": []}
+        asset_metadata = collect_run_metadata([task], static_analyzer=_new_analyzer(args))
+        asset_metadata.update(run_status="completed", selected_tasks=[task.id], pending_tasks=[])
         _save_checkpoint(output, [result], model, asset_metadata)
         _write_junit(args, [result], model, asset_metadata)
         print(BenchmarkReporter.generate_cli_table([result], model, asset_metadata))
@@ -331,7 +371,7 @@ def cmd_eval(args: argparse.Namespace) -> int:
         if not sol_path.is_file():
             print(f"Error: Solution file '{args.solution}' not found.", file=sys.stderr)
             return 1
-        with open(sol_path, "r", encoding="utf-8") as f:
+        with open(sol_path, encoding="utf-8") as f:
             solution_code = f.read()
     else:
         # Default to starter code
@@ -352,20 +392,21 @@ def cmd_eval(args: argparse.Namespace) -> int:
         _save_checkpoint(output, [pending], model_name, metadata)
     interrupted = False
     try:
-        errors = validate_task_assets(task)
-        if errors:
-            raise ValueError("Task asset validation failed: " + "; ".join(errors))
         result = evaluate_task(task, solution_code, loader.get_reference_solution(task.id),
                                model_name, executor, analyzer)
     except KeyboardInterrupt:
         result = failed_evaluation(task, model_name, "Evaluation interrupted by user")
         interrupted = True
     except Exception as error:
-        result = failed_evaluation(task, model_name, str(error))
+        result = failed_evaluation(task, model_name, error_diagnostic(error))
     if metadata is not None:
         metadata.update(run_status="interrupted" if interrupted else "completed",
                         pending_tasks=[task.id] if interrupted else [])
         _attach_provenance(result, metadata, task.id, solution_code)
+        if getattr(args, 'solution', None):
+            assert result.provenance is not None
+            result.provenance['candidate_source'] = str(Path(args.solution).resolve())
+            result.provenance['candidate_basename'] = Path(task.entry_file).name
         _save_checkpoint(output, [result], model_name, metadata)
     print(BenchmarkReporter.generate_cli_table([result], model_name=model_name, metadata=metadata))
     _task_diagnostics(args, result)
@@ -396,7 +437,7 @@ def _input_roots(loader):
 
 
 def _select_tasks(loader, args):
-    tasks = loader.list_tasks(tier=args.tier, category=getattr(args, "category", None))
+    tasks = loader.list_tasks(tier=getattr(args, "tier", None), category=getattr(args, "category", None))
     if args.tasks is not None:
         selected_ids = [item.strip() for item in args.tasks.split(",")]
         if any(not item for item in selected_ids) or len(set(selected_ids)) != len(selected_ids):
@@ -442,14 +483,23 @@ def cmd_validate(args: argparse.Namespace) -> int:
 
 
 def _cmd_run_once(args: argparse.Namespace) -> int:
-    from aibenchmark_esw.resume import load_resume, validate_resume, merge_generation_history
+    from aibenchmark_esw.resume import (
+        load_resume,
+        merge_generation_history,
+        validate_resume,
+    )
     saved = load_resume(args) if getattr(args, "resume", None) else None
     loader = getattr(args, "_prepared_loader", None) or DatasetLoader(getattr(args, "tasks_root", None))
     tasks = _select_tasks(loader, args)
     if not tasks:
         return 1
     if saved:
-        tasks = [loader.get_task(item) for item in saved["metadata"]["selected_tasks"]]
+        tasks = []
+        for item in saved["metadata"]["selected_tasks"]:
+            task = loader.get_task(item)
+            if task is None:
+                raise ValueError(f'Saved resume task is unavailable: {item}')
+            tasks.append(task)
     tasks = [_target_task(task, args) for task in tasks]
     solution_directory = getattr(args, "save_solutions", None)
     solution_paths = [] if solution_directory is None else [
@@ -474,9 +524,9 @@ def _cmd_run_once(args: argparse.Namespace) -> int:
         metadata["contamination_controls"] = args._variant_evidence
     option_names = ("compiler", "allow_standard_fallback", "compile_timeout", "max_output_bytes",
                     "isolation", "memory_limit_bytes", "sanitizers", "save_solutions", "tasks_root", "system_prompt_file",
-                    "target", "cross_compiler", "warnings", "container_engine", "container_image",
+                    "target", "cross_compiler", "warnings", "hardening", "container_engine", "container_image",
                     "static_analysis_timeout", "extended_safety_rules", "max_cost_usd",
-                    "input_cost_per_million", "output_cost_per_million", "variant_seed", "heldout_tests")
+                    "input_cost_per_million", "output_cost_per_million", "variant_seed", "heldout_tests", "api_key_env")
     metadata["run_options"] = {name: getattr(args, name, None) for name in option_names}
     metadata["run_options"]["compiler"] = executor.compiler_path
     metadata["run_options"].update(allow_standard_fallback=executor.allow_standard_fallback,
@@ -501,7 +551,7 @@ def _cmd_run_once(args: argparse.Namespace) -> int:
     cache = ReferenceCache()
     if getattr(args, "preflight", False):
         from aibenchmark_esw.doctor import run_doctor
-        readiness = run_doctor(tasks, loader, executor, True, cache)
+        readiness = run_doctor(tasks, loader, executor, True, cache, analyzer)
         if not readiness["passed"]:
             for check in readiness["checks"]:
                 if not check["passed"]:
@@ -541,8 +591,7 @@ def _cmd_run_once(args: argparse.Namespace) -> int:
             if llm is None:
                 solution_code = reference
             else:
-                headers = "\n".join(f"// --- {header.name} ---\n{header.read_text(encoding='utf-8')}"
-                                    for header in sorted((task.task_dir / "include").glob("*.h")))
+                headers = _task_headers(task)
                 messages = llm.build_prompt(task.prompt, headers, loader.get_starter_code(task.id) or "",
                     target_standard=task.target_standard, prompt_overrides=task.prompt_overrides,
                     system_prompt=system_prompt)
@@ -555,13 +604,27 @@ def _cmd_run_once(args: argparse.Namespace) -> int:
                 atomic_write_text(Path(solution_directory) / f"{task.id}.c", solution_code)
             result = evaluate_task(task, solution_code, reference, args.model, executor,
                                    _new_analyzer(args), reference_cache=cache)
+            for _ in range(llm.repair_turns if llm is not None else 0):
+                assert llm is not None
+                if result.compiled:
+                    break
+                generating = True
+                solution_code = llm.repair_solution(redact(result.error_log or result.test_result.output, (llm.api_key,)))
+                generating = False
+                if not solution_code:
+                    raise ValueError('Model returned an empty repair implementation')
+                if solution_directory is not None:
+                    atomic_write_text(Path(solution_directory) / f'{task.id}.c', solution_code)
+                result = evaluate_task(task, solution_code, reference, args.model, executor,
+                                       _new_analyzer(args), reference_cache=cache)
         except (KeyboardInterrupt, InterruptedError):
             result = failed_evaluation(task, args.model, "Evaluation interrupted by user")
             state = "interrupted"
         except Exception as error:
-            result = failed_evaluation(task, args.model, str(error))
+            result = failed_evaluation(task, args.model, error_diagnostic(error, (llm.api_key,) if llm else ()))
             if generating:
-                state = "fatal" if is_fatal_provider_error(error) else "generation_failure"
+                state = ('fatal' if is_fatal_provider_error(error) else 'transient'
+                         if is_transient_provider_error(error) else 'generation_failure')
             if llm and llm.last_generation and llm.last_generation.get("partial_response") and solution_directory is not None:
                 atomic_write_text(Path(solution_directory) / f"{task.id}.truncated.c",
                                   llm.extract_c_code(llm.last_generation["partial_response"]))
@@ -574,6 +637,10 @@ def _cmd_run_once(args: argparse.Namespace) -> int:
             if llm.last_generation:
                 messages = llm.last_generation.get("request_messages", messages)
         _attach_provenance(result, metadata, task.id, solution_code, messages)
+        if solution_directory and solution_code:
+            assert result.provenance is not None
+            result.provenance['candidate_source'] = str((Path(solution_directory) / f'{task.id}.c').resolve())
+            result.provenance['candidate_basename'] = Path(task.entry_file).name
         return index, result, state
 
     interrupted = aborted = False
@@ -587,17 +654,17 @@ def _cmd_run_once(args: argparse.Namespace) -> int:
             state = "interrupted"
         results[index] = result
         attempts += 1
-        generation_failures += state in ("fatal", "generation_failure")
-        if state == "generation_failure":
+        generation_failures += state in ("fatal", "generation_failure", "transient")
+        if state in ('generation_failure', 'transient'):
             retryable_streak.add(index)
         elif state != "fatal":
             retryable_streak.clear()
-        failure_streak = failure_streak + 1 if state == "generation_failure" else 0
+        failure_streak = failure_streak + 1 if state in ('generation_failure', 'transient') else 0
         interrupted |= state == "interrupted" and not aborted
         aborted |= state == "fatal" or failure_streak >= 3
         if aborted:
             pending.update(retryable_streak)
-        if state not in ("interrupted", "fatal") and not (state == "generation_failure" and aborted):
+        if state not in ("interrupted", "fatal", "transient") and not (state == "generation_failure" and aborted):
             pending.discard(index)
         if interrupted or aborted:
             cancelled.set()
@@ -644,6 +711,7 @@ def _cmd_run_once(args: argparse.Namespace) -> int:
         aborted = True
         # Failed provider requests are retryable pending slots on resume.
         pending.update(i for i in indices if not results[i].test_result.completed)
+    aborted |= bool(pending) and not interrupted
     checkpoint("interrupted" if interrupted else "aborted" if aborted else "completed")
     print("\n" + BenchmarkReporter.generate_cli_table(results, model_name=args.model, metadata=metadata))
     _write_junit(args, results, args.model, metadata)
@@ -656,15 +724,19 @@ def _cmd_run_once(args: argparse.Namespace) -> int:
 def _dry_run(args, loader, tasks, system_prompt):
     from aibenchmark_esw.llm.costs import pricing, token_upper_bound
     client = _new_client(args)
-    prices = pricing(None, args.model, getattr(args, "input_cost_per_million", None),
+    try:
+        import litellm as provider
+    except ImportError:
+        provider = None
+    prices = pricing(provider, args.model, getattr(args, "input_cost_per_million", None),
                      getattr(args, "output_cost_per_million", None))
-    turns = 1 + (getattr(args, "prompt_strategy", "single") == "plan") + bool(getattr(args, "review_turn", False))
+    turns = 1 + (getattr(args, "prompt_strategy", "single") == "plan") + bool(getattr(args, "review_turn", False)) + getattr(args, 'repair_turns', 0)
     rows = []
     for task in tasks:
         errors = validate_task_assets(task)
         if errors:
             raise ValueError(f"{task.id}: " + "; ".join(errors))
-        headers = "\n".join(path.read_text(encoding="utf-8") for path in sorted((task.task_dir / "include").glob("*.h")))
+        headers = _task_headers(task)
         prompt = client.build_prompt(task.prompt, headers, loader.get_starter_code(task.id) or "",
             target_standard=task.target_standard, prompt_overrides=task.prompt_overrides, system_prompt=system_prompt)
         input_bound = token_upper_bound(prompt)
@@ -682,6 +754,7 @@ def _dry_run(args, loader, tasks, system_prompt):
                      "maximum_attempts_per_turn": attempts, "samples": count,
                      "estimated_cost_upper_usd": estimate})
     payload = {"mode": "dry-run", "model": args.model, "tasks": rows, "pricing": prices,
+               'pricing_note': None if prices else 'Pricing unavailable; install the llm extra or provide both custom prices',
                "estimate_method": "conservative UTF-8 byte bounds; actual provider tokenization and billing may differ",
                "initial_prompt_token_upper_bound_total": sum(row["prompt_token_upper_bound"] for row in rows),
                "maximum_completion_tokens_total": sum(row["maximum_output_tokens_per_turn"] * row["turns"] *
@@ -690,6 +763,8 @@ def _dry_run(args, loader, tasks, system_prompt):
                "estimated_total_upper_usd": sum(row["estimated_cost_upper_usd"] for row in rows)
                    if all(row["estimated_cost_upper_usd"] is not None for row in rows) else None}
     if args.output:
+        if Path(args.output).exists() and Path(args.output).stat().st_size:
+            raise ValueError('Dry-run output already exists; choose a new output path to preserve the checkpoint')
         atomic_write_json(args.output, payload)
     print(json.dumps(payload, indent=2))
     return 0
@@ -724,7 +799,11 @@ def cmd_run(args):
             transformed_loader._tasks = {task.id: task for task in prepared}
             args._prepared_loader = transformed_loader
             args._variant_evidence = evidence
-            return _run_samples(args, saved) if args.samples > 1 and not args.dry_run else _cmd_run_once(args)
+            return _dispatch_run(args, saved)
+    return _dispatch_run(args, saved)
+
+
+def _dispatch_run(args, saved):
     return _run_samples(args, saved) if args.samples > 1 and not args.dry_run else _cmd_run_once(args)
 
 
@@ -750,21 +829,23 @@ def _run_samples(args, saved):
 
 
 def cmd_trend(args):
-    from aibenchmark_esw.metrics.trend import trend_runs, render_trend
+    from aibenchmark_esw.metrics.trend import render_trend, trend_runs
     directories = [path for path in args.results if path.is_dir()]
     validate_output_paths([args.output], protected_files=args.results,
                           protected_roots=_benchmark_roots(args) + directories)
-    from aibenchmark_esw.output_paths import _input_files
+    from aibenchmark_esw.output_paths import input_files
     paths = [file for path in args.results for file in
-             (sorted(_input_files([path])) if path.is_dir() else [path]) if file.suffix.lower() == ".json"]
+             (sorted(input_files([path])) if path.is_dir() else [path]) if file.suffix.lower() == ".json"]
     if not paths:
         raise ValueError("Trend inputs contain no JSON reports")
     reports = [json.loads(path.read_text(encoding="utf-8")) for path in paths]
-    rendered = render_trend(trend_runs(reports, args.regression_threshold), args.format)
+    summary = trend_runs(reports, args.regression_threshold)
+    rendered = render_trend(summary, args.format)
     if args.output:
         atomic_write_text(args.output, rendered)
     print(rendered)
-    return 0
+    return 3 if getattr(args, 'fail_on_regression', False) and any(
+        run['regressions'] for group in summary['groups'] for run in group['runs']) else 0
 
 
 def cmd_replay(args):
@@ -801,6 +882,7 @@ def cmd_report(args: argparse.Namespace) -> int:
             render_metadata.update(sampling=data["sampling"], collection_generation_summary=data.get("generation_summary"))
         validate_output_paths([getattr(args, "output", None)], protected_files=[report_file], protected_roots=_benchmark_roots())
         from aibenchmark_esw.metrics.exports import generate_sarif
+        from aibenchmark_esw.metrics.github_summary import github_summary
         export_results = results
         if "samples" in data:
             export_results = []
@@ -809,7 +891,10 @@ def cmd_report(args: argparse.Namespace) -> int:
                 for result in child_results:
                     result.provenance = {**(result.provenance or {}), "sample_run_id": sample["metadata"]["run_id"]}
                 export_results.extend(child_results)
-        rendered = (generate_sarif(export_results, model_name, render_metadata) if args.format == "sarif" else
+        rendered = (github_summary(data) if args.format == 'github-summary' else
+                    generate_sarif(export_results, model_name, render_metadata,
+                                   source_root=getattr(args, 'source_root', None),
+                                   source_mapping=json.loads(args.source_mapping.read_text(encoding='utf-8')) if getattr(args, 'source_mapping', None) else None) if args.format == "sarif" else
                     BenchmarkReporter.generate_html(results, model_name, render_metadata) if args.format == "html" else
                     render_junit(export_results, model_name, render_metadata) if args.format == "junit" else
                     BenchmarkReporter.generate_markdown(results, model_name, render_metadata) if args.format == "markdown"
@@ -842,6 +927,9 @@ def cmd_compare(args: argparse.Namespace) -> int:
         validate_output_paths([args.output], protected_files=args.results, protected_roots=_benchmark_roots(args))
         reports = [json.loads(Path(path).read_text(encoding="utf-8")) for path in args.results]
         comparison = compare_runs(reports)
+        from aibenchmark_esw.metrics.comparison import comparison_regressions
+        regressions = comparison_regressions(comparison, getattr(args, 'baseline_model', None),
+            getattr(args, 'regression_threshold', 0.0)) if getattr(args, 'fail_on_regression', False) else []
         rendered = render_comparison(comparison, args.format, baseline_model=getattr(args, "baseline_model", None),
                                      regression_threshold=getattr(args, "regression_threshold", 0.0))
         if args.output:
@@ -854,7 +942,7 @@ def cmd_compare(args: argparse.Namespace) -> int:
         for warning in comparison["warnings"]:
             print(f"Warning: {warning}", file=sys.stderr)
     sys.stdout.write(rendered + ("" if rendered.endswith("\n") else "\n"))
-    return 0
+    return 3 if regressions else 0
 
 
 def cmd_aggregate(args):
@@ -875,7 +963,8 @@ def cmd_doctor(args):
     tasks = _select_tasks(loader, args)
     if not tasks:
         return 1
-    report = run_doctor([_target_task(task, args) for task in tasks], loader, _new_executor(args), args.check_references)
+    report = run_doctor([_target_task(task, args) for task in tasks], loader, _new_executor(args),
+                        args.check_references, analyzer=_new_analyzer(args))
     for check in report["checks"]:
         print(f"[{'PASS' if check['passed'] else 'FAIL'}] {check['name']}: {check['detail']}")
     return 0 if report["passed"] and not loader.load_errors else 1
@@ -904,7 +993,7 @@ def main() -> None:
 
     if not args.command:
         parser.print_help()
-        sys.exit(0)
+        sys.exit(2)
 
     dispatch = {
         "list": cmd_list,
@@ -923,7 +1012,7 @@ def main() -> None:
 
     try:
         exit_code = dispatch[args.command](args)
-    except (OSError, ValueError) as error:
+    except (OSError, ValueError, TypeError, KeyError, IndexError, AttributeError) as error:
         print(f"Error: {error}", file=sys.stderr)
         exit_code = 1
     except KeyboardInterrupt:

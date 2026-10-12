@@ -8,12 +8,13 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 from unittest.mock import patch
 
-from aibenchmark_esw.dataset import DatasetLoader
-from aibenchmark_esw.sandbox.executor import ExecutionSandbox
-from aibenchmark_esw.sandbox.cross_compiler import CrossCompiler
-from aibenchmark_esw.sandbox.static_analyzer import StaticAnalyzer
-from aibenchmark_esw.sandbox.size_analyzer import SizeAnalyzer
 from compiler_tools import find_clang
+
+from aibenchmark_esw.dataset import DatasetLoader
+from aibenchmark_esw.sandbox.cross_compiler import CrossCompiler
+from aibenchmark_esw.sandbox.executor import ExecutionSandbox
+from aibenchmark_esw.sandbox.size_analyzer import SizeAnalyzer
+from aibenchmark_esw.sandbox.static_analyzer import StaticAnalyzer
 
 
 class TestRuntimeIssueRegressions(unittest.TestCase):
@@ -53,7 +54,7 @@ class TestRuntimeIssueRegressions(unittest.TestCase):
             path = Path(directory) / 'candidate.c'
             path.write_text('int x;')
             analyzer = StaticAnalyzer('cppcheck', timeout_seconds=45)
-            with patch('aibenchmark_esw.sandbox.static_analyzer.subprocess.run',
+            with patch('aibenchmark_esw.sandbox.static_analyzer.run_bounded',
                        side_effect=subprocess.TimeoutExpired('cppcheck', 45)) as run:
                 result = analyzer.analyze(path)
             self.assertEqual(run.call_args.kwargs['timeout'], 45)
@@ -137,7 +138,9 @@ class TestRuntimeIssueRegressions(unittest.TestCase):
 
     def test_compiler_deadline_kills_descendant_holding_output(self):
         import time
+
         from test_runtime_controls import child_alive
+
         from aibenchmark_esw.sandbox.process_runner import run_bounded
         task = DatasetLoader().get_task('tier1_crc16')
         program = ('import subprocess,sys,time\n'
@@ -164,7 +167,7 @@ class TestRuntimeIssueRegressions(unittest.TestCase):
         if not compiler:
             self.skipTest('GCC unavailable')
         task = DatasetLoader().get_task('tier1_crc16')
-        code = '#define X0 1\n' + ''.join('#define X%d X%d,X%d\n' % (n, n-1, n-1) for n in range(1, 24))
+        code = '#define X0 1\n' + ''.join(f'#define X{n} X{n-1},X{n-1}\n' for n in range(1, 24))
         code += 'int expanded[]={X23};\n'
         with TemporaryDirectory() as directory:
             result = ExecutionSandbox(compiler, isolation='process', memory_limit_bytes=128*1024*1024,

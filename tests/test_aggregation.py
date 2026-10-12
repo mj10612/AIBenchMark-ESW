@@ -3,14 +3,23 @@ import csv
 import io
 import json
 import unittest
-
 from dataclasses import asdict
-from aibenchmark_esw.metrics.scorer import SCORING_FORMULA_VERSION, SAFETY_ERROR_PENALTY, SAFETY_WARNING_PENALTY
+
 from aibenchmark_esw.metrics.aggregation import aggregate_runs, render_aggregation
 from aibenchmark_esw.metrics.reporter import BenchmarkReporter
+from aibenchmark_esw.metrics.scorer import (
+    SAFETY_ERROR_PENALTY,
+    SAFETY_WARNING_PENALTY,
+    SCORING_FORMULA_VERSION,
+)
 from aibenchmark_esw.models import (
-    DimensionScores, SizeMetrics, StaticSafetyMetrics, TaskEvaluationResult,
-    TaskLimits, TaskWeights, TestResult,
+    DimensionScores,
+    SizeMetrics,
+    StaticSafetyMetrics,
+    TaskEvaluationResult,
+    TaskLimits,
+    TaskWeights,
+    TestResult,
 )
 
 
@@ -32,7 +41,13 @@ def fixture_report(score=100, run_id="run-1", model="provider/alias"):
                 "static_analysis": {"engine": "builtin", "cppcheck_version": None},
                 "generation_settings": {"temperature": 0.5, "max_tokens": 100, "request_timeout_seconds": 60}}
     metadata["scoring_policy"] = {"formula_version": SCORING_FORMULA_VERSION, "safety_error_penalty": SAFETY_ERROR_PENALTY, "safety_warning_penalty": SAFETY_WARNING_PENALTY, "tasks": {"one": {"weights": asdict(result.weights), "limits": asdict(result.limits)}}}
-    return BenchmarkReporter.to_json_dict([result], model, metadata)
+    report = BenchmarkReporter.to_json_dict([result], model, metadata)
+    # This editable fixture represents legacy input without derived summaries;
+    # tests adding a summary must recompute it from their edited measurements.
+    report.pop('generation_summary')
+    for field in ('tier_weighted_score', 'tier_weight_policy', 'by_tier', 'by_category'):
+        report.pop(field)
+    return report
 
 
 class TestAggregation(unittest.TestCase):

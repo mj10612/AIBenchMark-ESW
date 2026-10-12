@@ -4,7 +4,7 @@ import json
 import subprocess
 import sys
 import unittest
-from contextlib import redirect_stdout, redirect_stderr
+from contextlib import redirect_stderr, redirect_stdout
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from types import SimpleNamespace as N
@@ -97,7 +97,7 @@ class TestCLIBacklogWorkflows(unittest.TestCase):
             output.write_text("{}", encoding="utf-8")
             process = subprocess.run([sys.executable, "-m", "aibenchmark_esw.baseline_check", str(output)], capture_output=True, text=True)
             self.assertEqual(process.returncode, 1)
-            self.assertIn("stale", process.stderr)
+            self.assertIn("selected_tasks", process.stderr)
         for command in ("doctor", "mutations"):
             status, _, error = self.invoke([command, "--tasks", "missing"])
             self.assertEqual(status, 1)

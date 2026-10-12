@@ -8,10 +8,25 @@
 #include <string.h>
 #include <inttypes.h>
 
-UNITY_STORAGE_T Unity;
+/* Private oracle state: candidates cannot bind or interpose this symbol. */
+static UNITY_STORAGE_T Unity;
+static int UnityStarted;
+
+UNITY_RESULT_T UnityGetResult(void)
+{
+    UNITY_RESULT_T result = {Unity.NumberOfTests, Unity.TestFailures, Unity.TestIgnores};
+    return result;
+}
 
 void UnityBegin(const char* filename)
 {
+    /* A candidate cannot reset failures by restarting the runner. */
+    if (UnityStarted) {
+        Unity.TestFailures++;
+        Unity.CurrentTestFailed = 1;
+        return;
+    }
+    UnityStarted = 1;
     Unity.TestFile = filename;
     Unity.CurrentTestName = NULL;
     Unity.CurrentTestLineNumber = 0;

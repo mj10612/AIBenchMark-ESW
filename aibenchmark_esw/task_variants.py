@@ -1,14 +1,14 @@
 """Reproducible task authoring overlays; public assets are never called hidden."""
 
-from contextlib import contextmanager
-from dataclasses import replace
 import hashlib
 import json
-from pathlib import Path
 import re
 import shutil
+from contextlib import contextmanager
+from dataclasses import replace
+from pathlib import Path
 from tempfile import TemporaryDirectory
-from typing import Any, Dict
+from typing import Any
 
 VARIANT_VERSION = "crc-polynomial-v1"
 
@@ -76,7 +76,9 @@ def prepare_task_variants(tasks, variant_seed=None, heldout_tests=None):
             supplied[entry.name] = tests
         if not supplied:
             raise ValueError("heldout_tests contains no task suites")
-    evidence: Dict[str, Any] = {"variant_version": VARIANT_VERSION, "variant_seed": variant_seed,
+    if variant_seed is not None and 'tier1_crc16' in supplied:
+        raise ValueError('Cannot combine --variant-seed with a tier1_crc16 held-out suite: expectations may use a different polynomial')
+    evidence: dict[str, Any] = {"variant_version": VARIANT_VERSION, "variant_seed": variant_seed,
                 "heldout_tests_used": bool(supplied),
                 "heldout_sha256": heldout_digest.hexdigest() if supplied else None,
                 "variant_parameters": {}}

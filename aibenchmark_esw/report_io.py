@@ -2,8 +2,9 @@
 
 import json
 import os
-import tempfile
+import stat
 import time
+import uuid
 from pathlib import Path
 
 
@@ -24,10 +25,11 @@ def _atomic_write(path, write):
     path.parent.mkdir(parents=True, exist_ok=True)
     temporary = None
     try:
-        with tempfile.NamedTemporaryFile(mode="w", encoding="utf-8", newline="\n",
-                                         dir=path.parent, prefix=f".{path.name}.",
-                                         suffix=".tmp", delete=False) as stream:
-            temporary = Path(stream.name)
+        temporary = path.parent / f'.{path.name}.{uuid.uuid4().hex}.tmp'
+        descriptor = os.open(temporary, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o666)
+        with os.fdopen(descriptor, 'w', encoding='utf-8', newline='\n') as stream:
+            if os.name == 'posix' and path.exists():
+                temporary.chmod(stat.S_IMODE(path.stat().st_mode))
             write(stream)
             stream.flush()
             os.fsync(stream.fileno())

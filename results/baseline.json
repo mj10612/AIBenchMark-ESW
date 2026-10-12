@@ -1,30 +1,30 @@
 {
   "schema_version": 2,
   "metadata": {
-    "run_id": "c07a53d2e28a4284987f8926bf442ca1",
-    "created_at_utc": "2026-10-08T00:42:30.749991+00:00",
+    "run_id": "219480ebcf514451a1daa561ee8d4d95",
+    "created_at_utc": "2026-10-11T05:40:13.447584+00:00",
     "benchmark_version": "0.1.0",
-    "evaluator_sha256": "82cd9fb5890b9c025dbe351eefef334c1177377566646562443eb894d1dc4e5b",
-    "python_version": "3.14.3",
+    "evaluator_sha256": "f1b3c788846ed55d30d3ab3c1bafad0fb7f60718e33d942a8101019dec607a84",
+    "python_version": "3.11.15",
     "platform": {
       "system": "Windows",
-      "release": "11",
+      "release": "10",
       "machine": "AMD64"
     },
     "compiler": {
-      "name": "clang",
-      "version": "clang version 19.1.5",
+      "name": "tcc",
+      "version": "tcc version 0.9.27 (x86_64 Windows)",
       "target": {
         "target": "host"
       },
-      "optimization": "-Os",
+      "optimization": "native",
       "allow_standard_fallback": false
     },
     "static_analysis": {
       "engine": "builtin",
       "cppcheck_version": null,
       "configuration": {
-        "version": 2,
+        "version": 4,
         "builtin_rules": [
           "allocation-reference",
           "misra.15.1",
@@ -35,6 +35,8 @@
           "host-filesystem"
         ],
         "extended_rules": false,
+        "max_output_bytes": 1048576,
+        "max_findings": 200,
         "timeout_seconds": 30.0,
         "basic_type_exceptions": [
           "plain int (status/main APIs)",
@@ -59,16 +61,18 @@
         ]
       }
     },
-    "source_revision": "082ec46bd40d2f4548945f7c28bba616a6d718ab",
-    "source_dirty": true,
+    "source_revision": "ce490de61eddb724508f3854ea1885f6cd113fe5",
+    "source_dirty": false,
     "selected_tasks": [
       "tier1_crc16",
       "tier1_q15_math",
       "tier1_ring_buffer",
+      "tier2_can_frame",
       "tier2_cobs_codec",
       "tier2_debounce_fsm",
       "tier2_fixed_control",
       "tier2_tick_timer",
+      "tier2_windowed_watchdog",
       "tier3_flash_update",
       "tier3_i2c_sensor",
       "tier3_spi_flash",
@@ -80,33 +84,37 @@
       "tier1_crc16": "core_fundamentals",
       "tier1_q15_math": "core_fundamentals",
       "tier1_ring_buffer": "core_fundamentals",
+      "tier2_can_frame": "fsm_and_protocols",
       "tier2_cobs_codec": "fsm_and_protocols",
       "tier2_debounce_fsm": "fsm_and_protocols",
-      "tier2_fixed_control": "firmware",
+      "tier2_fixed_control": "fixed_point_control",
       "tier2_tick_timer": "fsm_and_protocols",
-      "tier3_flash_update": "firmware",
+      "tier2_windowed_watchdog": "fsm_and_protocols",
+      "tier3_flash_update": "flash_management",
       "tier3_i2c_sensor": "device_drivers",
-      "tier3_spi_flash": "firmware",
+      "tier3_spi_flash": "device_drivers",
       "tier4_bitmask_fix": "bug_fix_and_safety",
       "tier4_dma_buffer": "concurrency",
-      "tier4_uart_frame_fix": "concurrency"
+      "tier4_uart_frame_fix": "bug_fix_and_safety"
     },
     "task_fingerprints": {
-      "tier1_crc16": "0b66c3354cbc19fd8155b69da63eb9821cdb2fb7dfe5c24fc4d9990944733cb7",
-      "tier1_q15_math": "a88b7483f4a4597257a67603969be48b51fdc8078f104cd5c1033626c22d0cc3",
-      "tier1_ring_buffer": "856b96a8a663b0c046bf59c31b4421581ad90efe8ea5f9c63b9842f4b3dd96ac",
-      "tier2_cobs_codec": "efdbd5d326bbc196336fbbfc3dae21e7ac07a17edc48352fe4e6af107583fdf5",
-      "tier2_debounce_fsm": "d6f9b9f4d0a25916bcf3ea9a9cef24e64ff4e4acd71f1bf7ba5df4d2a254aab8",
-      "tier2_fixed_control": "66ca1dac6481cc2d181ef1936cd29f1933f2b200f45478ac8fda21e852468883",
-      "tier2_tick_timer": "c92675411f25130458734eb3e4dae5fdeaadf4331d1130decc2b6809e3c74a52",
-      "tier3_flash_update": "b3def148d36d4030140b84d70cfadb7976e5185a83a85fb318175a254b2bfb98",
-      "tier3_i2c_sensor": "272a44630d07b7599c299809c873774f87f7e604bb9a6dfacb33bd41c5fbed96",
-      "tier3_spi_flash": "0568d1fc0b5eceeab990fbe912ec4bc4449e02dc90983fef915d46d80bdeb15a",
-      "tier4_bitmask_fix": "bccf133f78892143865fa673a9b9565f43505e39859e21dc472d5501ea03b365",
-      "tier4_dma_buffer": "b76b8c6983ab6c9c5be021eceea5ce8e5314e75471e3619516be0d2e507574e4",
-      "tier4_uart_frame_fix": "bbe6f7c60b4a575905fef1e381f8977371da6bca5a377ee7efe54fbf35eef436"
+      "tier1_crc16": "0b0e524ce9fa320945052441022b26595e7a58188b3162905bf23896dbbd9734",
+      "tier1_q15_math": "4a31d147057151bcd018aa421cb849d57b2fc93e752b4d165763287c07e1091f",
+      "tier1_ring_buffer": "750efc2fcd6fc186e414a6e470ac1e75fded4432d4e0d2133637b48ac5fa5fb4",
+      "tier2_can_frame": "cbc8cc8dfa0ecd9bcbe02515244112b44ba58c1891265f7ede2ab89ac37ecc93",
+      "tier2_cobs_codec": "e0d8e38ac017a140dafb44659d93e15cc56486d29f04788d4c17d17f0f99ceeb",
+      "tier2_debounce_fsm": "56a6cf42788072f4a5d8f763fe9b8af0a949105b467429f39393b78d5c15ede3",
+      "tier2_fixed_control": "8a029c491576548951695257aa9fa4fa356a6e69576d14b15b126165361796d1",
+      "tier2_tick_timer": "e6272cbbc9fb32e4c61a2a3f9edeaea25f1df538eabfedf955d27f246ec49b07",
+      "tier2_windowed_watchdog": "8e4dd0952df106cf6b22be7d24b75f4d01d28375e18aa15d2de5859a4f8fbc27",
+      "tier3_flash_update": "4ba56b9a822341e92cea28634ff7e8d9149a178f1464067df62096c0024d4afc",
+      "tier3_i2c_sensor": "4d684a35b1596a6bb660bda3a86df34f6df3b9cf21fffc2c2a2ec15fbb488b9a",
+      "tier3_spi_flash": "96a4304c7f4c86329488c46c5d68959f2c32e34b5a6da232b9fb0b5ce61f8517",
+      "tier4_bitmask_fix": "fc8c25e65a54af7ec6392f9b3aeec4c05c0299bef406cfce00d72e3a5869b4bd",
+      "tier4_dma_buffer": "5040d14fc7bf57da2fdd7b1aff52417df7ec8ae7c776234b00af7a8cc3e878dd",
+      "tier4_uart_frame_fix": "ea4941ba7dc4d03dd0b23220137c76fb4ceec7f47bad93c60813be8f2de55462"
     },
-    "dataset_sha256": "33924d0c6c9af95325974ac45aed9d4d07c6ed07541f2db7dc86699c1b9d67d3",
+    "dataset_sha256": "f2312a9944c5296fd55354f9f27cafafa920da443579e32581d6e4287124da97",
     "unreadable_assets": {},
     "generation_settings": null,
     "scoring_policy": {
@@ -147,6 +155,18 @@
           "limits": {
             "max_flash_bytes": 2048,
             "max_ram_bytes": 128,
+            "timeout_seconds": 5
+          }
+        },
+        "tier2_can_frame": {
+          "weights": {
+            "functional": 0.6,
+            "memory": 0.2,
+            "safety": 0.2
+          },
+          "limits": {
+            "max_flash_bytes": 8192,
+            "max_ram_bytes": 256,
             "timeout_seconds": 5
           }
         },
@@ -195,6 +215,18 @@
           "limits": {
             "max_flash_bytes": 1536,
             "max_ram_bytes": 0,
+            "timeout_seconds": 5
+          }
+        },
+        "tier2_windowed_watchdog": {
+          "weights": {
+            "functional": 0.6,
+            "memory": 0.2,
+            "safety": 0.2
+          },
+          "limits": {
+            "max_flash_bytes": 4096,
+            "max_ram_bytes": 256,
             "timeout_seconds": 5
           }
         },
@@ -281,6 +313,21 @@
       "compiler_warnings": false,
       "warning_flags": [],
       "containment": null,
+      "candidate_environment": "minimal-v1",
+      "oracle_policy": "private-unity-state-v1",
+      "hardening": {
+        "policy": "auto",
+        "compile_flags": [],
+        "binary_flags": [],
+        "available": false
+      },
+      "resource_limits": {
+        "process_count": 64,
+        "process_count_scope": "job",
+        "file_size_bytes": null,
+        "core_bytes": null,
+        "open_files": null
+      },
       "process_backend": "windows-job",
       "cpu_limit": null,
       "footprint": {
@@ -289,7 +336,7 @@
       }
     },
     "run_options": {
-      "compiler": "C:\\Program Files\\Microsoft Visual Studio\\2022\\Professional\\VC\\Tools\\Llvm\\x64\\bin\\clang.exe",
+      "compiler": "C:\\Users\\Admin\\scoop\\apps\\tcc\\0.9.27\\tcc\\tcc.exe",
       "allow_standard_fallback": false,
       "compile_timeout": 30.0,
       "max_output_bytes": 1048576,
@@ -302,6 +349,7 @@
       "target": null,
       "cross_compiler": null,
       "warnings": false,
+      "hardening": "auto",
       "container_engine": null,
       "container_image": "gcc:14",
       "static_analysis_timeout": 30.0,
@@ -310,7 +358,8 @@
       "input_cost_per_million": null,
       "output_cost_per_million": null,
       "variant_seed": null,
-      "heldout_tests": null
+      "heldout_tests": null,
+      "api_key_env": null
     },
     "run_status": "completed",
     "pending_tasks": []
@@ -322,726 +371,6 @@
     {
       "task_id": "tier1_crc16",
       "tier": 1,
-      "model_name": "baseline",
-      "compiled": true,
-      "test_result": {
-        "total": 7,
-        "passed": 7,
-        "failed": 0,
-        "ignored": 0,
-        "all_passed": true,
-        "completed": true,
-        "returncode": 0
-      },
-      "size_metrics": {
-        "flash_bytes": 130,
-        "ram_bytes": 0,
-        "ref_flash_bytes": 130,
-        "ref_ram_bytes": 0,
-        "measured": true
-      },
-      "safety_metrics": {
-        "error_count": 0,
-        "warning_count": 0,
-        "violations": [],
-        "cppcheck_status": "disabled",
-        "cppcheck_diagnostic": null,
-        "findings": []
-      },
-      "scores": {
-        "functional": 100.0,
-        "memory": 100.0,
-        "safety": 100.0,
-        "total": 100.0
-      },
-      "execution_time_sec": 0.873,
-      "error_log": null,
-      "weights": {
-        "functional": 0.6,
-        "memory": 0.2,
-        "safety": 0.2
-      },
-      "target_standard": "c99",
-      "effective_standard": "c99",
-      "generation": null,
-      "provenance": {
-        "reference_cache_hit": false,
-        "task_sha256": "0b66c3354cbc19fd8155b69da63eb9821cdb2fb7dfe5c24fc4d9990944733cb7",
-        "candidate_sha256": "90f8ff90c7858bfe4637ab3430e82370c79949f4aedc6ef9dd0bd189b20dc5a7",
-        "prompt_sha256": null
-      },
-      "limits": {
-        "max_flash_bytes": 1024,
-        "max_ram_bytes": 128,
-        "timeout_seconds": 5
-      },
-      "candidate_time_sec": 0.8728366999998798,
-      "reference_validation_time_sec": 0.008067900000241934,
-      "footprint_target": "host"
-    },
-    {
-      "task_id": "tier1_q15_math",
-      "tier": 1,
-      "model_name": "baseline",
-      "compiled": true,
-      "test_result": {
-        "total": 16,
-        "passed": 16,
-        "failed": 0,
-        "ignored": 0,
-        "all_passed": true,
-        "completed": true,
-        "returncode": 0
-      },
-      "size_metrics": {
-        "flash_bytes": 70,
-        "ram_bytes": 0,
-        "ref_flash_bytes": 70,
-        "ref_ram_bytes": 0,
-        "measured": true
-      },
-      "safety_metrics": {
-        "error_count": 0,
-        "warning_count": 0,
-        "violations": [],
-        "cppcheck_status": "disabled",
-        "cppcheck_diagnostic": null,
-        "findings": []
-      },
-      "scores": {
-        "functional": 100.0,
-        "memory": 100.0,
-        "safety": 100.0,
-        "total": 100.0
-      },
-      "execution_time_sec": 0.858,
-      "error_log": null,
-      "weights": {
-        "functional": 0.6,
-        "memory": 0.2,
-        "safety": 0.2
-      },
-      "target_standard": "c99",
-      "effective_standard": "c99",
-      "generation": null,
-      "provenance": {
-        "reference_cache_hit": false,
-        "task_sha256": "a88b7483f4a4597257a67603969be48b51fdc8078f104cd5c1033626c22d0cc3",
-        "candidate_sha256": "77d1452e3053e02bda883205d268005d490f938b02f7be2696386e100923bae6",
-        "prompt_sha256": null
-      },
-      "limits": {
-        "max_flash_bytes": 1024,
-        "max_ram_bytes": 0,
-        "timeout_seconds": 5
-      },
-      "candidate_time_sec": 0.8581812000002174,
-      "reference_validation_time_sec": 0.008144699999775185,
-      "footprint_target": "host"
-    },
-    {
-      "task_id": "tier1_ring_buffer",
-      "tier": 1,
-      "model_name": "baseline",
-      "compiled": true,
-      "test_result": {
-        "total": 11,
-        "passed": 11,
-        "failed": 0,
-        "ignored": 0,
-        "all_passed": true,
-        "completed": true,
-        "returncode": 0
-      },
-      "size_metrics": {
-        "flash_bytes": 384,
-        "ram_bytes": 0,
-        "ref_flash_bytes": 384,
-        "ref_ram_bytes": 0,
-        "measured": true
-      },
-      "safety_metrics": {
-        "error_count": 0,
-        "warning_count": 0,
-        "violations": [],
-        "cppcheck_status": "disabled",
-        "cppcheck_diagnostic": null,
-        "findings": []
-      },
-      "scores": {
-        "functional": 100.0,
-        "memory": 100.0,
-        "safety": 100.0,
-        "total": 100.0
-      },
-      "execution_time_sec": 0.905,
-      "error_log": null,
-      "weights": {
-        "functional": 0.6,
-        "memory": 0.2,
-        "safety": 0.2
-      },
-      "target_standard": "c99",
-      "effective_standard": "c99",
-      "generation": null,
-      "provenance": {
-        "reference_cache_hit": false,
-        "task_sha256": "856b96a8a663b0c046bf59c31b4421581ad90efe8ea5f9c63b9842f4b3dd96ac",
-        "candidate_sha256": "fb3a5b2b6042401d1e9e830334b67bd6283e361380feb453cd4fee2387d14164",
-        "prompt_sha256": null
-      },
-      "limits": {
-        "max_flash_bytes": 2048,
-        "max_ram_bytes": 128,
-        "timeout_seconds": 5
-      },
-      "candidate_time_sec": 0.9050327999998444,
-      "reference_validation_time_sec": 0.011831199999960518,
-      "footprint_target": "host"
-    },
-    {
-      "task_id": "tier2_cobs_codec",
-      "tier": 2,
-      "model_name": "baseline",
-      "compiled": true,
-      "test_result": {
-        "total": 9,
-        "passed": 9,
-        "failed": 0,
-        "ignored": 0,
-        "all_passed": true,
-        "completed": true,
-        "returncode": 0
-      },
-      "size_metrics": {
-        "flash_bytes": 609,
-        "ram_bytes": 0,
-        "ref_flash_bytes": 609,
-        "ref_ram_bytes": 0,
-        "measured": true
-      },
-      "safety_metrics": {
-        "error_count": 0,
-        "warning_count": 0,
-        "violations": [],
-        "cppcheck_status": "disabled",
-        "cppcheck_diagnostic": null,
-        "findings": []
-      },
-      "scores": {
-        "functional": 100.0,
-        "memory": 100.0,
-        "safety": 100.0,
-        "total": 100.0
-      },
-      "execution_time_sec": 0.937,
-      "error_log": null,
-      "weights": {
-        "functional": 0.6,
-        "memory": 0.2,
-        "safety": 0.2
-      },
-      "target_standard": "c99",
-      "effective_standard": "c99",
-      "generation": null,
-      "provenance": {
-        "reference_cache_hit": false,
-        "task_sha256": "efdbd5d326bbc196336fbbfc3dae21e7ac07a17edc48352fe4e6af107583fdf5",
-        "candidate_sha256": "75fe4540625a980305994bbb1c47da690c72819b2531f3e72379e6571d98b560",
-        "prompt_sha256": null
-      },
-      "limits": {
-        "max_flash_bytes": 2048,
-        "max_ram_bytes": 0,
-        "timeout_seconds": 5
-      },
-      "candidate_time_sec": 0.9372622999994746,
-      "reference_validation_time_sec": 0.007844200000363344,
-      "footprint_target": "host"
-    },
-    {
-      "task_id": "tier2_debounce_fsm",
-      "tier": 2,
-      "model_name": "baseline",
-      "compiled": true,
-      "test_result": {
-        "total": 7,
-        "passed": 7,
-        "failed": 0,
-        "ignored": 0,
-        "all_passed": true,
-        "completed": true,
-        "returncode": 0
-      },
-      "size_metrics": {
-        "flash_bytes": 292,
-        "ram_bytes": 0,
-        "ref_flash_bytes": 292,
-        "ref_ram_bytes": 0,
-        "measured": true
-      },
-      "safety_metrics": {
-        "error_count": 0,
-        "warning_count": 0,
-        "violations": [],
-        "cppcheck_status": "disabled",
-        "cppcheck_diagnostic": null,
-        "findings": []
-      },
-      "scores": {
-        "functional": 100.0,
-        "memory": 100.0,
-        "safety": 100.0,
-        "total": 100.0
-      },
-      "execution_time_sec": 0.872,
-      "error_log": null,
-      "weights": {
-        "functional": 0.6,
-        "memory": 0.2,
-        "safety": 0.2
-      },
-      "target_standard": "c99",
-      "effective_standard": "c99",
-      "generation": null,
-      "provenance": {
-        "reference_cache_hit": false,
-        "task_sha256": "d6f9b9f4d0a25916bcf3ea9a9cef24e64ff4e4acd71f1bf7ba5df4d2a254aab8",
-        "candidate_sha256": "2f2623c7abfec0ce13c3d1f3502e843ef7253e4962e798056d52306bf8e9c730",
-        "prompt_sha256": null
-      },
-      "limits": {
-        "max_flash_bytes": 1536,
-        "max_ram_bytes": 128,
-        "timeout_seconds": 5
-      },
-      "candidate_time_sec": 0.8721379999992678,
-      "reference_validation_time_sec": 0.012132300000303076,
-      "footprint_target": "host"
-    },
-    {
-      "task_id": "tier2_fixed_control",
-      "tier": 2,
-      "model_name": "baseline",
-      "compiled": true,
-      "test_result": {
-        "total": 7,
-        "passed": 7,
-        "failed": 0,
-        "ignored": 0,
-        "all_passed": true,
-        "completed": true,
-        "returncode": 0
-      },
-      "size_metrics": {
-        "flash_bytes": 327,
-        "ram_bytes": 0,
-        "ref_flash_bytes": 327,
-        "ref_ram_bytes": 0,
-        "measured": true
-      },
-      "safety_metrics": {
-        "error_count": 0,
-        "warning_count": 0,
-        "violations": [],
-        "cppcheck_status": "disabled",
-        "cppcheck_diagnostic": null,
-        "findings": []
-      },
-      "scores": {
-        "functional": 100.0,
-        "memory": 100.0,
-        "safety": 100.0,
-        "total": 100.0
-      },
-      "execution_time_sec": 0.9,
-      "error_log": null,
-      "weights": {
-        "functional": 0.6,
-        "memory": 0.2,
-        "safety": 0.2
-      },
-      "target_standard": "c99",
-      "effective_standard": "c99",
-      "generation": null,
-      "provenance": {
-        "reference_cache_hit": false,
-        "task_sha256": "66ca1dac6481cc2d181ef1936cd29f1933f2b200f45478ac8fda21e852468883",
-        "candidate_sha256": "8817a58885053fc9c2572d3ab5a5c55d1cbf1316308933152c99acc5c8a2c158",
-        "prompt_sha256": null
-      },
-      "limits": {
-        "max_flash_bytes": 2048,
-        "max_ram_bytes": 128,
-        "timeout_seconds": 5
-      },
-      "candidate_time_sec": 0.8997663000000102,
-      "reference_validation_time_sec": 0.0076521999999386026,
-      "footprint_target": "host"
-    },
-    {
-      "task_id": "tier2_tick_timer",
-      "tier": 2,
-      "model_name": "baseline",
-      "compiled": true,
-      "test_result": {
-        "total": 16,
-        "passed": 16,
-        "failed": 0,
-        "ignored": 0,
-        "all_passed": true,
-        "completed": true,
-        "returncode": 0
-      },
-      "size_metrics": {
-        "flash_bytes": 139,
-        "ram_bytes": 0,
-        "ref_flash_bytes": 139,
-        "ref_ram_bytes": 0,
-        "measured": true
-      },
-      "safety_metrics": {
-        "error_count": 0,
-        "warning_count": 0,
-        "violations": [],
-        "cppcheck_status": "disabled",
-        "cppcheck_diagnostic": null,
-        "findings": []
-      },
-      "scores": {
-        "functional": 100.0,
-        "memory": 100.0,
-        "safety": 100.0,
-        "total": 100.0
-      },
-      "execution_time_sec": 0.908,
-      "error_log": null,
-      "weights": {
-        "functional": 0.6,
-        "memory": 0.2,
-        "safety": 0.2
-      },
-      "target_standard": "c99",
-      "effective_standard": "c99",
-      "generation": null,
-      "provenance": {
-        "reference_cache_hit": false,
-        "task_sha256": "c92675411f25130458734eb3e4dae5fdeaadf4331d1130decc2b6809e3c74a52",
-        "candidate_sha256": "625cd1ffd8a746042c6e624a1190cab21ede00ef9efdd94e4ed1fcdd1bd29e6c",
-        "prompt_sha256": null
-      },
-      "limits": {
-        "max_flash_bytes": 1536,
-        "max_ram_bytes": 0,
-        "timeout_seconds": 5
-      },
-      "candidate_time_sec": 0.9080783999997948,
-      "reference_validation_time_sec": 0.008079900000211637,
-      "footprint_target": "host"
-    },
-    {
-      "task_id": "tier3_flash_update",
-      "tier": 3,
-      "model_name": "baseline",
-      "compiled": true,
-      "test_result": {
-        "total": 7,
-        "passed": 7,
-        "failed": 0,
-        "ignored": 0,
-        "all_passed": true,
-        "completed": true,
-        "returncode": 0
-      },
-      "size_metrics": {
-        "flash_bytes": 735,
-        "ram_bytes": 0,
-        "ref_flash_bytes": 735,
-        "ref_ram_bytes": 0,
-        "measured": true
-      },
-      "safety_metrics": {
-        "error_count": 0,
-        "warning_count": 0,
-        "violations": [],
-        "cppcheck_status": "disabled",
-        "cppcheck_diagnostic": null,
-        "findings": []
-      },
-      "scores": {
-        "functional": 100.0,
-        "memory": 100.0,
-        "safety": 100.0,
-        "total": 100.0
-      },
-      "execution_time_sec": 0.986,
-      "error_log": null,
-      "weights": {
-        "functional": 0.6,
-        "memory": 0.2,
-        "safety": 0.2
-      },
-      "target_standard": "c99",
-      "effective_standard": "c99",
-      "generation": null,
-      "provenance": {
-        "reference_cache_hit": false,
-        "task_sha256": "b3def148d36d4030140b84d70cfadb7976e5185a83a85fb318175a254b2bfb98",
-        "candidate_sha256": "464da4ba144a0dd641297fe5ae14d4e0c2b8efa90d83ecdb52752046527e79cc",
-        "prompt_sha256": null
-      },
-      "limits": {
-        "max_flash_bytes": 3072,
-        "max_ram_bytes": 128,
-        "timeout_seconds": 5
-      },
-      "candidate_time_sec": 0.98640690000002,
-      "reference_validation_time_sec": 0.010994600000231003,
-      "footprint_target": "host"
-    },
-    {
-      "task_id": "tier3_i2c_sensor",
-      "tier": 3,
-      "model_name": "baseline",
-      "compiled": true,
-      "test_result": {
-        "total": 11,
-        "passed": 11,
-        "failed": 0,
-        "ignored": 0,
-        "all_passed": true,
-        "completed": true,
-        "returncode": 0
-      },
-      "size_metrics": {
-        "flash_bytes": 368,
-        "ram_bytes": 0,
-        "ref_flash_bytes": 368,
-        "ref_ram_bytes": 0,
-        "measured": true
-      },
-      "safety_metrics": {
-        "error_count": 0,
-        "warning_count": 0,
-        "violations": [],
-        "cppcheck_status": "disabled",
-        "cppcheck_diagnostic": null,
-        "findings": []
-      },
-      "scores": {
-        "functional": 100.0,
-        "memory": 100.0,
-        "safety": 100.0,
-        "total": 100.0
-      },
-      "execution_time_sec": 0.962,
-      "error_log": null,
-      "weights": {
-        "functional": 0.6,
-        "memory": 0.2,
-        "safety": 0.2
-      },
-      "target_standard": "c99",
-      "effective_standard": "c99",
-      "generation": null,
-      "provenance": {
-        "reference_cache_hit": false,
-        "task_sha256": "272a44630d07b7599c299809c873774f87f7e604bb9a6dfacb33bd41c5fbed96",
-        "candidate_sha256": "522d72a16e27ad8d6a62d1ab61ab00fbd576fc70d479305f425410118592b231",
-        "prompt_sha256": null
-      },
-      "limits": {
-        "max_flash_bytes": 2048,
-        "max_ram_bytes": 256,
-        "timeout_seconds": 5
-      },
-      "candidate_time_sec": 0.9621295999995709,
-      "reference_validation_time_sec": 0.008578000000397878,
-      "footprint_target": "host"
-    },
-    {
-      "task_id": "tier3_spi_flash",
-      "tier": 3,
-      "model_name": "baseline",
-      "compiled": true,
-      "test_result": {
-        "total": 6,
-        "passed": 6,
-        "failed": 0,
-        "ignored": 0,
-        "all_passed": true,
-        "completed": true,
-        "returncode": 0
-      },
-      "size_metrics": {
-        "flash_bytes": 861,
-        "ram_bytes": 0,
-        "ref_flash_bytes": 861,
-        "ref_ram_bytes": 0,
-        "measured": true
-      },
-      "safety_metrics": {
-        "error_count": 0,
-        "warning_count": 0,
-        "violations": [],
-        "cppcheck_status": "disabled",
-        "cppcheck_diagnostic": null,
-        "findings": []
-      },
-      "scores": {
-        "functional": 100.0,
-        "memory": 100.0,
-        "safety": 100.0,
-        "total": 100.0
-      },
-      "execution_time_sec": 0.975,
-      "error_log": null,
-      "weights": {
-        "functional": 0.6,
-        "memory": 0.2,
-        "safety": 0.2
-      },
-      "target_standard": "c99",
-      "effective_standard": "c99",
-      "generation": null,
-      "provenance": {
-        "reference_cache_hit": false,
-        "task_sha256": "0568d1fc0b5eceeab990fbe912ec4bc4449e02dc90983fef915d46d80bdeb15a",
-        "candidate_sha256": "66901088376968950f34a9b6f4056caad735df20fd89fb819c5e90af892879cb",
-        "prompt_sha256": null
-      },
-      "limits": {
-        "max_flash_bytes": 3072,
-        "max_ram_bytes": 128,
-        "timeout_seconds": 5
-      },
-      "candidate_time_sec": 0.974775099999988,
-      "reference_validation_time_sec": 0.009755800000220916,
-      "footprint_target": "host"
-    },
-    {
-      "task_id": "tier4_bitmask_fix",
-      "tier": 4,
-      "model_name": "baseline",
-      "compiled": true,
-      "test_result": {
-        "total": 5,
-        "passed": 5,
-        "failed": 0,
-        "ignored": 0,
-        "all_passed": true,
-        "completed": true,
-        "returncode": 0
-      },
-      "size_metrics": {
-        "flash_bytes": 141,
-        "ram_bytes": 0,
-        "ref_flash_bytes": 141,
-        "ref_ram_bytes": 0,
-        "measured": true
-      },
-      "safety_metrics": {
-        "error_count": 0,
-        "warning_count": 0,
-        "violations": [],
-        "cppcheck_status": "disabled",
-        "cppcheck_diagnostic": null,
-        "findings": []
-      },
-      "scores": {
-        "functional": 100.0,
-        "memory": 100.0,
-        "safety": 100.0,
-        "total": 100.0
-      },
-      "execution_time_sec": 0.982,
-      "error_log": null,
-      "weights": {
-        "functional": 0.6,
-        "memory": 0.2,
-        "safety": 0.2
-      },
-      "target_standard": "c99",
-      "effective_standard": "c99",
-      "generation": null,
-      "provenance": {
-        "reference_cache_hit": false,
-        "task_sha256": "bccf133f78892143865fa673a9b9565f43505e39859e21dc472d5501ea03b365",
-        "candidate_sha256": "172cac8a83c198ca44c2bb1cf01cc86555c57cf47559130f0f0ec4694c10f59b",
-        "prompt_sha256": null
-      },
-      "limits": {
-        "max_flash_bytes": 1024,
-        "max_ram_bytes": 128,
-        "timeout_seconds": 5
-      },
-      "candidate_time_sec": 0.9817063000000417,
-      "reference_validation_time_sec": 0.009019399999942834,
-      "footprint_target": "host"
-    },
-    {
-      "task_id": "tier4_dma_buffer",
-      "tier": 4,
-      "model_name": "baseline",
-      "compiled": true,
-      "test_result": {
-        "total": 5,
-        "passed": 5,
-        "failed": 0,
-        "ignored": 0,
-        "all_passed": true,
-        "completed": true,
-        "returncode": 0
-      },
-      "size_metrics": {
-        "flash_bytes": 545,
-        "ram_bytes": 0,
-        "ref_flash_bytes": 545,
-        "ref_ram_bytes": 0,
-        "measured": true
-      },
-      "safety_metrics": {
-        "error_count": 0,
-        "warning_count": 0,
-        "violations": [],
-        "cppcheck_status": "disabled",
-        "cppcheck_diagnostic": null,
-        "findings": []
-      },
-      "scores": {
-        "functional": 100.0,
-        "memory": 100.0,
-        "safety": 100.0,
-        "total": 100.0
-      },
-      "execution_time_sec": 0.992,
-      "error_log": null,
-      "weights": {
-        "functional": 0.6,
-        "memory": 0.2,
-        "safety": 0.2
-      },
-      "target_standard": "c11",
-      "effective_standard": "c11",
-      "generation": null,
-      "provenance": {
-        "reference_cache_hit": false,
-        "task_sha256": "b76b8c6983ab6c9c5be021eceea5ce8e5314e75471e3619516be0d2e507574e4",
-        "candidate_sha256": "855696ea82661c4392e6790ddecf965065c3cd6898d7fdd91611e9f3cf21cd63",
-        "prompt_sha256": null
-      },
-      "limits": {
-        "max_flash_bytes": 2048,
-        "max_ram_bytes": 128,
-        "timeout_seconds": 5
-      },
-      "candidate_time_sec": 0.9915993999998136,
-      "reference_validation_time_sec": 0.007988400000158435,
-      "footprint_target": "host"
-    },
-    {
-      "task_id": "tier4_uart_frame_fix",
-      "tier": 4,
       "model_name": "baseline",
       "compiled": true,
       "test_result": {
@@ -1074,7 +403,7 @@
         "safety": 100.0,
         "total": 100.0
       },
-      "execution_time_sec": 0.802,
+      "execution_time_sec": 0.583,
       "error_log": null,
       "weights": {
         "functional": 0.6,
@@ -1086,7 +415,847 @@
       "generation": null,
       "provenance": {
         "reference_cache_hit": false,
-        "task_sha256": "bbe6f7c60b4a575905fef1e381f8977371da6bca5a377ee7efe54fbf35eef436",
+        "task_sha256": "0b0e524ce9fa320945052441022b26595e7a58188b3162905bf23896dbbd9734",
+        "candidate_sha256": "90f8ff90c7858bfe4637ab3430e82370c79949f4aedc6ef9dd0bd189b20dc5a7",
+        "prompt_sha256": null
+      },
+      "limits": {
+        "max_flash_bytes": 1024,
+        "max_ram_bytes": 128,
+        "timeout_seconds": 5
+      },
+      "candidate_time_sec": 0.5833079000003636,
+      "reference_validation_time_sec": 0.061809499999071704,
+      "footprint_target": "host"
+    },
+    {
+      "task_id": "tier1_q15_math",
+      "tier": 1,
+      "model_name": "baseline",
+      "compiled": true,
+      "test_result": {
+        "total": 16,
+        "passed": 16,
+        "failed": 0,
+        "ignored": 0,
+        "all_passed": true,
+        "completed": true,
+        "returncode": 0
+      },
+      "size_metrics": {
+        "flash_bytes": 270,
+        "ram_bytes": 0,
+        "ref_flash_bytes": 270,
+        "ref_ram_bytes": 0,
+        "measured": true
+      },
+      "safety_metrics": {
+        "error_count": 0,
+        "warning_count": 0,
+        "violations": [],
+        "cppcheck_status": "disabled",
+        "cppcheck_diagnostic": null,
+        "findings": []
+      },
+      "scores": {
+        "functional": 100.0,
+        "memory": 100.0,
+        "safety": 100.0,
+        "total": 100.0
+      },
+      "execution_time_sec": 0.507,
+      "error_log": null,
+      "weights": {
+        "functional": 0.6,
+        "memory": 0.2,
+        "safety": 0.2
+      },
+      "target_standard": "c99",
+      "effective_standard": "c99",
+      "generation": null,
+      "provenance": {
+        "reference_cache_hit": false,
+        "task_sha256": "4a31d147057151bcd018aa421cb849d57b2fc93e752b4d165763287c07e1091f",
+        "candidate_sha256": "77d1452e3053e02bda883205d268005d490f938b02f7be2696386e100923bae6",
+        "prompt_sha256": null
+      },
+      "limits": {
+        "max_flash_bytes": 1024,
+        "max_ram_bytes": 0,
+        "timeout_seconds": 5
+      },
+      "candidate_time_sec": 0.5065226999995502,
+      "reference_validation_time_sec": 0.06908260000091104,
+      "footprint_target": "host"
+    },
+    {
+      "task_id": "tier1_ring_buffer",
+      "tier": 1,
+      "model_name": "baseline",
+      "compiled": true,
+      "test_result": {
+        "total": 11,
+        "passed": 11,
+        "failed": 0,
+        "ignored": 0,
+        "all_passed": true,
+        "completed": true,
+        "returncode": 0
+      },
+      "size_metrics": {
+        "flash_bytes": 1474,
+        "ram_bytes": 0,
+        "ref_flash_bytes": 1474,
+        "ref_ram_bytes": 0,
+        "measured": true
+      },
+      "safety_metrics": {
+        "error_count": 0,
+        "warning_count": 0,
+        "violations": [],
+        "cppcheck_status": "disabled",
+        "cppcheck_diagnostic": null,
+        "findings": []
+      },
+      "scores": {
+        "functional": 100.0,
+        "memory": 100.0,
+        "safety": 100.0,
+        "total": 100.0
+      },
+      "execution_time_sec": 0.569,
+      "error_log": null,
+      "weights": {
+        "functional": 0.6,
+        "memory": 0.2,
+        "safety": 0.2
+      },
+      "target_standard": "c99",
+      "effective_standard": "c99",
+      "generation": null,
+      "provenance": {
+        "reference_cache_hit": false,
+        "task_sha256": "750efc2fcd6fc186e414a6e470ac1e75fded4432d4e0d2133637b48ac5fa5fb4",
+        "candidate_sha256": "fb3a5b2b6042401d1e9e830334b67bd6283e361380feb453cd4fee2387d14164",
+        "prompt_sha256": null
+      },
+      "limits": {
+        "max_flash_bytes": 2048,
+        "max_ram_bytes": 128,
+        "timeout_seconds": 5
+      },
+      "candidate_time_sec": 0.5690204000002268,
+      "reference_validation_time_sec": 0.09170420000009472,
+      "footprint_target": "host"
+    },
+    {
+      "task_id": "tier2_can_frame",
+      "tier": 2,
+      "model_name": "baseline",
+      "compiled": true,
+      "test_result": {
+        "total": 14,
+        "passed": 14,
+        "failed": 0,
+        "ignored": 0,
+        "all_passed": true,
+        "completed": true,
+        "returncode": 0
+      },
+      "size_metrics": {
+        "flash_bytes": 2600,
+        "ram_bytes": 0,
+        "ref_flash_bytes": 2600,
+        "ref_ram_bytes": 0,
+        "measured": true
+      },
+      "safety_metrics": {
+        "error_count": 0,
+        "warning_count": 0,
+        "violations": [],
+        "cppcheck_status": "disabled",
+        "cppcheck_diagnostic": null,
+        "findings": []
+      },
+      "scores": {
+        "functional": 100.0,
+        "memory": 100.0,
+        "safety": 100.0,
+        "total": 100.0
+      },
+      "execution_time_sec": 0.603,
+      "error_log": null,
+      "weights": {
+        "functional": 0.6,
+        "memory": 0.2,
+        "safety": 0.2
+      },
+      "target_standard": "c99",
+      "effective_standard": "c99",
+      "generation": null,
+      "provenance": {
+        "reference_cache_hit": false,
+        "task_sha256": "cbc8cc8dfa0ecd9bcbe02515244112b44ba58c1891265f7ede2ab89ac37ecc93",
+        "candidate_sha256": "6644ed6a1f53afb563fc9b66a0876ef92a653950974fb913457b4d1fd975d678",
+        "prompt_sha256": null
+      },
+      "limits": {
+        "max_flash_bytes": 8192,
+        "max_ram_bytes": 256,
+        "timeout_seconds": 5
+      },
+      "candidate_time_sec": 0.6028631999979552,
+      "reference_validation_time_sec": 0.059350900000936235,
+      "footprint_target": "host"
+    },
+    {
+      "task_id": "tier2_cobs_codec",
+      "tier": 2,
+      "model_name": "baseline",
+      "compiled": true,
+      "test_result": {
+        "total": 9,
+        "passed": 9,
+        "failed": 0,
+        "ignored": 0,
+        "all_passed": true,
+        "completed": true,
+        "returncode": 0
+      },
+      "size_metrics": {
+        "flash_bytes": 1186,
+        "ram_bytes": 0,
+        "ref_flash_bytes": 1186,
+        "ref_ram_bytes": 0,
+        "measured": true
+      },
+      "safety_metrics": {
+        "error_count": 0,
+        "warning_count": 0,
+        "violations": [],
+        "cppcheck_status": "disabled",
+        "cppcheck_diagnostic": null,
+        "findings": []
+      },
+      "scores": {
+        "functional": 100.0,
+        "memory": 100.0,
+        "safety": 100.0,
+        "total": 100.0
+      },
+      "execution_time_sec": 0.533,
+      "error_log": null,
+      "weights": {
+        "functional": 0.6,
+        "memory": 0.2,
+        "safety": 0.2
+      },
+      "target_standard": "c99",
+      "effective_standard": "c99",
+      "generation": null,
+      "provenance": {
+        "reference_cache_hit": false,
+        "task_sha256": "e0d8e38ac017a140dafb44659d93e15cc56486d29f04788d4c17d17f0f99ceeb",
+        "candidate_sha256": "75fe4540625a980305994bbb1c47da690c72819b2531f3e72379e6571d98b560",
+        "prompt_sha256": null
+      },
+      "limits": {
+        "max_flash_bytes": 2048,
+        "max_ram_bytes": 0,
+        "timeout_seconds": 5
+      },
+      "candidate_time_sec": 0.5326830000012706,
+      "reference_validation_time_sec": 0.06925629999932426,
+      "footprint_target": "host"
+    },
+    {
+      "task_id": "tier2_debounce_fsm",
+      "tier": 2,
+      "model_name": "baseline",
+      "compiled": true,
+      "test_result": {
+        "total": 7,
+        "passed": 7,
+        "failed": 0,
+        "ignored": 0,
+        "all_passed": true,
+        "completed": true,
+        "returncode": 0
+      },
+      "size_metrics": {
+        "flash_bytes": 1134,
+        "ram_bytes": 0,
+        "ref_flash_bytes": 1134,
+        "ref_ram_bytes": 0,
+        "measured": true
+      },
+      "safety_metrics": {
+        "error_count": 0,
+        "warning_count": 0,
+        "violations": [],
+        "cppcheck_status": "disabled",
+        "cppcheck_diagnostic": null,
+        "findings": []
+      },
+      "scores": {
+        "functional": 100.0,
+        "memory": 100.0,
+        "safety": 100.0,
+        "total": 100.0
+      },
+      "execution_time_sec": 0.494,
+      "error_log": null,
+      "weights": {
+        "functional": 0.6,
+        "memory": 0.2,
+        "safety": 0.2
+      },
+      "target_standard": "c99",
+      "effective_standard": "c99",
+      "generation": null,
+      "provenance": {
+        "reference_cache_hit": false,
+        "task_sha256": "56a6cf42788072f4a5d8f763fe9b8af0a949105b467429f39393b78d5c15ede3",
+        "candidate_sha256": "2f2623c7abfec0ce13c3d1f3502e843ef7253e4962e798056d52306bf8e9c730",
+        "prompt_sha256": null
+      },
+      "limits": {
+        "max_flash_bytes": 1536,
+        "max_ram_bytes": 128,
+        "timeout_seconds": 5
+      },
+      "candidate_time_sec": 0.4936579000004713,
+      "reference_validation_time_sec": 0.052883599999404396,
+      "footprint_target": "host"
+    },
+    {
+      "task_id": "tier2_fixed_control",
+      "tier": 2,
+      "model_name": "baseline",
+      "compiled": true,
+      "test_result": {
+        "total": 7,
+        "passed": 7,
+        "failed": 0,
+        "ignored": 0,
+        "all_passed": true,
+        "completed": true,
+        "returncode": 0
+      },
+      "size_metrics": {
+        "flash_bytes": 941,
+        "ram_bytes": 0,
+        "ref_flash_bytes": 941,
+        "ref_ram_bytes": 0,
+        "measured": true
+      },
+      "safety_metrics": {
+        "error_count": 0,
+        "warning_count": 0,
+        "violations": [],
+        "cppcheck_status": "disabled",
+        "cppcheck_diagnostic": null,
+        "findings": []
+      },
+      "scores": {
+        "functional": 100.0,
+        "memory": 100.0,
+        "safety": 100.0,
+        "total": 100.0
+      },
+      "execution_time_sec": 0.5,
+      "error_log": null,
+      "weights": {
+        "functional": 0.6,
+        "memory": 0.2,
+        "safety": 0.2
+      },
+      "target_standard": "c99",
+      "effective_standard": "c99",
+      "generation": null,
+      "provenance": {
+        "reference_cache_hit": false,
+        "task_sha256": "8a029c491576548951695257aa9fa4fa356a6e69576d14b15b126165361796d1",
+        "candidate_sha256": "8817a58885053fc9c2572d3ab5a5c55d1cbf1316308933152c99acc5c8a2c158",
+        "prompt_sha256": null
+      },
+      "limits": {
+        "max_flash_bytes": 2048,
+        "max_ram_bytes": 128,
+        "timeout_seconds": 5
+      },
+      "candidate_time_sec": 0.5003178000006301,
+      "reference_validation_time_sec": 0.060495699999592034,
+      "footprint_target": "host"
+    },
+    {
+      "task_id": "tier2_tick_timer",
+      "tier": 2,
+      "model_name": "baseline",
+      "compiled": true,
+      "test_result": {
+        "total": 16,
+        "passed": 16,
+        "failed": 0,
+        "ignored": 0,
+        "all_passed": true,
+        "completed": true,
+        "returncode": 0
+      },
+      "size_metrics": {
+        "flash_bytes": 636,
+        "ram_bytes": 0,
+        "ref_flash_bytes": 636,
+        "ref_ram_bytes": 0,
+        "measured": true
+      },
+      "safety_metrics": {
+        "error_count": 0,
+        "warning_count": 0,
+        "violations": [],
+        "cppcheck_status": "disabled",
+        "cppcheck_diagnostic": null,
+        "findings": []
+      },
+      "scores": {
+        "functional": 100.0,
+        "memory": 100.0,
+        "safety": 100.0,
+        "total": 100.0
+      },
+      "execution_time_sec": 0.522,
+      "error_log": null,
+      "weights": {
+        "functional": 0.6,
+        "memory": 0.2,
+        "safety": 0.2
+      },
+      "target_standard": "c99",
+      "effective_standard": "c99",
+      "generation": null,
+      "provenance": {
+        "reference_cache_hit": false,
+        "task_sha256": "e6272cbbc9fb32e4c61a2a3f9edeaea25f1df538eabfedf955d27f246ec49b07",
+        "candidate_sha256": "625cd1ffd8a746042c6e624a1190cab21ede00ef9efdd94e4ed1fcdd1bd29e6c",
+        "prompt_sha256": null
+      },
+      "limits": {
+        "max_flash_bytes": 1536,
+        "max_ram_bytes": 0,
+        "timeout_seconds": 5
+      },
+      "candidate_time_sec": 0.5221122999992076,
+      "reference_validation_time_sec": 0.05329560000063793,
+      "footprint_target": "host"
+    },
+    {
+      "task_id": "tier2_windowed_watchdog",
+      "tier": 2,
+      "model_name": "baseline",
+      "compiled": true,
+      "test_result": {
+        "total": 13,
+        "passed": 13,
+        "failed": 0,
+        "ignored": 0,
+        "all_passed": true,
+        "completed": true,
+        "returncode": 0
+      },
+      "size_metrics": {
+        "flash_bytes": 1136,
+        "ram_bytes": 0,
+        "ref_flash_bytes": 1136,
+        "ref_ram_bytes": 0,
+        "measured": true
+      },
+      "safety_metrics": {
+        "error_count": 0,
+        "warning_count": 0,
+        "violations": [],
+        "cppcheck_status": "disabled",
+        "cppcheck_diagnostic": null,
+        "findings": []
+      },
+      "scores": {
+        "functional": 100.0,
+        "memory": 100.0,
+        "safety": 100.0,
+        "total": 100.0
+      },
+      "execution_time_sec": 0.573,
+      "error_log": null,
+      "weights": {
+        "functional": 0.6,
+        "memory": 0.2,
+        "safety": 0.2
+      },
+      "target_standard": "c99",
+      "effective_standard": "c99",
+      "generation": null,
+      "provenance": {
+        "reference_cache_hit": false,
+        "task_sha256": "8e4dd0952df106cf6b22be7d24b75f4d01d28375e18aa15d2de5859a4f8fbc27",
+        "candidate_sha256": "bf8055bca9b0c11ae704fe5284d8c5da51b3990c047da5aa3b620e0cf2adc186",
+        "prompt_sha256": null
+      },
+      "limits": {
+        "max_flash_bytes": 4096,
+        "max_ram_bytes": 256,
+        "timeout_seconds": 5
+      },
+      "candidate_time_sec": 0.5725830000010319,
+      "reference_validation_time_sec": 0.09008089999952062,
+      "footprint_target": "host"
+    },
+    {
+      "task_id": "tier3_flash_update",
+      "tier": 3,
+      "model_name": "baseline",
+      "compiled": true,
+      "test_result": {
+        "total": 7,
+        "passed": 7,
+        "failed": 0,
+        "ignored": 0,
+        "all_passed": true,
+        "completed": true,
+        "returncode": 0
+      },
+      "size_metrics": {
+        "flash_bytes": 1980,
+        "ram_bytes": 0,
+        "ref_flash_bytes": 1980,
+        "ref_ram_bytes": 0,
+        "measured": true
+      },
+      "safety_metrics": {
+        "error_count": 0,
+        "warning_count": 0,
+        "violations": [],
+        "cppcheck_status": "disabled",
+        "cppcheck_diagnostic": null,
+        "findings": []
+      },
+      "scores": {
+        "functional": 100.0,
+        "memory": 100.0,
+        "safety": 100.0,
+        "total": 100.0
+      },
+      "execution_time_sec": 0.582,
+      "error_log": null,
+      "weights": {
+        "functional": 0.6,
+        "memory": 0.2,
+        "safety": 0.2
+      },
+      "target_standard": "c99",
+      "effective_standard": "c99",
+      "generation": null,
+      "provenance": {
+        "reference_cache_hit": false,
+        "task_sha256": "4ba56b9a822341e92cea28634ff7e8d9149a178f1464067df62096c0024d4afc",
+        "candidate_sha256": "464da4ba144a0dd641297fe5ae14d4e0c2b8efa90d83ecdb52752046527e79cc",
+        "prompt_sha256": null
+      },
+      "limits": {
+        "max_flash_bytes": 3072,
+        "max_ram_bytes": 128,
+        "timeout_seconds": 5
+      },
+      "candidate_time_sec": 0.5818515000009938,
+      "reference_validation_time_sec": 0.06966269999975339,
+      "footprint_target": "host"
+    },
+    {
+      "task_id": "tier3_i2c_sensor",
+      "tier": 3,
+      "model_name": "baseline",
+      "compiled": true,
+      "test_result": {
+        "total": 11,
+        "passed": 11,
+        "failed": 0,
+        "ignored": 0,
+        "all_passed": true,
+        "completed": true,
+        "returncode": 0
+      },
+      "size_metrics": {
+        "flash_bytes": 830,
+        "ram_bytes": 0,
+        "ref_flash_bytes": 830,
+        "ref_ram_bytes": 0,
+        "measured": true
+      },
+      "safety_metrics": {
+        "error_count": 0,
+        "warning_count": 0,
+        "violations": [],
+        "cppcheck_status": "disabled",
+        "cppcheck_diagnostic": null,
+        "findings": []
+      },
+      "scores": {
+        "functional": 100.0,
+        "memory": 100.0,
+        "safety": 100.0,
+        "total": 100.0
+      },
+      "execution_time_sec": 0.556,
+      "error_log": null,
+      "weights": {
+        "functional": 0.6,
+        "memory": 0.2,
+        "safety": 0.2
+      },
+      "target_standard": "c99",
+      "effective_standard": "c99",
+      "generation": null,
+      "provenance": {
+        "reference_cache_hit": false,
+        "task_sha256": "4d684a35b1596a6bb660bda3a86df34f6df3b9cf21fffc2c2a2ec15fbb488b9a",
+        "candidate_sha256": "522d72a16e27ad8d6a62d1ab61ab00fbd576fc70d479305f425410118592b231",
+        "prompt_sha256": null
+      },
+      "limits": {
+        "max_flash_bytes": 2048,
+        "max_ram_bytes": 256,
+        "timeout_seconds": 5
+      },
+      "candidate_time_sec": 0.5558182000022498,
+      "reference_validation_time_sec": 0.06711629999881552,
+      "footprint_target": "host"
+    },
+    {
+      "task_id": "tier3_spi_flash",
+      "tier": 3,
+      "model_name": "baseline",
+      "compiled": true,
+      "test_result": {
+        "total": 8,
+        "passed": 8,
+        "failed": 0,
+        "ignored": 0,
+        "all_passed": true,
+        "completed": true,
+        "returncode": 0
+      },
+      "size_metrics": {
+        "flash_bytes": 1913,
+        "ram_bytes": 0,
+        "ref_flash_bytes": 1913,
+        "ref_ram_bytes": 0,
+        "measured": true
+      },
+      "safety_metrics": {
+        "error_count": 0,
+        "warning_count": 0,
+        "violations": [],
+        "cppcheck_status": "disabled",
+        "cppcheck_diagnostic": null,
+        "findings": []
+      },
+      "scores": {
+        "functional": 100.0,
+        "memory": 100.0,
+        "safety": 100.0,
+        "total": 100.0
+      },
+      "execution_time_sec": 0.582,
+      "error_log": null,
+      "weights": {
+        "functional": 0.6,
+        "memory": 0.2,
+        "safety": 0.2
+      },
+      "target_standard": "c99",
+      "effective_standard": "c99",
+      "generation": null,
+      "provenance": {
+        "reference_cache_hit": false,
+        "task_sha256": "96a4304c7f4c86329488c46c5d68959f2c32e34b5a6da232b9fb0b5ce61f8517",
+        "candidate_sha256": "66901088376968950f34a9b6f4056caad735df20fd89fb819c5e90af892879cb",
+        "prompt_sha256": null
+      },
+      "limits": {
+        "max_flash_bytes": 3072,
+        "max_ram_bytes": 128,
+        "timeout_seconds": 5
+      },
+      "candidate_time_sec": 0.5822832000012568,
+      "reference_validation_time_sec": 0.07232709999880171,
+      "footprint_target": "host"
+    },
+    {
+      "task_id": "tier4_bitmask_fix",
+      "tier": 4,
+      "model_name": "baseline",
+      "compiled": true,
+      "test_result": {
+        "total": 5,
+        "passed": 5,
+        "failed": 0,
+        "ignored": 0,
+        "all_passed": true,
+        "completed": true,
+        "returncode": 0
+      },
+      "size_metrics": {
+        "flash_bytes": 462,
+        "ram_bytes": 0,
+        "ref_flash_bytes": 462,
+        "ref_ram_bytes": 0,
+        "measured": true
+      },
+      "safety_metrics": {
+        "error_count": 0,
+        "warning_count": 0,
+        "violations": [],
+        "cppcheck_status": "disabled",
+        "cppcheck_diagnostic": null,
+        "findings": []
+      },
+      "scores": {
+        "functional": 100.0,
+        "memory": 100.0,
+        "safety": 100.0,
+        "total": 100.0
+      },
+      "execution_time_sec": 0.497,
+      "error_log": null,
+      "weights": {
+        "functional": 0.6,
+        "memory": 0.2,
+        "safety": 0.2
+      },
+      "target_standard": "c99",
+      "effective_standard": "c99",
+      "generation": null,
+      "provenance": {
+        "reference_cache_hit": false,
+        "task_sha256": "fc8c25e65a54af7ec6392f9b3aeec4c05c0299bef406cfce00d72e3a5869b4bd",
+        "candidate_sha256": "172cac8a83c198ca44c2bb1cf01cc86555c57cf47559130f0f0ec4694c10f59b",
+        "prompt_sha256": null
+      },
+      "limits": {
+        "max_flash_bytes": 1024,
+        "max_ram_bytes": 128,
+        "timeout_seconds": 5
+      },
+      "candidate_time_sec": 0.49733150000065507,
+      "reference_validation_time_sec": 0.060993900000539725,
+      "footprint_target": "host"
+    },
+    {
+      "task_id": "tier4_dma_buffer",
+      "tier": 4,
+      "model_name": "baseline",
+      "compiled": true,
+      "test_result": {
+        "total": 8,
+        "passed": 8,
+        "failed": 0,
+        "ignored": 0,
+        "all_passed": true,
+        "completed": true,
+        "returncode": 0
+      },
+      "size_metrics": {
+        "flash_bytes": 1590,
+        "ram_bytes": 0,
+        "ref_flash_bytes": 1590,
+        "ref_ram_bytes": 0,
+        "measured": true
+      },
+      "safety_metrics": {
+        "error_count": 0,
+        "warning_count": 0,
+        "violations": [],
+        "cppcheck_status": "disabled",
+        "cppcheck_diagnostic": null,
+        "findings": []
+      },
+      "scores": {
+        "functional": 100.0,
+        "memory": 100.0,
+        "safety": 100.0,
+        "total": 100.0
+      },
+      "execution_time_sec": 0.549,
+      "error_log": null,
+      "weights": {
+        "functional": 0.6,
+        "memory": 0.2,
+        "safety": 0.2
+      },
+      "target_standard": "c11",
+      "effective_standard": "c11",
+      "generation": null,
+      "provenance": {
+        "reference_cache_hit": false,
+        "task_sha256": "5040d14fc7bf57da2fdd7b1aff52417df7ec8ae7c776234b00af7a8cc3e878dd",
+        "candidate_sha256": "855696ea82661c4392e6790ddecf965065c3cd6898d7fdd91611e9f3cf21cd63",
+        "prompt_sha256": null
+      },
+      "limits": {
+        "max_flash_bytes": 2048,
+        "max_ram_bytes": 128,
+        "timeout_seconds": 5
+      },
+      "candidate_time_sec": 0.5490785999991203,
+      "reference_validation_time_sec": 0.06646630000068399,
+      "footprint_target": "host"
+    },
+    {
+      "task_id": "tier4_uart_frame_fix",
+      "tier": 4,
+      "model_name": "baseline",
+      "compiled": true,
+      "test_result": {
+        "total": 8,
+        "passed": 8,
+        "failed": 0,
+        "ignored": 0,
+        "all_passed": true,
+        "completed": true,
+        "returncode": 0
+      },
+      "size_metrics": {
+        "flash_bytes": 760,
+        "ram_bytes": 0,
+        "ref_flash_bytes": 760,
+        "ref_ram_bytes": 0,
+        "measured": true
+      },
+      "safety_metrics": {
+        "error_count": 0,
+        "warning_count": 0,
+        "violations": [],
+        "cppcheck_status": "disabled",
+        "cppcheck_diagnostic": null,
+        "findings": []
+      },
+      "scores": {
+        "functional": 100.0,
+        "memory": 100.0,
+        "safety": 100.0,
+        "total": 100.0
+      },
+      "execution_time_sec": 0.559,
+      "error_log": null,
+      "weights": {
+        "functional": 0.6,
+        "memory": 0.2,
+        "safety": 0.2
+      },
+      "target_standard": "c99",
+      "effective_standard": "c99",
+      "generation": null,
+      "provenance": {
+        "reference_cache_hit": false,
+        "task_sha256": "ea4941ba7dc4d03dd0b23220137c76fb4ceec7f47bad93c60813be8f2de55462",
         "candidate_sha256": "11ebb3048975ffd971039384cb6c5ba85274a0597a54ca8388d730577fb873ab",
         "prompt_sha256": null
       },
@@ -1095,13 +1264,13 @@
         "max_ram_bytes": 128,
         "timeout_seconds": 5
       },
-      "candidate_time_sec": 0.8024438000002192,
-      "reference_validation_time_sec": 0.01088419999996404,
+      "candidate_time_sec": 0.5591643000007025,
+      "reference_validation_time_sec": 0.057807400000456255,
       "footprint_target": "host"
     }
   ],
   "generation_summary": {
-    "task_attempts": 13,
+    "task_attempts": 15,
     "total_tokens": null,
     "known_total_tokens": null,
     "usage_tasks": 0,
@@ -1119,5 +1288,77 @@
     "cost_per_passed_task": null,
     "generation_seconds": null,
     "duration_tasks": 0
+  },
+  "tier_weighted_score": 100.0,
+  "tier_weight_policy": "proportional-to-tier-v1",
+  "by_tier": {
+    "1": {
+      "count": 3,
+      "task_attempts": 3,
+      "mean_score": 100.0,
+      "pass_at_1_pct": 100.0
+    },
+    "2": {
+      "count": 6,
+      "task_attempts": 6,
+      "mean_score": 100.0,
+      "pass_at_1_pct": 100.0
+    },
+    "3": {
+      "count": 3,
+      "task_attempts": 3,
+      "mean_score": 100.0,
+      "pass_at_1_pct": 100.0
+    },
+    "4": {
+      "count": 3,
+      "task_attempts": 3,
+      "mean_score": 100.0,
+      "pass_at_1_pct": 100.0
+    }
+  },
+  "by_category": {
+    "bug_fix_and_safety": {
+      "count": 2,
+      "task_attempts": 2,
+      "mean_score": 100.0,
+      "pass_at_1_pct": 100.0
+    },
+    "concurrency": {
+      "count": 1,
+      "task_attempts": 1,
+      "mean_score": 100.0,
+      "pass_at_1_pct": 100.0
+    },
+    "core_fundamentals": {
+      "count": 3,
+      "task_attempts": 3,
+      "mean_score": 100.0,
+      "pass_at_1_pct": 100.0
+    },
+    "device_drivers": {
+      "count": 2,
+      "task_attempts": 2,
+      "mean_score": 100.0,
+      "pass_at_1_pct": 100.0
+    },
+    "fixed_point_control": {
+      "count": 1,
+      "task_attempts": 1,
+      "mean_score": 100.0,
+      "pass_at_1_pct": 100.0
+    },
+    "flash_management": {
+      "count": 1,
+      "task_attempts": 1,
+      "mean_score": 100.0,
+      "pass_at_1_pct": 100.0
+    },
+    "fsm_and_protocols": {
+      "count": 5,
+      "task_attempts": 5,
+      "mean_score": 100.0,
+      "pass_at_1_pct": 100.0
+    }
   }
 }

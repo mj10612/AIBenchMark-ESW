@@ -5,6 +5,7 @@ from unittest.mock import patch
 from xml.etree import ElementTree
 
 from test_aggregation import fixture_report
+
 from aibenchmark_esw.metrics.aggregation import aggregate_runs, render_aggregation
 from aibenchmark_esw.metrics.comparison import compare_runs, render_comparison
 from aibenchmark_esw.metrics.reporter import BenchmarkReporter
@@ -164,7 +165,7 @@ class ReportIntegrityTests(unittest.TestCase):
         self.assertEqual(summary['groups'][0]['runs'],2)
         self.assertEqual(summary['groups'][0]['statistics']['score']['mean'],75)
         interval=summary['groups'][0]['statistics']['score']['mean_ci95_approx']
-        self.assertEqual(interval['method'],'normal approximation; descriptive, small-sample uncertainty')
+        self.assertIn('Student-t', interval['method'])
         self.assertLess(interval['lower'],75)
         self.assertGreater(interval['upper'],75)
         comparison=compare_runs([wrapper,fixture_report(model='other')])
@@ -267,18 +268,20 @@ class ExportServiceTests(unittest.TestCase):
         self.assertEqual(sarif['version'],'2.1.0')
         run=sarif['runs'][0]
         self.assertEqual(len(run['tool']['driver']['rules']),1)
-        self.assertEqual(run['results'][0]['locations'][0]['physicalLocation']['region']['startLine'],3)
-        self.assertNotIn('region',run['results'][1]['locations'][0]['physicalLocation'])
+        self.assertEqual(run['results'][0]['properties']['original_line'],3)
+        self.assertEqual(run['results'][0]['properties']['source_mapping'], 'diagnostic-only')
+        self.assertNotIn('locations', run['results'][0])
+        self.assertIsNone(run['results'][1]['properties']['original_line'])
 
     def test_junit_comparison_regression_threshold_and_baseline(self):
         comparison=compare_runs([fixture_report(),fixture_report(50,model='other')])
         root=ElementTree.fromstring(render_comparison(comparison,'junit',baseline_model='provider/alias',regression_threshold=10))
-        self.assertEqual(len(root.findall('.//testcase')),2)
+        self.assertEqual(len(root.findall('.//testcase')),3)
         self.assertEqual(len(root.findall('.//failure')),1)
         self.assertIn('-50',root.find('.//failure').text)
 
     def test_trend_orders_timestamps_groups_fingerprints_and_flags_regressions(self):
-        from aibenchmark_esw.metrics.trend import trend_runs, render_trend
+        from aibenchmark_esw.metrics.trend import render_trend, trend_runs
         old,new,changed=fixture_report(run_id='old'),fixture_report(50,run_id='new'),fixture_report(run_id='changed')
         for report,time in [(old,'2026-01-01T00:00:00Z'),(new,'2026-01-02T00:00:00Z'),(changed,'2026-01-03T00:00:00Z')]:
             report['metadata']['created_at_utc']=time

@@ -2,7 +2,7 @@ import shutil
 import struct
 import subprocess
 from pathlib import Path
-from typing import Optional, Tuple
+from typing import Optional
 
 from aibenchmark_esw.models import SizeMetrics
 
@@ -20,7 +20,7 @@ class SizeAnalyzer:
         ref_flash, ref_ram = self._measure_file(ref_binary_path) if ref_binary_path is not None else (0, 0)
         return SizeMetrics(flash, ram, ref_flash, ref_ram, measured=ref_binary_path is not None)
 
-    def _measure_file(self, file_path: Path) -> Tuple[int, int]:
+    def _measure_file(self, file_path: Path) -> tuple[int, int]:
         if not file_path.is_file():
             raise FileNotFoundError(f"Memory measurement artifact not found: {file_path}")
         # Native object parsing includes common symbols, which the default GNU
@@ -54,7 +54,7 @@ class SizeAnalyzer:
                 pass
         raise UnsupportedBinaryFormat(f"Unsupported binary format: {file_path}")
 
-    def _parse_binary_sections(self, file_path: Path) -> Tuple[int, int]:
+    def _parse_binary_sections(self, file_path: Path) -> tuple[int, int]:
         data = file_path.read_bytes()
         if data[:4] in (b"\xfe\xed\xfa\xce", b"\xce\xfa\xed\xfe",
                         b"\xfe\xed\xfa\xcf", b"\xcf\xfa\xed\xfe",
@@ -72,7 +72,7 @@ class SizeAnalyzer:
             return self._parse_coff(data, 0)
         raise UnsupportedBinaryFormat("Unsupported binary format; memory usage cannot be estimated reliably")
 
-    def _parse_macho(self, data: bytes) -> Tuple[int, int]:
+    def _parse_macho(self, data: bytes) -> tuple[int, int]:
         """Account relocatable Mach-O sections and common symbols, never segments.
 
         Universal objects have no single deployment footprint: return the
@@ -174,7 +174,7 @@ class SizeAnalyzer:
                 common[key] = max(common.get(key, 0), value)
         return flash, ram + sum(common.values())
 
-    def _parse_coff(self, data: bytes, header: int, image: bool = False) -> Tuple[int, int]:
+    def _parse_coff(self, data: bytes, header: int, image: bool = False) -> tuple[int, int]:
         count = struct.unpack_from("<H", data, header + 2)[0]
         optional_size = struct.unpack_from("<H", data, header + 16)[0]
         start = header + 20 + optional_size
@@ -184,7 +184,7 @@ class SizeAnalyzer:
             virtual_size = struct.unpack_from("<I", data, section + 8)[0]
             raw_size = struct.unpack_from("<I", data, section + 16)[0]
             flags = struct.unpack_from("<I", data, section + 36)[0]
-            size = virtual_size if image else raw_size
+            size = virtual_size if image else (virtual_size or raw_size) if flags & 0x80 else raw_size
             if flags & 0x00000800 or flags & 0x02000000:
                 continue
             if flags & 0x00000020:
@@ -212,7 +212,7 @@ class SizeAnalyzer:
                     raise ValueError("Invalid COFF auxiliary symbol count")
         return flash, ram
 
-    def _parse_elf(self, data: bytes) -> Tuple[int, int]:
+    def _parse_elf(self, data: bytes) -> tuple[int, int]:
         if data[4] not in (1, 2) or data[5] not in (1, 2):
             raise ValueError("Unsupported ELF class or byte order")
         is_64 = data[4] == 2

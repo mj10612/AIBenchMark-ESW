@@ -6,6 +6,36 @@ Thank you for your interest in contributing to **AIBenchMark-ESW**. The project 
 
 ## How to Add a New Benchmark Task
 
+The checked-in `uv.lock` is authoritative for contributor and CI dependency
+resolution. Use `uv sync --locked --extra dev` (add `--extra llm` for provider
+support). CI checks `uv lock --check`, exports the dev graph with hashes and
+installs it into the selected Python, including Python 3.9 compatibility markers.
+Regenerate the lock with `uv lock` when dependency bounds change; review upgrades
+in grouped Dependabot uv PRs with a seven-day cooldown.
+
+Ruff enforces bugbear, import ordering and Python 3.9 modernization on both the
+package and tests. Additional simplify/style families are separate decisions.
+Live documentation counts are checked against generated evidence in CI.
+
+Categories form a closed vocabulary: `general`, `core_fundamentals`,
+`fsm_and_protocols`, `device_drivers`, `bug_fix_and_safety`, `fixed_point_control`,
+`flash_management`, and `concurrency`. Choose the task's primary tested contract;
+UART repair belongs to bug fixes, SPI flash to device drivers, and DMA ownership
+to concurrency. Older external `firmware` categories must select control, flash
+management, or drivers. Each description should state its contract rather than
+repeat its display name.
+
+Published reference evidence must score exactly 100 for each completed task, have
+no evaluation errors, and come from committed evaluator/assets. Commit code and
+dataset changes before generating `results/baseline.*`, then commit the evidence.
+`python -m aibenchmark_esw.baseline_check REPORT [PUBLISHED_REFERENCE]` checks the
+selected subset fingerprint and this zero-tolerance score gate. Different compiler
+footprints can be compared against the fixed reference score without claiming that
+their grading/toolchain provenance is interchangeable. `source_dirty` refers to
+evaluator, dataset, harness and packaging inputs; writing evidence/docs does not
+make those inputs dirty. Old source revisions remain explicit provenance rather
+than being relabelled as the evidence-only commit.
+
 Every task in AIBenchMark-ESW lives in its own directory under `tasks/<task_id>/` and must be fully self-contained.
 
 ### 1. Task Directory Layout
