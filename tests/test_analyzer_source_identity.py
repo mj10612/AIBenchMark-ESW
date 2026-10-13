@@ -13,11 +13,56 @@ from test_aggregation import fixture_report
 from aibenchmark_esw.metrics.reporter import BenchmarkReporter
 from aibenchmark_esw.metrics.sarif_sources import generate_sarif
 from aibenchmark_esw.provenance import text_sha256
+from aibenchmark_esw.sandbox.executor import ExecutionSandbox
 from aibenchmark_esw.sandbox.process_runner import OutputLimitExceeded
 from aibenchmark_esw.sandbox.static_analyzer import StaticAnalyzer
 
 
 class TestAnalyzerSourceIdentity(unittest.TestCase):
+    def test_contained_compiler_warnings_keep_exact_candidate_identity(self):
+        from aibenchmark_esw.dataset import DatasetLoader
+        task = DatasetLoader().get_task('tier1_crc16')
+        for mode in ('container', 'bwrap'):
+            with self.subTest(mode=mode), TemporaryDirectory() as directory:
+                root = Path(directory)
+                source, output = root / 'candidate.c', root / 'candidate.o'
+                source.write_text('int candidate;')
+                executor = ExecutionSandbox(compiler_path='gcc', warnings=True, hardening='off')
+                executor.containment = SimpleNamespace(mode=mode)
+                log = (b'/workspace/candidate.c:1:1: warning: candidate [-Wunused-variable]\n'
+                       b'/workspace/include/candidate.c:1:1: warning: header [-Wshadow]\n'
+                       b'/workspace/aibenchmark_tests_0.c:1:1: warning: harness [-Wshadow]\n')
+                def run(command, output=output, log=log, **options):
+                    output.write_bytes(b'object')
+                    return SimpleNamespace(stdout=log, stderr=b'', returncode=0)
+                with patch.object(executor, '_run_contained', side_effect=run):
+                    result = executor._compile(task, [source], output, object_only=True)
+                self.assertTrue(result.success, result.output)
+                self.assertEqual(len(result.findings), 1)
+                self.assertEqual(result.findings[0]['source_origin'], 'candidate')
+                self.assertEqual(result.findings[0]['file'], '/workspace/candidate.c')
+
+    def test_contained_cppcheck_keeps_candidate_and_header_distinct(self):
+        for mode in ('container', 'bwrap'):
+            with self.subTest(mode=mode), TemporaryDirectory() as directory:
+                source = Path(directory) / 'candidate.c'
+                source.write_text('int candidate;')
+                output = (b'warning:probe:/workspace/candidate.c:1:source\n'
+                          b'warning:probe:/workspace/include/candidate.c:1:header\n'
+                          b'warning:probe:candidate.c:1:ambiguous\n')
+                executor = SimpleNamespace(containment=SimpleNamespace(mode=mode), cancel_event=None,
+                    _run_contained=lambda *args, output=output, **kwargs: SimpleNamespace(stdout=output, stderr=b'', returncode=0))
+                metrics = StaticAnalyzer(cppcheck_cmd='fake').analyze(source, executor=executor)
+                self.assertEqual(metrics.cppcheck_status, 'completed')
+                self.assertEqual([row['source_origin'] for row in metrics.findings],
+                                 ['candidate', 'other', 'unknown'])
+                result = BenchmarkReporter.from_json_dict(fixture_report())[0]
+                result.safety_metrics.findings = metrics.findings
+                result.provenance = {'candidate_sha256': text_sha256(source.read_text())}
+                entries = json.loads(generate_sarif([result], source_root=source.parent,
+                    source_mapping={result.task_id: source.name}))['runs'][0]['results']
+                self.assertEqual(['locations' in entry for entry in entries], [True, False, False])
+
     def test_concurrent_failure_status_stays_with_invocation(self):
         analyzer = StaticAnalyzer(cppcheck_cmd='fake-cppcheck')
         paused, release = threading.Event(), threading.Event()

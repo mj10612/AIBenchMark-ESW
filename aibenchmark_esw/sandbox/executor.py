@@ -92,7 +92,8 @@ class ExecutionSandbox:
             self.cross = CrossCompiler(target, cross_compiler, compile_timeout_seconds,
                                        max_output_bytes, isolation, memory_limit_bytes,
                                        self._run_contained if self.containment else None,
-                                       warnings=self.warnings, finding_parser=self._warning_findings)
+                                       warnings=self.warnings, finding_parser=lambda log, sources:
+                                       self._warning_findings(log, sources, workspace=Path(sources[0]).parent))
 
     def hardening_flags(self, object_only=False):
         if self.hardening == "off":
@@ -257,7 +258,7 @@ class ExecutionSandbox:
                           cwd=str(output.parent), isolation=self.isolation,
                           memory_limit_bytes=self.memory_limit_bytes, cancel_event=self.cancel_event)
             log = proc.stdout.decode(locale.getpreferredencoding(False), errors="backslashreplace")
-            findings = self._warning_findings(log, sources)
+            findings = self._warning_findings(log, sources, workspace=output.parent)
             if proc.returncode != 0 or not output.is_file():
                 return CompilationResult(False, log, error_message="Compilation failed",
                                          effective_standard=standard, findings=findings, warning_flags=self.warning_flags())
@@ -277,11 +278,16 @@ class ExecutionSandbox:
             return CompilationResult(False, str(error), error_message="Compiler unavailable or timed out",
                                      effective_standard=standard)
 
-    def _warning_findings(self, log, sources):
+    def _warning_findings(self, log, sources, workspace=None):
         if not self.warnings:
             return []
         owned = {Path(source).resolve() for source in sources
                  if not Path(source).name.startswith("aibenchmark_tests_") and Path(source).name != "unity.c"}
+        contained = set()
+        if self.containment and workspace is not None:
+            root = Path(workspace).resolve()
+            contained = {'/workspace/' + source.relative_to(root).as_posix()
+                         for source in owned if source.is_relative_to(root)}
         findings = []
         for diagnostic in log.splitlines():
             match = re.match(r"^(.*?):(\d+)(?::\d+)?:\s*warning:\s*(.*)", diagnostic)
@@ -295,7 +301,9 @@ class ExecutionSandbox:
             else:
                 continue
             path = Path(file)
-            if path.is_absolute():
+            if file in contained:
+                origin = 'candidate'
+            elif path.is_absolute():
                 if path.resolve() not in owned:
                     continue
                 origin = 'candidate'

@@ -159,6 +159,8 @@ class StaticAnalyzer:
                 reported_path = Path(reported_file)
                 resolved = (source_path.parent / reported_path).resolve()
                 origin = ("candidate" if resolved == source_path.resolve() else "other") if reported_file else "unknown"
+                if executor and executor.containment and reported_file == '/workspace/' + source_path.name:
+                    origin = "candidate"
                 if reported_file and not reported_path.is_absolute() and reported_path.parent == Path('.'):
                     origin = "unknown"
                 findings.append({"rule_id": parts[1], "engine": "cppcheck", "severity": parts[0],
