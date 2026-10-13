@@ -80,7 +80,10 @@ def generate_sarif(results, model_name='unknown', metadata=None, *, source_root=
                           'source_mapping': 'verified' if finding_relative else 'diagnostic-only'}
             entry = {'ruleId': rule, 'level': 'error' if finding['severity'] == 'error' else 'warning',
                      'message': {'text': finding['message']}, 'properties': properties}
-            identity = [result.task_id, finding_relative, provenance.get('candidate_sha256'), rule, finding['engine'], finding.get('line'), finding['message'], finding['severity']]
+            # A rule can emit multiple diagnostics at the same source line.
+            # Only identical messages and severities represent duplicate findings.
+            identity = [result.task_id, finding_relative, provenance.get('candidate_sha256'), rule,
+                        finding['engine'], finding.get('line'), finding['message'], finding['severity']]
             if finding_relative:
                 physical = {'artifactLocation': {'uri': quote(finding_relative, safe='/')}}
                 if finding.get('line') is not None:
@@ -90,7 +93,7 @@ def generate_sarif(results, model_name='unknown', metadata=None, *, source_root=
             else:
                 properties['mapping_diagnostic'] = finding_diagnostic
                 # Keep diagnostics distinct when no verified source identity exists.
-                identity += [sample, finding['file'], finding['message']]
+                identity += [sample, finding['file']]
             key = json.dumps(identity, ensure_ascii=False)
             if key in published:
                 samples = published[key]['properties']['sample_run_ids']

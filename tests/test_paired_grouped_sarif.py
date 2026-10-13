@@ -19,6 +19,39 @@ from aibenchmark_esw.provenance import text_sha256
 
 
 class TestPairedGroupedSarif(unittest.TestCase):
+    def test_same_location_keeps_distinct_messages_and_severities(self):
+        result = BenchmarkReporter.from_json_dict(fixture_report())[0]
+        source = 'int f(void) { int a, b; return 0; }\n'
+        result.safety_metrics.findings = [
+            dict(rule_id='compiler.-Wunused-variable', engine='compiler',
+                 severity=severity, message=message, file='candidate.c', line=1,
+                 source_origin='candidate')
+            for severity, message in (('warning', 'unused variable a'),
+                                      ('warning', 'unused variable b'),
+                                      ('error', 'unused variable a'))]
+        result.provenance = {'candidate_sha256': text_sha256(source), 'sample_run_id': 'first'}
+        second = copy.deepcopy(result)
+        second.provenance['sample_run_id'] = 'second'
+        with TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / 'candidate.c').write_text(source, encoding='utf-8')
+            for verified in (True, False):
+                with self.subTest(verified=verified):
+                    mapping = {result.task_id: 'candidate.c'} if verified else {}
+                    findings = json.loads(generate_sarif(
+                        [result, second], source_root=root, source_mapping=mapping))['runs'][0]['results']
+                    self.assertEqual(len(findings), 3 if verified else 6)
+                    self.assertEqual({(finding['properties']['severity'], finding['message']['text'])
+                                      for finding in findings},
+                                     {('warning', 'unused variable a'),
+                                      ('warning', 'unused variable b'),
+                                      ('error', 'unused variable a')})
+                    if verified:
+                        self.assertEqual(len({finding['partialFingerprints']['candidateLocation/v1']
+                                              for finding in findings}), 3)
+                        for finding in findings:
+                            self.assertEqual(finding['properties']['sample_run_ids'], ['first', 'second'])
+
     def test_exact_p_values_ties_zeros_effect_and_bootstrap(self):
         # Published SciPy example, with distinct nonzero paired ranks.
         self.assertEqual(paired_statistics([6, 8, 14, 16, 23, 24, 28, 29, 41, -48, 49, 56, 60, -67, 75])['p_value'], 0.041259765625)
