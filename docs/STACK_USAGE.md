@@ -1,6 +1,6 @@
 # Optional compiler stack evidence
 
-Add `--stack-usage` to `run`, `eval`, `replay`, or `mutations` to request
+Add `--stack-usage` to `run`, `eval`, or `replay` to request
 compiler-produced per-function stack records alongside the existing object
 Flash/RAM measurement. For example:
 
