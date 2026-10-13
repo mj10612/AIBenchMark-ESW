@@ -133,7 +133,7 @@ jobs:
         run: aibenchmark-esw report --results artifacts/baseline.json --format markdown > artifacts/baseline.md
       - name: Upload baseline evidence
         if: always()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: baseline-${{ matrix.os }}-py${{ matrix.python }}-${{ matrix.compiler }}
           path: artifacts/
@@ -205,7 +205,7 @@ jobs:
           aibenchmark-esw validate-report artifacts/msvc-baseline.json
       - name: Upload MSVC evidence
         if: always()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: baseline-windows-msvc
           path: artifacts/
@@ -256,7 +256,7 @@ jobs:
           aibenchmark-esw validate-report artifacts/bwrap-baseline.json
       - name: Upload containment evidence
         if: always()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: baseline-linux-containment
           path: artifacts/
