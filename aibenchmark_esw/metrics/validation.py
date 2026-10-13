@@ -112,6 +112,8 @@ def validate_task_result(item, default_model):
         if finding.get("engine") not in ("builtin", "cppcheck", "compiler") or finding.get("severity") not in (
                 "error", "warning", "style", "performance", "portability"):
             raise ValueError("Unknown finding engine or severity")
+        if "source_origin" in finding and finding["source_origin"] not in ("candidate", "other", "unknown"):
+            raise ValueError("Unknown finding.source_origin")
         if finding.get("line") is not None:
             _count(finding["line"], "finding.line")
             if finding["line"] == 0:

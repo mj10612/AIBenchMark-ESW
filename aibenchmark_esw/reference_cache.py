@@ -16,6 +16,7 @@ class ReferenceValidation:
     flash_bytes: int = 0
     ram_bytes: int = 0
     error: Optional[str] = None
+    stack_usage: Optional[dict] = None
 
 
 class ReferenceCache:
@@ -57,7 +58,7 @@ class ReferenceCache:
                         raise ValueError(f"Reference validation failed: Flash footprint {size.flash_bytes} exceeds budget {task.limits.max_flash_bytes}")
                     if size.ram_bytes > task.limits.max_ram_bytes:
                         raise ValueError(f"Reference validation failed: RAM footprint {size.ram_bytes} exceeds budget {task.limits.max_ram_bytes}")
-                    record = ReferenceValidation(size.flash_bytes, size.ram_bytes)
+                    record = ReferenceValidation(size.flash_bytes, size.ram_bytes, stack_usage=getattr(obj, 'stack_usage', None))
             except (OSError, ValueError) as error:
                 record = ReferenceValidation(error=str(error))
             if record.error is None:

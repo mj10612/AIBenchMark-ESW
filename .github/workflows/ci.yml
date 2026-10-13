@@ -203,6 +203,17 @@ jobs:
           aibenchmark-esw run --model baseline --compiler cl --allow-standard-fallback --output artifacts/msvc-baseline.json
           aibenchmark-esw mutations --compiler cl --allow-standard-fallback --output artifacts/msvc-mutations.json
           aibenchmark-esw validate-report artifacts/msvc-baseline.json
+      - name: Verify Windows Clang runtime output limits
+        shell: pwsh
+        run: |
+          $locator = Join-Path ${env:ProgramFiles(x86)} 'Microsoft Visual Studio/Installer/vswhere.exe'
+          $installation = & $locator -latest -products '*' -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath
+          $compiler = Join-Path $installation 'VC/Tools/Llvm/x64/bin/clang.exe'
+          if (-not (Test-Path -LiteralPath $compiler)) { throw 'Installed Visual Studio Clang was not found' }
+          $env:AIBENCHMARK_ESW_COMPILER = $compiler
+          $env:PYTHONPATH = 'tests'
+          python -m unittest test_runtime_controls.TestRuntimeControls.test_test_output_overflow_is_incomplete test_runtime_controls.TestRuntimeControls.test_candidate_fseek_stdout_cannot_bypass_output_limit -v
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
       - name: Upload MSVC evidence
         if: always()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2

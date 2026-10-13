@@ -56,6 +56,18 @@ def child_alive(pid):
         time.sleep(0.005)
 
 
+class RuntimeOutputSandbox(ExecutionSandbox):
+    """Leave room for compiler diagnostics while testing a small runtime cap."""
+
+    def _compile(self, *args, **kwargs):
+        runtime_cap = self.max_output_bytes
+        self.max_output_bytes = 64 * 1024
+        try:
+            return super()._compile(*args, **kwargs)
+        finally:
+            self.max_output_bytes = runtime_cap
+
+
 class TestRuntimeControls(unittest.TestCase):
     @patch("aibenchmark_esw.sandbox.process_runner.signal.SIGKILL", 9, create=True)
     def test_zombie_group_permission_error_reaps_and_retries_descendant_cleanup(self):
@@ -246,7 +258,7 @@ int main(void){UNITY_BEGIN();RUN_TEST(test_ok);return UNITY_END();}
         task = loader.get_task("tier1_crc16")
         source = '#include <stdio.h>\n' + loader.get_reference_solution(task.id)
         source = source.replace("return crc;", 'puts("' + "x" * 3000 + '"); return crc;', 1)
-        compiled, result = ExecutionSandbox(max_output_bytes=1024).compile_and_test(task, source)
+        compiled, result = RuntimeOutputSandbox(max_output_bytes=1024).compile_and_test(task, source)
         self.addCleanup(compiled.cleanup)
         self.assertTrue(compiled.success, compiled.output)
         self.assertFalse(result.completed)
@@ -259,7 +271,7 @@ int main(void){UNITY_BEGIN();RUN_TEST(test_ok);return UNITY_END();}
         source = '#include <stdio.h>\n' + loader.get_reference_solution(task.id)
         source = source.replace("return crc;", 'for (;;) { fseek(stdout,0,SEEK_SET); '
                                 'puts("' + 'x' * 512 + '"); fflush(stdout); } return crc;', 1)
-        compiled, result = ExecutionSandbox(max_output_bytes=1024).compile_and_test(task, source)
+        compiled, result = RuntimeOutputSandbox(max_output_bytes=1024).compile_and_test(task, source)
         self.addCleanup(compiled.cleanup)
         self.assertTrue(compiled.success, compiled.output)
         self.assertFalse(result.completed)

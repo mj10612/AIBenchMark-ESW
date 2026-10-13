@@ -43,6 +43,11 @@ def _mutation(name, description, before, after):
 
 MUTATIONS = {
     "tier2_can_frame": (
+        _mutation("restricted-capacity-domain", "Every caller capacity 1 through 16 supports FIFO service.",
+                  "if(storage==NULL || capacity==0",
+                  "if((capacity!=1 && capacity!=2 && capacity!=3 && capacity!=16) || storage==NULL || capacity==0"),
+        _mutation("small-index-wrap", "Capacity 16 must use every slot across repeated wraps.",
+                  "q->head=(q->head+1U)%q->capacity", "q->head=(q->head+1U)%(q->capacity>3U?3U:q->capacity)"),
         _mutation("dlc-over-eight", "Classic CAN rejects DLC 9 without changing output.",
                   "(raw->control&15U)>8U", "(raw->control&15U)>9U"),
         _mutation("extended-shift", "Extended IDs use 29 bits at bit 3.",
@@ -55,6 +60,8 @@ MUTATIONS = {
                   "--q->count;return CAN_OK;", "--q->count;q->overrun=false;return CAN_OK;"),
     ),
     "tier2_windowed_watchdog": (
+        _mutation("restricted-window-domain", "All legal timing windows must support service.",
+                  "if (low == 0 ||", "if (low != 8U || high != 12U || low == 0 ||"),
         _mutation("naive-window", "Elapsed subtraction must survive timer rollover.",
                   "uint32_t elapsed=now-m->origin;", "uint32_t elapsed=now < m->origin ? 0 : now-m->origin;"),
         _mutation("carry-heartbeats", "Each refresh requires new heartbeats from every task.",

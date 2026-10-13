@@ -8,7 +8,7 @@
 
 > A host-based benchmark for evaluating AI-generated embedded C using functional tests, resource budgets, and selected static safety rules.
 
-The project is in early development: 15 tasks and 147 C test cases provide a reproducible reference baseline. The published [100-point baseline](results/baseline.md) measures the bundled golden implementations; it is not an OpenAI or Claude model score. See [reproducibility](docs/REPRODUCIBILITY.md), the [roadmap](docs/ROADMAP.md), and [contributor guidance](CONTRIBUTING.md).
+The project is in early development: 15 tasks and 150 C test cases provide a reproducible reference baseline. The published [100-point baseline](results/baseline.md) measures the bundled golden implementations; it is not an OpenAI or Claude model score. See [reproducibility](docs/REPRODUCIBILITY.md), the [roadmap](docs/ROADMAP.md), and [contributor guidance](CONTRIBUTING.md).
 
 ---
 
@@ -199,7 +199,7 @@ The combined size ($\text{Flash} + \text{RAM}$) is compared to the measured refe
 * Missing or unreadable measurements are reported as unavailable and receive no memory points.
 * References that fail to compile, do not complete and pass every test, or exceed either resource budget produce an explicit reference-validation error and receive no memory points.
 
-Reference implementations must pass all functional tests and fit the budgets with the compiler used for comparisons. The published Clang 19.1.5 baseline scores 100/100 and passes all 147 tests. The ring buffer's Flash budget is 2048 bytes; the current Clang evidence measures a 384-byte object footprint. A historical TCC baseline measured 1474 bytes, which also fits that budget. Its RAM footprint is legitimately zero because it uses caller-owned storage. The Q1.15 task has 16 cases, including a sweep of all 65,536 raw values for selected arithmetic identities and scaling checks; it does not exhaust all input pairs. The tick timer has 16 cases for wrap, deadline boundaries, phase retention, and missed-expiration counts; real elapsed time from its stored origin must remain below 2^32 ticks. Other compilers may produce different footprints; resource limits remain enforced for both candidates and references.
+Reference implementations must pass all functional tests and fit the budgets with the compiler used for comparisons. The refreshed TCC baseline scores 100/100 and passes all 150 tests. The ring buffer's Flash budget is 2048 bytes, accommodating its measured 1474-byte TCC object footprint. Its RAM footprint is legitimately zero because it uses caller-owned storage. The Q1.15 task has 16 cases, including a sweep of all 65,536 raw values for selected arithmetic identities and scaling checks; it does not exhaust all input pairs. The tick timer has 16 cases for wrap, deadline boundaries, phase retention, and missed-expiration counts; real elapsed time from its stored origin must remain below 2^32 ticks. Other compilers may produce different footprints; resource limits remain enforced for both candidates and references.
 
 ### 3. Static Code Safety ($S_{\text{safety}}$, 20%)
 Checks selected embedded safety rules using built-in heuristics and, when installed, `cppcheck`. These checks are not full MISRA-C certification. Penalizes:
@@ -302,7 +302,7 @@ aibenchmark-esw aggregate --results results/run1.json results/run2.json --format
 aibenchmark-esw compare --results results/model_a.json results/model_b.json --format markdown
 # Stable long-form columns: model,task_id,total,functional,memory,safety,measured,pass_at_1.
 aibenchmark-esw compare --results results/model_a.json results/model_b.json --format csv-long
-# Test adequacy against 63 reviewed faulty candidates across all 15 tasks.
+# Test adequacy against 66 reviewed faulty candidates across all 15 tasks.
 aibenchmark-esw mutations
 # Verify the published evidence corresponds to the current code and dataset.
 python -m aibenchmark_esw.baseline_check results/baseline.json
@@ -347,6 +347,12 @@ when allocated). This excludes linker layout, startup libraries, stack and heap;
 a target object is not a final MCU image or proof of deployment fit. Mach-O
 relocatable objects are measured from sections and common symbols; universal
 objects use conservative componentwise maxima across their architecture slices.
+
+Optional `--stack-usage` collects separate GCC/Clang candidate/reference
+per-function stack evidence without changing scores. For example, add
+`--compiler clang --stack-usage` to a reference run. Coverage, unavailable reasons,
+compiler flags and target identity distinguish this evidence from static RAM;
+it does not establish whole-program peak stack. See [Stack usage](docs/STACK_USAGE.md).
 
 Built-in analysis records rule IDs, severity, file/line, rule configuration and
 safety penalties (15/error, 3/warning). Long/short and signed/unsigned integer/char

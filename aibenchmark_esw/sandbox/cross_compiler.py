@@ -67,8 +67,8 @@ class CrossCompiler:
                 "flags": self.flags, "warning_flags": self.warning_flags,
                 "stamp": self.stamp, "measurement": "target-object"}
 
-    def compile(self, task, source, output):
-        command = [self.compiler, *self.flags, *self.warning_flags, f"-std={task.target_standard}", "-I",
+    def compile(self, task, source, output, extra_flags=()):
+        command = [self.compiler, *self.flags, *self.warning_flags, *extra_flags, f"-std={task.target_standard}", "-I",
                    str(task.task_dir.resolve() / "include"), "-c", str(source), "-o", str(output)]
         try:
             runner = self.runner or run_bounded

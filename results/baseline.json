@@ -1,23 +1,23 @@
 {
   "schema_version": 2,
   "metadata": {
-    "run_id": "0e395ea3c5fd4bad8b6f79e4684ed324",
-    "created_at_utc": "2026-10-12T00:15:43.856860+00:00",
+    "run_id": "cb1462a5816846788b7ab754e0749647",
+    "created_at_utc": "2026-10-13T12:14:19.329643+00:00",
     "benchmark_version": "0.1.0",
-    "evaluator_sha256": "30b852bc11f446af70b9a1d0799e8fc0ee8d49e725ec03474f665fb13591f2db",
-    "python_version": "3.14.3",
+    "evaluator_sha256": "c40ecb2a16fcb897a5f6766a579bdacedb1fbd3de7a8d89c3ba9ac19c39f86d2",
+    "python_version": "3.11.15",
     "platform": {
       "system": "Windows",
-      "release": "11",
+      "release": "10",
       "machine": "AMD64"
     },
     "compiler": {
-      "name": "clang",
-      "version": "clang version 19.1.5",
+      "name": "tcc",
+      "version": "tcc version 0.9.27 (x86_64 Windows)",
       "target": {
         "target": "host"
       },
-      "optimization": "-Os",
+      "optimization": "native",
       "allow_standard_fallback": false
     },
     "static_analysis": {
@@ -61,7 +61,7 @@
         ]
       }
     },
-    "source_revision": "c5405138704d53fc6f4fcf0b8fe01b7e5a8ab1ee",
+    "source_revision": "4d57dfe23111c64d64316e1ff60cbaea49b05964",
     "source_dirty": false,
     "selected_tasks": [
       "tier1_crc16",
@@ -101,20 +101,20 @@
       "tier1_crc16": "0b0e524ce9fa320945052441022b26595e7a58188b3162905bf23896dbbd9734",
       "tier1_q15_math": "4a31d147057151bcd018aa421cb849d57b2fc93e752b4d165763287c07e1091f",
       "tier1_ring_buffer": "750efc2fcd6fc186e414a6e470ac1e75fded4432d4e0d2133637b48ac5fa5fb4",
-      "tier2_can_frame": "cbc8cc8dfa0ecd9bcbe02515244112b44ba58c1891265f7ede2ab89ac37ecc93",
+      "tier2_can_frame": "6c968b097ac50661e4b2dc6cbba078d03dc650f2783e3f60f47dca1d3710b4a7",
       "tier2_cobs_codec": "e0d8e38ac017a140dafb44659d93e15cc56486d29f04788d4c17d17f0f99ceeb",
       "tier2_debounce_fsm": "56a6cf42788072f4a5d8f763fe9b8af0a949105b467429f39393b78d5c15ede3",
       "tier2_fixed_control": "8a029c491576548951695257aa9fa4fa356a6e69576d14b15b126165361796d1",
       "tier2_tick_timer": "e6272cbbc9fb32e4c61a2a3f9edeaea25f1df538eabfedf955d27f246ec49b07",
-      "tier2_windowed_watchdog": "8e4dd0952df106cf6b22be7d24b75f4d01d28375e18aa15d2de5859a4f8fbc27",
+      "tier2_windowed_watchdog": "3e20d96971143d41a8af56a84c797bfc174ecdc79ed862505e5c4ea020ff1f29",
       "tier3_flash_update": "4ba56b9a822341e92cea28634ff7e8d9149a178f1464067df62096c0024d4afc",
-      "tier3_i2c_sensor": "4d684a35b1596a6bb660bda3a86df34f6df3b9cf21fffc2c2a2ec15fbb488b9a",
+      "tier3_i2c_sensor": "e62411cdda2ec00ca0fd6ba391d68383136b2612c09c3fad3fa53c54b3fa4e29",
       "tier3_spi_flash": "96a4304c7f4c86329488c46c5d68959f2c32e34b5a6da232b9fb0b5ce61f8517",
       "tier4_bitmask_fix": "fc8c25e65a54af7ec6392f9b3aeec4c05c0299bef406cfce00d72e3a5869b4bd",
       "tier4_dma_buffer": "5040d14fc7bf57da2fdd7b1aff52417df7ec8ae7c776234b00af7a8cc3e878dd",
       "tier4_uart_frame_fix": "ea4941ba7dc4d03dd0b23220137c76fb4ceec7f47bad93c60813be8f2de55462"
     },
-    "dataset_sha256": "f2312a9944c5296fd55354f9f27cafafa920da443579e32581d6e4287124da97",
+    "dataset_sha256": "96b16b5b2685cdb873c04e4f83b0123cf5af92226bd236aa44f20a1adcdede50",
     "unreadable_assets": {},
     "generation_settings": null,
     "scoring_policy": {
@@ -312,20 +312,15 @@
       "sanitizers": [],
       "compiler_warnings": false,
       "warning_flags": [],
+      "stack_usage": false,
       "containment": null,
       "candidate_environment": "minimal-v1",
       "oracle_policy": "private-unity-state-v1",
       "hardening": {
         "policy": "auto",
-        "compile_flags": [
-          "-fstack-protector-strong",
-          "-D_FORTIFY_SOURCE=2"
-        ],
-        "binary_flags": [
-          "-fstack-protector-strong",
-          "-D_FORTIFY_SOURCE=2"
-        ],
-        "available": true
+        "compile_flags": [],
+        "binary_flags": [],
+        "available": false
       },
       "resource_limits": {
         "process_count": 64,
@@ -342,7 +337,7 @@
       }
     },
     "run_options": {
-      "compiler": "C:\\Program Files\\Microsoft Visual Studio\\2022\\Professional\\VC\\Tools\\Llvm\\x64\\bin\\clang.exe",
+      "compiler": "C:\\Users\\Admin\\scoop\\apps\\tcc\\0.9.27\\tcc\\tcc.exe",
       "allow_standard_fallback": false,
       "compile_timeout": 30.0,
       "max_output_bytes": 1048576,
@@ -356,6 +351,7 @@
       "cross_compiler": null,
       "warnings": false,
       "hardening": "auto",
+      "stack_usage": false,
       "container_engine": null,
       "container_image": "gcc:14",
       "static_analysis_timeout": 30.0,
@@ -389,9 +385,9 @@
         "returncode": 0
       },
       "size_metrics": {
-        "flash_bytes": 130,
+        "flash_bytes": 361,
         "ram_bytes": 0,
-        "ref_flash_bytes": 130,
+        "ref_flash_bytes": 361,
         "ref_ram_bytes": 0,
         "measured": true
       },
@@ -409,7 +405,7 @@
         "safety": 100.0,
         "total": 100.0
       },
-      "execution_time_sec": 0.922,
+      "execution_time_sec": 0.467,
       "error_log": null,
       "weights": {
         "functional": 0.6,
@@ -430,8 +426,8 @@
         "max_ram_bytes": 128,
         "timeout_seconds": 5
       },
-      "candidate_time_sec": 0.9216050000002269,
-      "reference_validation_time_sec": 0.008446999999932814,
+      "candidate_time_sec": 0.46654499999976906,
+      "reference_validation_time_sec": 0.05864400000018577,
       "footprint_target": "host"
     },
     {
@@ -449,9 +445,9 @@
         "returncode": 0
       },
       "size_metrics": {
-        "flash_bytes": 70,
+        "flash_bytes": 270,
         "ram_bytes": 0,
-        "ref_flash_bytes": 70,
+        "ref_flash_bytes": 270,
         "ref_ram_bytes": 0,
         "measured": true
       },
@@ -469,7 +465,7 @@
         "safety": 100.0,
         "total": 100.0
       },
-      "execution_time_sec": 0.897,
+      "execution_time_sec": 0.436,
       "error_log": null,
       "weights": {
         "functional": 0.6,
@@ -490,8 +486,8 @@
         "max_ram_bytes": 0,
         "timeout_seconds": 5
       },
-      "candidate_time_sec": 0.89707240000007,
-      "reference_validation_time_sec": 0.007897100000036517,
+      "candidate_time_sec": 0.43609090000018114,
+      "reference_validation_time_sec": 0.051345299999866256,
       "footprint_target": "host"
     },
     {
@@ -509,9 +505,9 @@
         "returncode": 0
       },
       "size_metrics": {
-        "flash_bytes": 384,
+        "flash_bytes": 1474,
         "ram_bytes": 0,
-        "ref_flash_bytes": 384,
+        "ref_flash_bytes": 1474,
         "ref_ram_bytes": 0,
         "measured": true
       },
@@ -529,7 +525,7 @@
         "safety": 100.0,
         "total": 100.0
       },
-      "execution_time_sec": 0.947,
+      "execution_time_sec": 0.446,
       "error_log": null,
       "weights": {
         "functional": 0.6,
@@ -550,8 +546,8 @@
         "max_ram_bytes": 128,
         "timeout_seconds": 5
       },
-      "candidate_time_sec": 0.9465069000000312,
-      "reference_validation_time_sec": 0.008480700000063734,
+      "candidate_time_sec": 0.4462898000001587,
+      "reference_validation_time_sec": 0.05605139999988751,
       "footprint_target": "host"
     },
     {
@@ -560,8 +556,8 @@
       "model_name": "baseline",
       "compiled": true,
       "test_result": {
-        "total": 14,
-        "passed": 14,
+        "total": 15,
+        "passed": 15,
         "failed": 0,
         "ignored": 0,
         "all_passed": true,
@@ -569,9 +565,9 @@
         "returncode": 0
       },
       "size_metrics": {
-        "flash_bytes": 1130,
+        "flash_bytes": 2600,
         "ram_bytes": 0,
-        "ref_flash_bytes": 1130,
+        "ref_flash_bytes": 2600,
         "ref_ram_bytes": 0,
         "measured": true
       },
@@ -589,7 +585,7 @@
         "safety": 100.0,
         "total": 100.0
       },
-      "execution_time_sec": 0.944,
+      "execution_time_sec": 0.423,
       "error_log": null,
       "weights": {
         "functional": 0.6,
@@ -601,7 +597,7 @@
       "generation": null,
       "provenance": {
         "reference_cache_hit": false,
-        "task_sha256": "cbc8cc8dfa0ecd9bcbe02515244112b44ba58c1891265f7ede2ab89ac37ecc93",
+        "task_sha256": "6c968b097ac50661e4b2dc6cbba078d03dc650f2783e3f60f47dca1d3710b4a7",
         "candidate_sha256": "6644ed6a1f53afb563fc9b66a0876ef92a653950974fb913457b4d1fd975d678",
         "prompt_sha256": null
       },
@@ -610,8 +606,8 @@
         "max_ram_bytes": 256,
         "timeout_seconds": 5
       },
-      "candidate_time_sec": 0.9441349999999602,
-      "reference_validation_time_sec": 0.008548400000108813,
+      "candidate_time_sec": 0.4230102999999872,
+      "reference_validation_time_sec": 0.05730790000006891,
       "footprint_target": "host"
     },
     {
@@ -629,9 +625,9 @@
         "returncode": 0
       },
       "size_metrics": {
-        "flash_bytes": 609,
+        "flash_bytes": 1186,
         "ram_bytes": 0,
-        "ref_flash_bytes": 609,
+        "ref_flash_bytes": 1186,
         "ref_ram_bytes": 0,
         "measured": true
       },
@@ -649,7 +645,7 @@
         "safety": 100.0,
         "total": 100.0
       },
-      "execution_time_sec": 0.959,
+      "execution_time_sec": 0.474,
       "error_log": null,
       "weights": {
         "functional": 0.6,
@@ -670,8 +666,8 @@
         "max_ram_bytes": 0,
         "timeout_seconds": 5
       },
-      "candidate_time_sec": 0.9593579999998383,
-      "reference_validation_time_sec": 0.00853000000006432,
+      "candidate_time_sec": 0.47442860000046494,
+      "reference_validation_time_sec": 0.07578359999979511,
       "footprint_target": "host"
     },
     {
@@ -689,9 +685,9 @@
         "returncode": 0
       },
       "size_metrics": {
-        "flash_bytes": 292,
+        "flash_bytes": 1134,
         "ram_bytes": 0,
-        "ref_flash_bytes": 292,
+        "ref_flash_bytes": 1134,
         "ref_ram_bytes": 0,
         "measured": true
       },
@@ -709,7 +705,7 @@
         "safety": 100.0,
         "total": 100.0
       },
-      "execution_time_sec": 0.914,
+      "execution_time_sec": 0.59,
       "error_log": null,
       "weights": {
         "functional": 0.6,
@@ -730,8 +726,8 @@
         "max_ram_bytes": 128,
         "timeout_seconds": 5
       },
-      "candidate_time_sec": 0.9142332000001261,
-      "reference_validation_time_sec": 0.00876709999988634,
+      "candidate_time_sec": 0.5903634999999667,
+      "reference_validation_time_sec": 0.0641086999999061,
       "footprint_target": "host"
     },
     {
@@ -749,9 +745,9 @@
         "returncode": 0
       },
       "size_metrics": {
-        "flash_bytes": 327,
+        "flash_bytes": 941,
         "ram_bytes": 0,
-        "ref_flash_bytes": 327,
+        "ref_flash_bytes": 941,
         "ref_ram_bytes": 0,
         "measured": true
       },
@@ -769,7 +765,7 @@
         "safety": 100.0,
         "total": 100.0
       },
-      "execution_time_sec": 0.904,
+      "execution_time_sec": 0.473,
       "error_log": null,
       "weights": {
         "functional": 0.6,
@@ -790,8 +786,8 @@
         "max_ram_bytes": 128,
         "timeout_seconds": 5
       },
-      "candidate_time_sec": 0.9037370999999439,
-      "reference_validation_time_sec": 0.007887799999934941,
+      "candidate_time_sec": 0.47280570000020816,
+      "reference_validation_time_sec": 0.05552899999975125,
       "footprint_target": "host"
     },
     {
@@ -809,9 +805,9 @@
         "returncode": 0
       },
       "size_metrics": {
-        "flash_bytes": 139,
+        "flash_bytes": 636,
         "ram_bytes": 0,
-        "ref_flash_bytes": 139,
+        "ref_flash_bytes": 636,
         "ref_ram_bytes": 0,
         "measured": true
       },
@@ -829,7 +825,7 @@
         "safety": 100.0,
         "total": 100.0
       },
-      "execution_time_sec": 0.897,
+      "execution_time_sec": 0.487,
       "error_log": null,
       "weights": {
         "functional": 0.6,
@@ -850,8 +846,8 @@
         "max_ram_bytes": 0,
         "timeout_seconds": 5
       },
-      "candidate_time_sec": 0.8972584000000552,
-      "reference_validation_time_sec": 0.008272799999986091,
+      "candidate_time_sec": 0.48738479999974516,
+      "reference_validation_time_sec": 0.06356860000005327,
       "footprint_target": "host"
     },
     {
@@ -860,8 +856,8 @@
       "model_name": "baseline",
       "compiled": true,
       "test_result": {
-        "total": 13,
-        "passed": 13,
+        "total": 15,
+        "passed": 15,
         "failed": 0,
         "ignored": 0,
         "all_passed": true,
@@ -869,9 +865,9 @@
         "returncode": 0
       },
       "size_metrics": {
-        "flash_bytes": 413,
+        "flash_bytes": 1136,
         "ram_bytes": 0,
-        "ref_flash_bytes": 413,
+        "ref_flash_bytes": 1136,
         "ref_ram_bytes": 0,
         "measured": true
       },
@@ -889,7 +885,7 @@
         "safety": 100.0,
         "total": 100.0
       },
-      "execution_time_sec": 0.906,
+      "execution_time_sec": 0.445,
       "error_log": null,
       "weights": {
         "functional": 0.6,
@@ -901,7 +897,7 @@
       "generation": null,
       "provenance": {
         "reference_cache_hit": false,
-        "task_sha256": "8e4dd0952df106cf6b22be7d24b75f4d01d28375e18aa15d2de5859a4f8fbc27",
+        "task_sha256": "3e20d96971143d41a8af56a84c797bfc174ecdc79ed862505e5c4ea020ff1f29",
         "candidate_sha256": "bf8055bca9b0c11ae704fe5284d8c5da51b3990c047da5aa3b620e0cf2adc186",
         "prompt_sha256": null
       },
@@ -910,8 +906,8 @@
         "max_ram_bytes": 256,
         "timeout_seconds": 5
       },
-      "candidate_time_sec": 0.9064343000000008,
-      "reference_validation_time_sec": 0.00824729999999363,
+      "candidate_time_sec": 0.44460979999985284,
+      "reference_validation_time_sec": 0.05497120000018185,
       "footprint_target": "host"
     },
     {
@@ -929,9 +925,9 @@
         "returncode": 0
       },
       "size_metrics": {
-        "flash_bytes": 779,
+        "flash_bytes": 1980,
         "ram_bytes": 0,
-        "ref_flash_bytes": 779,
+        "ref_flash_bytes": 1980,
         "ref_ram_bytes": 0,
         "measured": true
       },
@@ -949,7 +945,7 @@
         "safety": 100.0,
         "total": 100.0
       },
-      "execution_time_sec": 0.931,
+      "execution_time_sec": 0.459,
       "error_log": null,
       "weights": {
         "functional": 0.6,
@@ -970,8 +966,8 @@
         "max_ram_bytes": 128,
         "timeout_seconds": 5
       },
-      "candidate_time_sec": 0.9310335000000123,
-      "reference_validation_time_sec": 0.00884459999997489,
+      "candidate_time_sec": 0.4585923999998158,
+      "reference_validation_time_sec": 0.04925830000001952,
       "footprint_target": "host"
     },
     {
@@ -989,9 +985,9 @@
         "returncode": 0
       },
       "size_metrics": {
-        "flash_bytes": 444,
+        "flash_bytes": 830,
         "ram_bytes": 0,
-        "ref_flash_bytes": 444,
+        "ref_flash_bytes": 830,
         "ref_ram_bytes": 0,
         "measured": true
       },
@@ -1009,7 +1005,7 @@
         "safety": 100.0,
         "total": 100.0
       },
-      "execution_time_sec": 0.897,
+      "execution_time_sec": 0.414,
       "error_log": null,
       "weights": {
         "functional": 0.6,
@@ -1021,7 +1017,7 @@
       "generation": null,
       "provenance": {
         "reference_cache_hit": false,
-        "task_sha256": "4d684a35b1596a6bb660bda3a86df34f6df3b9cf21fffc2c2a2ec15fbb488b9a",
+        "task_sha256": "e62411cdda2ec00ca0fd6ba391d68383136b2612c09c3fad3fa53c54b3fa4e29",
         "candidate_sha256": "522d72a16e27ad8d6a62d1ab61ab00fbd576fc70d479305f425410118592b231",
         "prompt_sha256": null
       },
@@ -1030,8 +1026,8 @@
         "max_ram_bytes": 256,
         "timeout_seconds": 5
       },
-      "candidate_time_sec": 0.8967717999998968,
-      "reference_validation_time_sec": 0.008282799999960844,
+      "candidate_time_sec": 0.4135135999999875,
+      "reference_validation_time_sec": 0.0532748000000538,
       "footprint_target": "host"
     },
     {
@@ -1049,9 +1045,9 @@
         "returncode": 0
       },
       "size_metrics": {
-        "flash_bytes": 1018,
+        "flash_bytes": 1913,
         "ram_bytes": 0,
-        "ref_flash_bytes": 1018,
+        "ref_flash_bytes": 1913,
         "ref_ram_bytes": 0,
         "measured": true
       },
@@ -1069,7 +1065,7 @@
         "safety": 100.0,
         "total": 100.0
       },
-      "execution_time_sec": 0.932,
+      "execution_time_sec": 0.507,
       "error_log": null,
       "weights": {
         "functional": 0.6,
@@ -1090,8 +1086,8 @@
         "max_ram_bytes": 128,
         "timeout_seconds": 5
       },
-      "candidate_time_sec": 0.9316722999999456,
-      "reference_validation_time_sec": 0.00817260000007991,
+      "candidate_time_sec": 0.5069571000003634,
+      "reference_validation_time_sec": 0.05892009999979564,
       "footprint_target": "host"
     },
     {
@@ -1109,9 +1105,9 @@
         "returncode": 0
       },
       "size_metrics": {
-        "flash_bytes": 141,
+        "flash_bytes": 462,
         "ram_bytes": 0,
-        "ref_flash_bytes": 141,
+        "ref_flash_bytes": 462,
         "ref_ram_bytes": 0,
         "measured": true
       },
@@ -1129,7 +1125,7 @@
         "safety": 100.0,
         "total": 100.0
       },
-      "execution_time_sec": 0.919,
+      "execution_time_sec": 0.441,
       "error_log": null,
       "weights": {
         "functional": 0.6,
@@ -1150,8 +1146,8 @@
         "max_ram_bytes": 128,
         "timeout_seconds": 5
       },
-      "candidate_time_sec": 0.9189607999999225,
-      "reference_validation_time_sec": 0.008962600000131715,
+      "candidate_time_sec": 0.4414895999998407,
+      "reference_validation_time_sec": 0.054256899999927555,
       "footprint_target": "host"
     },
     {
@@ -1169,9 +1165,9 @@
         "returncode": 0
       },
       "size_metrics": {
-        "flash_bytes": 545,
+        "flash_bytes": 1590,
         "ram_bytes": 0,
-        "ref_flash_bytes": 545,
+        "ref_flash_bytes": 1590,
         "ref_ram_bytes": 0,
         "measured": true
       },
@@ -1189,7 +1185,7 @@
         "safety": 100.0,
         "total": 100.0
       },
-      "execution_time_sec": 0.944,
+      "execution_time_sec": 0.436,
       "error_log": null,
       "weights": {
         "functional": 0.6,
@@ -1210,8 +1206,8 @@
         "max_ram_bytes": 128,
         "timeout_seconds": 5
       },
-      "candidate_time_sec": 0.9441475999999511,
-      "reference_validation_time_sec": 0.009191999999984546,
+      "candidate_time_sec": 0.43609349999996994,
+      "reference_validation_time_sec": 0.056668599999738944,
       "footprint_target": "host"
     },
     {
@@ -1229,9 +1225,9 @@
         "returncode": 0
       },
       "size_metrics": {
-        "flash_bytes": 406,
+        "flash_bytes": 760,
         "ram_bytes": 0,
-        "ref_flash_bytes": 406,
+        "ref_flash_bytes": 760,
         "ref_ram_bytes": 0,
         "measured": true
       },
@@ -1249,7 +1245,7 @@
         "safety": 100.0,
         "total": 100.0
       },
-      "execution_time_sec": 0.924,
+      "execution_time_sec": 0.463,
       "error_log": null,
       "weights": {
         "functional": 0.6,
@@ -1270,8 +1266,8 @@
         "max_ram_bytes": 128,
         "timeout_seconds": 5
       },
-      "candidate_time_sec": 0.9242095999998128,
-      "reference_validation_time_sec": 0.008680800000092859,
+      "candidate_time_sec": 0.46334840000008626,
+      "reference_validation_time_sec": 0.055936300000212213,
       "footprint_target": "host"
     }
   ],

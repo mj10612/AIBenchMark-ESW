@@ -8,6 +8,13 @@ CATEGORIES = frozenset({'general', 'core_fundamentals', 'fsm_and_protocols', 'de
                         'bug_fix_and_safety', 'fixed_point_control', 'flash_management', 'concurrency'})
 
 
+def _known_fields(data, allowed, prefix):
+    unknown = set(data) - set(allowed)
+    if unknown:
+        names = ', '.join(prefix + str(key) for key in sorted(unknown, key=str))
+        raise ValueError(f'Unknown configuration fields: {names}')
+
+
 @dataclass
 class TaskLimits:
     max_flash_bytes: int = 2048
@@ -99,9 +106,14 @@ class TaskConfig:
     def from_dict(cls, data: dict[str, Any], task_dir: Path, prompt: str = "") -> "TaskConfig":
         if not isinstance(data, dict):
             raise ValueError("Task metadata must be a JSON object")
+        _known_fields(data, {'id', 'name', 'tier', 'category', 'target_standard', 'description',
+                             'limits', 'weights', 'entry_file', 'reference_file', 'prompt_overrides',
+                             'canary', 'audit_canary', 'variant'}, '')
         limits_data = data.get("limits", {})
         if not isinstance(limits_data, dict):
             raise ValueError("Task limits must be an object")
+        limit_fields = {'max_flash_bytes', 'max_ram_bytes', 'timeout_seconds'}
+        _known_fields(limits_data, limit_fields | {'default', 'targets'}, 'limits.')
         targets = limits_data.get("targets", {})
         if not isinstance(targets, dict):
             raise ValueError("limits.targets must be an object")
@@ -109,6 +121,8 @@ class TaskConfig:
         defaults = limits_data.get("default", limits_data)
         if not isinstance(defaults, dict):
             raise ValueError("limits.default must be an object")
+        if 'default' in limits_data:
+            _known_fields(defaults, limit_fields, 'limits.default.')
         limits_data = defaults
         limits = TaskLimits(
             max_flash_bytes=limits_data.get("max_flash_bytes", 2048),
@@ -118,10 +132,12 @@ class TaskConfig:
         for target, override in targets.items():
             if not isinstance(target, str) or not isinstance(override, dict):
                 raise ValueError("Target limits must map target names to limit objects")
+            _known_fields(override, limit_fields, f'limits.targets.{target}.')
             target_limits[target] = TaskLimits(**{**asdict(limits), **override})
         weights_data = data.get("weights", {})
         if not isinstance(weights_data, dict):
             raise ValueError("Task weights must be an object")
+        _known_fields(weights_data, {'functional', 'memory', 'safety'}, 'weights.')
         weights = TaskWeights(
             functional=weights_data.get("functional", 0.6),
             memory=weights_data.get("memory", 0.2),
@@ -154,6 +170,7 @@ class CompilationResult:
     effective_standard: Optional[str] = None
     findings: list[dict[str, Any]] = field(default_factory=list)
     warning_flags: list[str] = field(default_factory=list)
+    stack_usage: Optional[dict[str, Any]] = None
     _workspace: Optional[Any] = field(default=None, repr=False, compare=False)
 
     def cleanup(self) -> None:
@@ -231,6 +248,7 @@ class TaskEvaluationResult:
     candidate_time_sec: Optional[float] = None
     reference_validation_time_sec: Optional[float] = None
     footprint_target: str = "host"
+    stack_usage: Optional[dict[str, Any]] = None
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -279,4 +297,5 @@ class TaskEvaluationResult:
             "candidate_time_sec": self.candidate_time_sec,
             "reference_validation_time_sec": self.reference_validation_time_sec,
             "footprint_target": self.footprint_target,
+            **({"stack_usage": self.stack_usage} if self.stack_usage is not None else {}),
         }

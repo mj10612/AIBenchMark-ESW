@@ -218,6 +218,7 @@ def build_parser() -> argparse.ArgumentParser:
         command.add_argument("--container-engine", help="Docker or Podman executable")
         command.add_argument("--container-image", default="gcc:14", help="Compiler-equipped container image")
         command.add_argument("--hardening", choices=["auto", "off", "required"], default="auto", help="Native exploit-mitigation policy; cross-target footprints retain freestanding flags")
+        command.add_argument("--stack-usage", action="store_true", help="Collect optional compiler per-function stack evidence without changing scores")
         command.add_argument("--warnings", action="store_true", help="Score compiler warnings as additional safety findings")
         if command is not mutation_p:
             command.add_argument("--static-analysis-timeout", type=_positive_float, default=30.0)
@@ -251,7 +252,8 @@ def _new_executor(args):
         memory_limit_bytes=getattr(args, "memory_limit_bytes", None), sanitizers=sanitizers,
         target=getattr(args, "target", None), cross_compiler=getattr(args, "cross_compiler", None),
         warnings=getattr(args, "warnings", False), container_engine=getattr(args, "container_engine", None),
-        container_image=getattr(args, "container_image", "gcc:14"), hardening=getattr(args, "hardening", "auto"))
+        container_image=getattr(args, "container_image", "gcc:14"), hardening=getattr(args, "hardening", "auto"),
+        stack_usage=getattr(args, "stack_usage", False))
 
 
 def _new_analyzer(args):
@@ -418,6 +420,10 @@ def cmd_eval(args: argparse.Namespace) -> int:
 
 def _attach_provenance(result, metadata, task_id, solution_code=None, messages=None):
     result.footprint_target = ((metadata.get("compiler") or {}).get("target") or {}).get("target", "host")
+    if result.stack_usage is None and (metadata.get('execution_settings') or {}).get('stack_usage'):
+        from aibenchmark_esw.sandbox.stack_usage import unavailable_stack_usage
+        result.stack_usage = {role: unavailable_stack_usage('Not evaluated', {'target': result.footprint_target})
+                              for role in ('candidate', 'reference')}
     result.provenance = {**(result.provenance or {}),
         "task_sha256": metadata["task_fingerprints"][task_id],
         "candidate_sha256": text_sha256(solution_code) if solution_code else None,
@@ -524,7 +530,7 @@ def _cmd_run_once(args: argparse.Namespace) -> int:
         metadata["contamination_controls"] = args._variant_evidence
     option_names = ("compiler", "allow_standard_fallback", "compile_timeout", "max_output_bytes",
                     "isolation", "memory_limit_bytes", "sanitizers", "save_solutions", "tasks_root", "system_prompt_file",
-                    "target", "cross_compiler", "warnings", "hardening", "container_engine", "container_image",
+                    "target", "cross_compiler", "warnings", "hardening", "stack_usage", "container_engine", "container_image",
                     "static_analysis_timeout", "extended_safety_rules", "max_cost_usd",
                     "input_cost_per_million", "output_cost_per_million", "variant_seed", "heldout_tests", "api_key_env")
     metadata["run_options"] = {name: getattr(args, name, None) for name in option_names}
@@ -883,6 +889,7 @@ def cmd_report(args: argparse.Namespace) -> int:
         validate_output_paths([getattr(args, "output", None)], protected_files=[report_file], protected_roots=_benchmark_roots())
         from aibenchmark_esw.metrics.exports import generate_sarif
         from aibenchmark_esw.metrics.github_summary import github_summary
+        from aibenchmark_esw.metrics.junit import render_collection_junit
         export_results = results
         if "samples" in data:
             export_results = []
@@ -891,12 +898,25 @@ def cmd_report(args: argparse.Namespace) -> int:
                 for result in child_results:
                     result.provenance = {**(result.provenance or {}), "sample_run_id": sample["metadata"]["run_id"]}
                 export_results.extend(child_results)
+        source_mapping = None
+        if args.format == 'sarif':
+            from aibenchmark_esw.metrics.sarif_sources import resolve_sarif_sources
+            mapping_file = getattr(args, 'source_mapping', None)
+            if mapping_file:
+                source_mapping = json.loads(mapping_file.read_text(encoding='utf-8'))
+            _, source_paths = resolve_sarif_sources(
+                export_results, source_root=getattr(args, 'source_root', None), source_mapping=source_mapping)
+            validate_output_paths([getattr(args, 'output', None)],
+                                  protected_files=[report_file, *([mapping_file] if mapping_file else []),
+                                                   *(path for path in source_paths if path is not None)],
+                                  protected_roots=_benchmark_roots())
         rendered = (github_summary(data) if args.format == 'github-summary' else
                     generate_sarif(export_results, model_name, render_metadata,
                                    source_root=getattr(args, 'source_root', None),
-                                   source_mapping=json.loads(args.source_mapping.read_text(encoding='utf-8')) if getattr(args, 'source_mapping', None) else None) if args.format == "sarif" else
+                                   source_mapping=source_mapping) if args.format == "sarif" else
                     BenchmarkReporter.generate_html(results, model_name, render_metadata) if args.format == "html" else
-                    render_junit(export_results, model_name, render_metadata) if args.format == "junit" else
+                    (render_collection_junit(data) if 'samples' in data else
+                     render_junit(results, model_name, render_metadata)) if args.format == "junit" else
                     BenchmarkReporter.generate_markdown(results, model_name, render_metadata) if args.format == "markdown"
                     else BenchmarkReporter.generate_cli_table(results, model_name, render_metadata))
         if getattr(args, "output", None):

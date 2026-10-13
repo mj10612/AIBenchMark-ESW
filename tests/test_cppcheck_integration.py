@@ -41,7 +41,8 @@ class TestCppcheckIntegration(unittest.TestCase):
         self.assertEqual(result.cppcheck_status, "completed", result.cppcheck_diagnostic)
         self.assertGreater(result.error_count, 0)
         finding = next(item for item in result.findings if item["engine"] == "cppcheck" and item["rule_id"] == "arrayIndexOutOfBounds")
-        self.assertEqual(finding["file"], "bounds.c")
+        self.assertEqual(Path(finding["file"]), source)
+        self.assertEqual(finding["source_origin"], "candidate")
         self.assertEqual(finding["line"], 1)
         self.assertTrue(any("arrayIndexOutOfBounds" in violation for violation in result.violations), result.violations)
 

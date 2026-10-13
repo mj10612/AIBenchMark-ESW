@@ -44,10 +44,11 @@ class ExecutionSandbox:
                  compile_timeout_seconds: float = 30, max_output_bytes: int = 1048576,
                  isolation: str = "native", memory_limit_bytes: Optional[int] = None,
                  sanitizers=(), target=None, cross_compiler=None, warnings=False,
-                 container_engine=None, container_image="gcc:14", container_runtime=None, hardening="auto"):
+                 container_engine=None, container_image="gcc:14", container_runtime=None, hardening="auto", stack_usage=False):
         if hardening not in ("auto", "off", "required"):
             raise ValueError("hardening must be auto, off or required")
         self.hardening = hardening
+        self.stack_usage = bool(stack_usage)
         self.compiler_path = compiler_path or os.environ.get("AIBENCHMARK_ESW_COMPILER") or (
             "gcc" if isolation == "container" else self._find_c_compiler())
         if Path(self.compiler_path).is_file():
@@ -91,7 +92,8 @@ class ExecutionSandbox:
             self.cross = CrossCompiler(target, cross_compiler, compile_timeout_seconds,
                                        max_output_bytes, isolation, memory_limit_bytes,
                                        self._run_contained if self.containment else None,
-                                       warnings=self.warnings, finding_parser=self._warning_findings)
+                                       warnings=self.warnings, finding_parser=lambda log, sources:
+                                       self._warning_findings(log, sources, workspace=Path(sources[0]).parent))
 
     def hardening_flags(self, object_only=False):
         if self.hardening == "off":
@@ -117,6 +119,25 @@ class ExecutionSandbox:
             return []
         name = Path(self.compiler_path).stem.lower()
         return ["/W4"] if name in ("cl", "clang-cl") else ["-Wall", "-Wextra", "-Wconversion", "-Wshadow"] if name != "tcc" else ["-Wall"]
+
+    def stack_usage_flags(self):
+        compiler = self.cross.compiler if self.cross else self.compiler_path
+        name = Path(compiler).stem.lower()
+        return ['-fstack-usage'] if self.stack_usage and ('gcc' in name or 'clang' in name and name != 'clang-cl' or name == 'cc') else []
+
+    def collect_stack_usage(self, compilation, output, flags):
+        from aibenchmark_esw.sandbox.stack_usage import (
+            read_stack_usage,
+            unavailable_stack_usage,
+        )
+        compiler = self.cross.settings() if self.cross else self.compiler_identity()
+        provenance = {'target': self.cross.target if self.cross else 'host', 'compiler': compiler,
+                      'flags': list(flags), 'measurement': 'compiler-per-function'}
+        if not self.stack_usage_flags():
+            return unavailable_stack_usage('Unsupported stack-usage compiler', provenance)
+        if not compilation.success:
+            return unavailable_stack_usage('Object compilation did not succeed', provenance)
+        return read_stack_usage(Path(output).with_suffix('.su'), self.max_output_bytes, provenance)
 
     def _run_contained(self, command, **options):
         assert self.containment is not None
@@ -144,6 +165,7 @@ class ExecutionSandbox:
                 "max_output_bytes": self.max_output_bytes, "isolation": self.isolation,
                 "memory_limit_bytes": self.memory_limit_bytes or (536870912 if self.isolation == "container" else None), "sanitizers": list(self.sanitizers),
                 "compiler_warnings": self.warnings, "warning_flags": self.warning_flags(),
+                "stack_usage": self.stack_usage,
                 "containment": self.containment.settings() if self.containment else None,
                 "candidate_environment": "minimal-v1",
                 "oracle_policy": "private-unity-state-v1",
@@ -182,7 +204,7 @@ class ExecutionSandbox:
         return "gcc"
 
     def _compile(self, task: TaskConfig, sources, output: Path, object_only=False,
-                  extra_includes=()) -> CompilationResult:
+                  extra_includes=(), stack_flags=None) -> CompilationResult:
         from aibenchmark_esw.resources import (
             task_integrity_errors,
             unity_integrity_errors,
@@ -229,17 +251,22 @@ class ExecutionSandbox:
         try:
             cmd += self.warning_flags()
             cmd += self.hardening_flags(object_only)
+            if object_only:
+                cmd += self.stack_usage_flags() if stack_flags is None else list(stack_flags)
             runner = self._run_contained if self.containment else run_bounded
             proc = runner(cmd, timeout=self.compile_timeout_seconds, max_output_bytes=self.max_output_bytes,
                           cwd=str(output.parent), isolation=self.isolation,
                           memory_limit_bytes=self.memory_limit_bytes, cancel_event=self.cancel_event)
             log = proc.stdout.decode(locale.getpreferredencoding(False), errors="backslashreplace")
-            findings = self._warning_findings(log, sources)
+            findings = self._warning_findings(log, sources, workspace=output.parent)
             if proc.returncode != 0 or not output.is_file():
                 return CompilationResult(False, log, error_message="Compilation failed",
                                          effective_standard=standard, findings=findings, warning_flags=self.warning_flags())
-            return CompilationResult(True, log, binary_path=output, effective_standard=standard,
-                                     findings=findings, warning_flags=self.warning_flags())
+            result = CompilationResult(True, log, binary_path=output, effective_standard=standard,
+                                       findings=findings, warning_flags=self.warning_flags())
+            if object_only and self.stack_usage:
+                result.stack_usage = self.collect_stack_usage(result, output, cmd[1:])
+            return result
         except subprocess.TimeoutExpired as error:
             return CompilationResult(False, _timeout_output(error), error_message="Compilation timed out",
                                      effective_standard=standard)
@@ -251,11 +278,16 @@ class ExecutionSandbox:
             return CompilationResult(False, str(error), error_message="Compiler unavailable or timed out",
                                      effective_standard=standard)
 
-    def _warning_findings(self, log, sources):
+    def _warning_findings(self, log, sources, workspace=None):
         if not self.warnings:
             return []
-        owned = {Path(source).name for source in sources
+        owned = {Path(source).resolve() for source in sources
                  if not Path(source).name.startswith("aibenchmark_tests_") and Path(source).name != "unity.c"}
+        contained = set()
+        if self.containment and workspace is not None:
+            root = Path(workspace).resolve()
+            contained = {'/workspace/' + source.relative_to(root).as_posix()
+                         for source in owned if source.is_relative_to(root)}
         findings = []
         for diagnostic in log.splitlines():
             match = re.match(r"^(.*?):(\d+)(?::\d+)?:\s*warning:\s*(.*)", diagnostic)
@@ -268,11 +300,19 @@ class ExecutionSandbox:
                 file, line, rule, message = msvc.groups()
             else:
                 continue
-            file = Path(file).name
-            if file not in owned:
-                continue
+            path = Path(file)
+            if file in contained:
+                origin = 'candidate'
+            elif path.is_absolute():
+                if path.resolve() not in owned:
+                    continue
+                origin = 'candidate'
+            else:
+                if path.parent != Path('.') or path.name not in {source.name for source in owned}:
+                    continue
+                origin = 'unknown'
             findings.append({"rule_id": "compiler." + rule, "engine": "compiler", "severity": "warning",
-                             "message": message, "file": file, "line": int(line)})
+                             "message": message, "file": file, "line": int(line), "source_origin": origin})
         return findings
 
     def compile_object(self, task: TaskConfig, solution_code: str,
@@ -282,10 +322,32 @@ class ExecutionSandbox:
         workspace.mkdir(parents=True, exist_ok=True)
         source = workspace / f"{name}.c"
         source.write_text(solution_code, encoding="utf-8")
+        output = workspace / f'{name}.o'
+        artifact = output.with_suffix('.su')
+        if self.stack_usage and (artifact.exists() or artifact.is_symlink()):
+            artifact.unlink()
         if self.cross:
             self.cross.cancel_event = self.cancel_event
-            return self.cross.compile(task, source, workspace / f"{name}.o")
-        return self._compile(task, [source], workspace / f"{name}.o", object_only=True)
+            stack_flags = self.stack_usage_flags()
+            result = self.cross.compile(task, source, output, stack_flags) if stack_flags else self.cross.compile(task, source, output)
+            if self.stack_usage:
+                result.stack_usage = self.collect_stack_usage(result, workspace / f"{name}.o",
+                    [*self.cross.flags, *self.cross.warning_flags, f'-std={task.target_standard}', *self.stack_usage_flags()])
+        else:
+            result = self._compile(task, [source], workspace / f"{name}.o", object_only=True)
+            if self.stack_usage and result.stack_usage is None:
+                result.stack_usage = self.collect_stack_usage(result, workspace / f"{name}.o", [])
+        # A rejected evidence flag must not alter object scoring. Retry only an
+        # explicit unsupported-option diagnostic, keeping all other flags intact.
+        if (not result.success and self.stack_usage_flags()
+                and re.search(r'(?:unknown|unrecognized|unsupported|not supported)[^\n]*-fstack-usage|'
+                              r'-fstack-usage[^\n]*(?:unknown|unrecognized|unsupported|not supported)', result.output, re.I)):
+            from aibenchmark_esw.sandbox.stack_usage import unavailable_stack_usage
+            provenance = (result.stack_usage or {}).get('provenance', {})
+            result = self.cross.compile(task, source, output) if self.cross else self._compile(
+                task, [source], output, object_only=True, stack_flags=())
+            result.stack_usage = unavailable_stack_usage('Compiler rejected -fstack-usage', provenance)
+        return result
 
     def compile_and_test(self, task: TaskConfig, solution_code: str,
                          custom_workspace: Optional[Path] = None) -> tuple[CompilationResult, TestResult]:

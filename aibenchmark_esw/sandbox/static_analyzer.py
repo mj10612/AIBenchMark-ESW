@@ -91,10 +91,8 @@ class StaticAnalyzer:
         if isinstance(max_output_bytes, bool) or not isinstance(max_output_bytes, int) or max_output_bytes <= 0:
             raise ValueError("max_output_bytes must be a positive integer")
         self.max_output_bytes = max_output_bytes
-        self.last_cppcheck_timeout = False
         configured = cppcheck_cmd if cppcheck_cmd is not None else os.environ.get("AIBENCHMARK_ESW_CPPCHECK")
         self.cppcheck_cmd = None if configured == "off" else configured or shutil.which("cppcheck")
-        self.last_cppcheck_error: Optional[str] = None
 
     def analyze(self, source_path: Path, include_dirs: Optional[list[Path]] = None,
                 standard: str = "c99", executor=None) -> StaticSafetyMetrics:
@@ -104,22 +102,18 @@ class StaticAnalyzer:
         metrics = self._heuristic_check(source_path)
         metrics.cppcheck_status = "disabled" if not self.cppcheck_cmd else "not_run"
         if self.cppcheck_cmd and source_path.exists():
-            self.last_cppcheck_error = None
             cppcheck_metrics = self._run_cppcheck(source_path, include_dirs, standard, executor)
-            if cppcheck_metrics is not None:
-                metrics.cppcheck_status = "completed"
+            metrics.cppcheck_status = cppcheck_metrics.cppcheck_status
+            metrics.cppcheck_diagnostic = cppcheck_metrics.cppcheck_diagnostic
+            if cppcheck_metrics.cppcheck_status == "completed":
                 metrics.error_count += cppcheck_metrics.error_count
                 metrics.warning_count += cppcheck_metrics.warning_count
                 metrics.violations.extend(cppcheck_metrics.violations)
                 metrics.findings.extend(cppcheck_metrics.findings)
-            else:
-                metrics.cppcheck_status = "timeout" if self.last_cppcheck_timeout else "failed"
-                metrics.cppcheck_diagnostic = self.last_cppcheck_error or "cppcheck did not complete"
         return metrics
 
     def _run_cppcheck(self, source_path: Path, include_dirs: Optional[list[Path]] = None,
-                      standard: str = "c99", executor=None) -> Optional[StaticSafetyMetrics]:
-        self.last_cppcheck_timeout = False
+                      standard: str = "c99", executor=None) -> StaticSafetyMetrics:
         try:
             assert self.cppcheck_cmd is not None
             cmd = [
@@ -132,7 +126,7 @@ class StaticAnalyzer:
             ]
             for directory in include_dirs or []:
                 cmd += ["-I", str(directory)]
-            cmd.append(str(source_path))
+            cmd.append(str(source_path.resolve()))
             runner = executor._run_contained if executor and executor.containment else run_bounded
             proc = runner(cmd, timeout=self.timeout_seconds, max_output_bytes=self.max_output_bytes,
                           cwd=str(source_path.parent), isolation="process",
@@ -140,8 +134,8 @@ class StaticAnalyzer:
                           cancel_event=getattr(executor, "cancel_event", None))
             output = (proc.stdout + (proc.stderr or b"")).decode("utf-8", errors="backslashreplace")
             if proc.returncode != 0:
-                self.last_cppcheck_error = f"cppcheck exited with {proc.returncode}: {output.strip()}"
-                return None
+                return StaticSafetyMetrics(cppcheck_status="failed",
+                    cppcheck_diagnostic=f"cppcheck exited with {proc.returncode}: {output.strip()}")
             errors = 0
             warnings = 0
             violations = []
@@ -157,13 +151,21 @@ class StaticAnalyzer:
                 else:
                     continue
                 if len(findings) >= 200:
-                    self.last_cppcheck_error = "cppcheck finding limit exceeded (200); analysis is incomplete"
-                    return None
+                    return StaticSafetyMetrics(cppcheck_status="failed",
+                        cppcheck_diagnostic="cppcheck finding limit exceeded (200); analysis is incomplete")
                 parts = line.split(":", 2)
                 location = re.match(r"(.*):(\d+):(.*)", parts[2]) if len(parts) == 3 else None
+                reported_file = location.group(1) if location else ""
+                reported_path = Path(reported_file)
+                resolved = (source_path.parent / reported_path).resolve()
+                origin = ("candidate" if resolved == source_path.resolve() else "other") if reported_file else "unknown"
+                if executor and executor.containment and reported_file == '/workspace/' + source_path.name:
+                    origin = "candidate"
+                if reported_file and not reported_path.is_absolute() and reported_path.parent == Path('.'):
+                    origin = "unknown"
                 findings.append({"rule_id": parts[1], "engine": "cppcheck", "severity": parts[0],
                     "message": location.group(3) if location else parts[2],
-                    "file": Path(location.group(1)).name if location else source_path.name,
+                    "file": reported_file or str(source_path), "source_origin": origin,
                     "line": int(location.group(2)) if location else None})
 
             return StaticSafetyMetrics(
@@ -171,11 +173,11 @@ class StaticAnalyzer:
                 warning_count=warnings,
                 violations=violations,
                 findings=findings,
+                cppcheck_status="completed",
             )
         except (OSError, subprocess.SubprocessError, UnicodeError, ValueError) as error:
-            self.last_cppcheck_timeout = isinstance(error, subprocess.TimeoutExpired)
-            self.last_cppcheck_error = str(error)
-            return None
+            return StaticSafetyMetrics(cppcheck_status="timeout" if isinstance(error, subprocess.TimeoutExpired) else "failed",
+                                       cppcheck_diagnostic=str(error))
 
     def _heuristic_check(self, source_path: Path) -> StaticSafetyMetrics:
         if not source_path.exists():
@@ -263,13 +265,13 @@ class StaticAnalyzer:
                 match = re.search(r"\b(?:" + "|".join(re.escape(name) for name in sorted(names)) + r")\b", masked)
                 position = match.start() if match else None
             findings.append({"rule_id": rule, "engine": "builtin", "severity": severity, "message": message,
-                             "file": source_path.name, "line": original_line(code, position) if position is not None else None})
+                             "file": str(source_path), "source_origin": "candidate", "line": original_line(code, position) if position is not None else None})
         if self.extended_rules:
             for rule, position, message in self._extended_findings(masked, headers, reference_sites):
                 warnings += 1
                 violations.append(message)
                 findings.append({"rule_id": "builtin." + rule, "engine": "builtin", "severity": "warning",
-                                 "message": message, "file": source_path.name,
+                                 "message": message, "file": str(source_path), "source_origin": "candidate",
                                  "line": original_line(code, position) if position is not None else None})
         return StaticSafetyMetrics(
             error_count=errors,

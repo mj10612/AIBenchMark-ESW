@@ -66,12 +66,15 @@ def report_html(results, model_name, metadata=None):
             cells.append('<td>' + _escape(text) + (f'<meter min="0" max="{max(budget, value, 1)}" value="{value}"></meter>' if budget is not None and result.size_metrics.measured else '') + '</td>')
         cells.append(f'<td data-value="{result.execution_time_sec}">{result.execution_time_sec:.3f}s</td>')
         details = {'compiler/test diagnostics': result.error_log, 'test output': result.test_result.output,
+                   'stack usage (per-function compiler evidence)': result.stack_usage,
                    'static analysis': result.safety_metrics.__dict__, 'generation': result.generation, 'provenance': result.provenance}
         cells.append('<td><details><summary>Diagnostics and provenance</summary><pre>' + _escape(json.dumps(details, indent=2, default=str)) + '</pre></details></td>')
         rows.append(f'<tr data-status="{status}" data-tier="{result.tier}" data-category="{_escape(category)}" data-score="{result.scores.total_score}">' + ''.join(cells) + '</tr>')
     warnings = BenchmarkReporter.analysis_warnings(results) + BenchmarkReporter.scoring_warnings(results, metadata)
     from aibenchmark_esw.metrics.measurements import render_measurements
     measurements = render_measurements(results, (metadata or {}).get('collection_generation_summary'))
+    from aibenchmark_esw.sandbox.stack_usage import stack_usage_lines
+    measurements += stack_usage_lines(results)
     sampling = BenchmarkReporter.sampling_lines(metadata)
     warning = BenchmarkReporter.run_warning(metadata)
     if warning:

@@ -7,7 +7,7 @@ import uuid
 from datetime import datetime, timezone
 from pathlib import Path
 
-from aibenchmark_esw.metrics.junit import render_junit
+from aibenchmark_esw.metrics.junit import render_collection_junit
 from aibenchmark_esw.metrics.reporter import BenchmarkReporter
 from aibenchmark_esw.metrics.statistics import score_statistics
 from aibenchmark_esw.output_paths import validate_output_paths
@@ -136,8 +136,7 @@ def run_samples(args, saved, run_once, protected_roots):
             atomic_write_json(args.output, wrapper)
         assert wrapper is not None
         if args.junit_output:
-            atomic_write_text(args.junit_output, render_junit(
-                [result for sample in samples for result in BenchmarkReporter.from_json_dict(sample)], args.model, wrapper["metadata"]))
+            atomic_write_text(args.junit_output, render_collection_junit(wrapper))
         print(json.dumps(wrapper["sampling"], indent=2))
         return 130 if interrupted else 1 if pending or child_failed or any(
             not BenchmarkReporter._all_tests_passed(result) or result.error_log for sample in samples
