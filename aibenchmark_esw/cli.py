@@ -891,10 +891,22 @@ def cmd_report(args: argparse.Namespace) -> int:
                 for result in child_results:
                     result.provenance = {**(result.provenance or {}), "sample_run_id": sample["metadata"]["run_id"]}
                 export_results.extend(child_results)
+        source_mapping = None
+        if args.format == 'sarif':
+            from aibenchmark_esw.metrics.sarif_sources import resolve_sarif_sources
+            mapping_file = getattr(args, 'source_mapping', None)
+            if mapping_file:
+                source_mapping = json.loads(mapping_file.read_text(encoding='utf-8'))
+            _, source_paths = resolve_sarif_sources(
+                export_results, source_root=getattr(args, 'source_root', None), source_mapping=source_mapping)
+            validate_output_paths([getattr(args, 'output', None)],
+                                  protected_files=[report_file, *([mapping_file] if mapping_file else []),
+                                                   *(path for path in source_paths if path is not None)],
+                                  protected_roots=_benchmark_roots())
         rendered = (github_summary(data) if args.format == 'github-summary' else
                     generate_sarif(export_results, model_name, render_metadata,
                                    source_root=getattr(args, 'source_root', None),
-                                   source_mapping=json.loads(args.source_mapping.read_text(encoding='utf-8')) if getattr(args, 'source_mapping', None) else None) if args.format == "sarif" else
+                                   source_mapping=source_mapping) if args.format == "sarif" else
                     BenchmarkReporter.generate_html(results, model_name, render_metadata) if args.format == "html" else
                     render_junit(export_results, model_name, render_metadata) if args.format == "junit" else
                     BenchmarkReporter.generate_markdown(results, model_name, render_metadata) if args.format == "markdown"

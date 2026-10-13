@@ -7,23 +7,34 @@ from urllib.parse import quote
 from aibenchmark_esw.provenance import text_sha256
 
 
-def generate_sarif(results, model_name='unknown', metadata=None, *, source_root=None, source_mapping=None):
+def resolve_sarif_sources(results, *, source_root=None, source_mapping=None):
+    """Resolve export inputs consistently for preflight and source verification."""
     root = Path(source_root or Path.cwd()).resolve()
     if not root.is_dir():
         raise ValueError('SARIF source root must be an existing directory')
     mapping = source_mapping or {}
     if not isinstance(mapping, dict) or any(not isinstance(key, str) or not isinstance(value, str) for key, value in mapping.items()):
         raise ValueError('SARIF source mapping must map task or task:sample IDs to file paths')
-    rules: dict = {}
-    published: dict = {}
+    paths = []
     for result in results:
         provenance = result.provenance or {}
         sample = provenance.get('sample_run_id')
         source = mapping.get(result.task_id + ':' + str(sample), mapping.get(result.task_id, provenance.get('candidate_source')))
+        path = Path(source) if source else None
+        paths.append((root / path).resolve() if path is not None else None)
+    return root, paths
+
+
+def generate_sarif(results, model_name='unknown', metadata=None, *, source_root=None, source_mapping=None):
+    results = list(results)
+    root, paths = resolve_sarif_sources(results, source_root=source_root, source_mapping=source_mapping)
+    rules: dict = {}
+    published: dict = {}
+    for result, path in zip(results, paths):
+        provenance = result.provenance or {}
+        sample = provenance.get('sample_run_id')
         relative, diagnostic = None, 'No persistent candidate source mapping'
-        if source:
-            path = Path(source)
-            path = (root / path).resolve() if not path.is_absolute() else path.resolve()
+        if path is not None:
             try:
                 if not path.is_relative_to(root):
                     diagnostic = 'Candidate source is outside the explicit source root'
