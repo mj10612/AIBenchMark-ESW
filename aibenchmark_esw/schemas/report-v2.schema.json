@@ -4,6 +4,37 @@
   "title": "AIBenchMark-ESW report v2",
   "description": "Structural contract. Python additionally validates scoring, task policy, suite consistency and run state.",
   "type": "object",
+  "$defs": {
+    "stackEvidence": {
+      "type": "object",
+      "required": ["status", "reason", "functions", "bounded_functions", "total_functions", "max_per_function_bytes", "whole_program_peak_bytes", "whole_program_reason", "provenance"],
+      "properties": {
+        "status": {"enum": ["measured", "partial", "unavailable"]},
+        "reason": {"type": ["string", "null"]},
+        "functions": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["function", "bytes", "reported_bytes", "classification"],
+            "properties": {
+              "function": {"type": "string", "minLength": 1},
+              "bytes": {"type": ["integer", "null"], "minimum": 0},
+              "reported_bytes": {"type": "integer", "minimum": 0},
+              "classification": {"enum": ["static", "dynamic-bounded", "unknown"]}
+            },
+            "additionalProperties": false
+          }
+        },
+        "bounded_functions": {"type": "integer", "minimum": 0},
+        "total_functions": {"type": "integer", "minimum": 0},
+        "max_per_function_bytes": {"type": ["integer", "null"], "minimum": 0},
+        "whole_program_peak_bytes": {"type": "null"},
+        "whole_program_reason": {"type": "string", "minLength": 1},
+        "provenance": {"type": "object"}
+      },
+      "additionalProperties": false
+    }
+  },
   "properties": {
     "tier_weighted_score": {"type": "number", "minimum": 0, "maximum": 100},
     "tier_weight_policy": {"const": "proportional-to-tier-v1"},
@@ -363,6 +394,9 @@
                       "minLength": 1,
                       "pattern": "\\S"
                     },
+                    "source_origin": {
+                      "enum": ["candidate", "other", "unknown"]
+                    },
                     "line": {
                       "type": [
                         "integer",
@@ -500,6 +534,20 @@
             "type": "string",
             "minLength": 1,
             "pattern": "\\S"
+          },
+          "stack_usage": {
+            "anyOf": [
+              {"type": "null"},
+              {
+                "type": "object",
+                "required": ["candidate", "reference"],
+                "properties": {
+                  "candidate": {"$ref": "#/$defs/stackEvidence"},
+                  "reference": {"$ref": "#/$defs/stackEvidence"}
+                },
+                "additionalProperties": false
+              }
+            ]
           },
           "generation": {
             "type": [

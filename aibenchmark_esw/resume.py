@@ -24,7 +24,7 @@ _EXECUTION_OPTIONS = {
 _RUN_OPTIONS: tuple[str, ...] = ("compiler", "allow_standard_fallback", "compile_timeout", "max_output_bytes",
                 "isolation", "memory_limit_bytes", "sanitizers", "save_solutions", "tasks_root",
                 "system_prompt_file", "target", "cross_compiler")
-_RUN_OPTIONS += ("warnings", "container_engine", "container_image", "static_analysis_timeout", "extended_safety_rules",
+_RUN_OPTIONS += ("warnings", "hardening", "stack_usage", "container_engine", "container_image", "static_analysis_timeout", "extended_safety_rules",
                  "variant_seed", "heldout_tests", 'api_key_env')
 _PATH_OPTIONS = {"save_solutions", "tasks_root", "system_prompt_file", "heldout_tests"}
 

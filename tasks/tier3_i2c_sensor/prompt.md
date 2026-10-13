@@ -6,7 +6,7 @@ You are an embedded software engineer. Implement a reliable device driver for an
 ## Hardware Specifications
 - Device address: `SENSOR_DEFAULT_I2C_ADDR` (`0x48`)
 - Registers:
-  - `SENSOR_REG_WHO_AM_I` (`0x0F`): Read-only, returns `0xA5`.
+  - `SENSOR_REG_WHO_AM_I` (`0x0F`): Read-only, returns `SENSOR_EXPECTED_CHIP_ID` (`0xA5`).
   - `SENSOR_REG_CONFIG` (`0x02`): Read/Write, 8-bit config (set bit 0 to `1` to enable normal mode).
   - `SENSOR_REG_TEMP_MSB` (`0x00`) and `SENSOR_REG_TEMP_LSB` (`0x01`): 12-bit signed temperature.
     - Temperature format: `((MSB << 8) | LSB) >> 4` (12-bit signed integer in two's complement).
@@ -16,7 +16,7 @@ You are an embedded software engineer. Implement a reliable device driver for an
 ## Error Handling:
 - Return `SENSOR_ERR_NULL_PARAM` if any pointer (`dev`, `bus`, `bus->read`, `bus->write`, `temp_celsius_x100`) is NULL.
 - Return `SENSOR_ERR_COMM_FAIL` if any I2C read/write operation returns a non-OK status.
-- Return `SENSOR_ERR_INVALID_ID` if the chip ID in `WHO_AM_I` register is not `0xA5`.
+- Return `SENSOR_ERR_INVALID_ID` if the chip ID in `WHO_AM_I` register is not `SENSOR_EXPECTED_CHIP_ID` (`0xA5`).
 - In `sensor_read_temperature_celsius_x100`, if `dev->is_initialized` is false, return `SENSOR_ERR_COMM_FAIL`.
 - For an initialized device, a NULL bus or either NULL callback returns `SENSOR_ERR_NULL_PARAM`.
 - Every `sensor_init` attempt with a non-NULL device first clears `is_initialized`

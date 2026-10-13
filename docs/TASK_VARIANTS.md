@@ -1,6 +1,6 @@
 # Task authoring, held-out suites, and contamination controls
 
-The bundled dataset has 15 tasks, 147 Unity cases, and 63 mandatory reviewed
+The bundled dataset has 15 tasks, 150 Unity cases, and 66 mandatory reviewed
 mutants. Its prompts, APIs, tests, starters, and references are public. A passing
 result can reflect recall; these controls provide audit evidence, not a proof
 that training contamination was absent.
@@ -32,17 +32,45 @@ account for runtime helpers, stack and alignment separately.
 ## Reproducible variants
 
 `run --variant-seed INTEGER` prepares temporary assets without changing
-the public source tree. The `crc-polynomial-v1` authoring transform chooses a
-deterministic odd 16-bit CRC polynomial from SHA-256 of version, seed, and task
-ID; it updates the CRC implementation, independent bit oracle, fixed vectors,
-header text and prompt. Only `tier1_crc16` changes algorithm parameters. Other
-selected tasks retain their contracts and record the seed in task.json.
+original public files. The `task-parameters-v2` dispatcher records per-task
+versions and exact parameters. Supported transforms are:
 
-Reports record `variant_version`, `variant_seed`, `variant_parameters`, and the
-actual transformed task hashes. Different seeds are distinct evaluation
-conditions and must not be combined silently. Seeds do not make a task private;
-publish or retain them for reproduction. CRC variants are not CCITT-FALSE and
-must be described by their recorded polynomial.
+| Task | Task version | Valid domain and hooks |
+| --- | --- | --- |
+| `tier1_crc16` | `crc-polynomial-v1` | Odd 16-bit polynomial with bit 15 set; SHA-256 mapping and original CRC seed outputs are preserved. Implementation, oracle, vectors, header and prompt are updated. |
+| `tier3_i2c_sensor` | `i2c-registers-v1` | Address `0x20..0x3F`; even temperature MSB register `0x10..0x2E`, adjacent LSB; CONFIG register `0x40..0x5F`; WHO_AM_I register `0x60..0x7F`; expected chip ID `0x80..0xFF`. |
+
+I2C maps SHA-256 of `i2c-registers-v1:SEED:tier3_i2c_sensor`:
+address is `0x20 + digest[0] % 32`, temperature MSB is
+`0x10 + 2*(digest[1] % 16)`, CONFIG is `0x40 + digest[2] % 32`,
+WHO_AM_I is `0x60 + digest[3] % 32`, and chip ID is
+`0x80 + digest[4] % 128`. All register slots are distinct and the two-byte
+read cannot wrap. Named header definitions and prompt hooks are checked
+before rendering. The starter, reference and suite already consume those
+header macros, so no unconstrained replacements of their source are needed.
+Temperature conversion and CONFIG enable bit retain their original meaning.
+
+Seeds 42 and 43 produce distinct contracts for both supported tasks. Repeat
+`run --model baseline --tasks tier3_i2c_sensor --variant-seed 42` to reproduce
+I2C parameters and effective task fingerprints; replacing 42 with 43 changes
+them. Matching references pass and original hardcoded I2C register/chip-ID
+values fail completed assertions. Relevant reviewed I2C faults remain killed.
+
+Reports record `variant_version`, `variant_seed`, `variant_parameters`,
+`variant_task_versions`, `unvaried_tasks`, and transformed task hashes.
+Copied task.json records its per-task version, parameters and whether it was
+varied. Unsupported tasks retain their functional contracts, are listed in
+`unvaried_tasks`, and record seed identity only. With no seed or overlay,
+original task objects/assets are used directly. Temporary copies live until
+the authoring context exits; compile and replay within that context.
+
+Different seeds or effective fingerprints are distinct evaluation conditions
+and comparison/resume must reject incompatible inputs. The finite domains can
+produce parameter collisions between seeds, so use recorded parameters and
+fingerprints to identify the effective contract. Seeds do not make a task
+private or prove absence of training contamination; retain or publish them
+for reproduction. CRC variants are not CCITT-FALSE and must be described by
+the recorded polynomial. UART, watchdog and other tasks remain unvaried.
 
 The Python authoring API is:
 
@@ -72,9 +100,11 @@ reconstruct them. Candidate native execution has filesystem access, so this
 workflow separates provider inputs but does not claim hostile-candidate secrecy
 or isolation. Use an appropriate external containment boundary where needed.
 
-When combining overlays with a seed, author the private CRC oracle for the
-recorded polynomial; the user-owned overlay is applied after the public variant
-transform and is never silently rewritten. `reference_similarity(candidate,
+Combining a seed with an overlay for either supported task (`tier1_crc16`
+or `tier3_i2c_sensor`) is rejected: private expectations cannot be assumed to
+match generated parameters. No user-owned suite is silently rewritten.
+Overlays for unvaried tasks can still be combined with a seed.
+`reference_similarity(candidate,
 reference)` detects exact token equality ignoring comments/spacing while keeping
 literals. Its warning is an audit signal, not a penalty or contamination proof.
 

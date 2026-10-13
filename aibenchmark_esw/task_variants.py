@@ -10,7 +10,9 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 from typing import Any
 
-VARIANT_VERSION = "crc-polynomial-v1"
+VARIANT_VERSION = "task-parameters-v2"
+TASK_VARIANT_VERSIONS = {"tier1_crc16": "crc-polynomial-v1",
+                         "tier3_i2c_sensor": "i2c-registers-v1"}
 
 
 def _crc(data, polynomial):
@@ -23,7 +25,7 @@ def _crc(data, polynomial):
 
 
 def _crc_variant(task, seed):
-    digest = hashlib.sha256(f"{VARIANT_VERSION}:{seed}:{task.id}".encode()).digest()
+    digest = hashlib.sha256(f"{TASK_VARIANT_VERSIONS[task.id]}:{seed}:{task.id}".encode()).digest()
     polynomial = (int.from_bytes(digest[:2], "big") | 0x8001)
     old = {0x29B1: _crc(b"123456789", polynomial),
            0x84C0: _crc(bytes(4), polynomial), 0x1D0F: _crc(bytes([255] * 4), polynomial)}
@@ -41,13 +43,50 @@ def _crc_variant(task, seed):
     return replace(task, prompt=prompt), {"polynomial": polynomial}
 
 
+def _i2c_variant(task, seed):
+    """Render named register hooks; reference, starter and oracle use the API macros."""
+    version = TASK_VARIANT_VERSIONS[task.id]
+    digest = hashlib.sha256(f"{version}:{seed}:{task.id}".encode()).digest()
+    # Separate ranges keep all hooks distinct; adjacent temperature bytes do not wrap.
+    parameters = {
+        "SENSOR_DEFAULT_I2C_ADDR": 0x20 + digest[0] % 32,
+        "SENSOR_REG_TEMP_MSB": 0x10 + 2 * (digest[1] % 16),
+        "SENSOR_REG_CONFIG": 0x40 + digest[2] % 32,
+        "SENSOR_REG_WHO_AM_I": 0x60 + digest[3] % 32,
+        "SENSOR_EXPECTED_CHIP_ID": 0x80 + digest[4] % 128,
+    }
+    parameters["SENSOR_REG_TEMP_LSB"] = parameters["SENSOR_REG_TEMP_MSB"] + 1
+    header_path = task.task_dir / "include" / "i2c_sensor.h"
+    header = header_path.read_text(encoding="utf-8")
+    prompt = task.prompt
+    for name, value in parameters.items():
+        header, count = re.subn(rf"(?m)^(#define {name}\s+)0x[0-9A-Fa-f]+(?=\s|$)",
+                               rf"\g<1>0x{value:02X}", header)
+        if count != 1:
+            raise ValueError(f"I2C variant requires exactly one header hook: {name}")
+        if name == "SENSOR_EXPECTED_CHIP_ID":
+            continue
+        prompt, count = re.subn(rf"(`{name}` \(`)0x[0-9A-Fa-f]+(`\))",
+                               rf"\g<1>0x{value:02X}\g<2>", prompt)
+        # CHIP_ID has a separately named prompt hook rather than a register definition.
+        if count != 1:
+            raise ValueError(f"I2C variant requires exactly one prompt hook: {name}")
+    chip_hook = "`SENSOR_EXPECTED_CHIP_ID` (`0xA5`)"
+    if prompt.count(chip_hook) != 2:
+        raise ValueError("I2C variant requires chip ID hooks in hardware and errors")
+    prompt = prompt.replace(chip_hook, f"`SENSOR_EXPECTED_CHIP_ID` (`0x{parameters['SENSOR_EXPECTED_CHIP_ID']:02X}`)")
+    header_path.write_text(header, encoding="utf-8", newline="\n")
+    (task.task_dir / "prompt.md").write_text(prompt, encoding="utf-8", newline="\n")
+    return replace(task, prompt=prompt), parameters
+
+
 @contextmanager
 def prepare_task_variants(tasks, variant_seed=None, heldout_tests=None):
     """Yield (tasks, evidence); temporary asset paths live for the whole context.
 
     Held-out root layout is TASK_ID/tests/test_*.c. A present task overlay
     replaces its whole tests directory, preserving public prompt/API assets.
-    A seed changes CRC parameters only; evidence records this explicit scope.
+    A seed changes only registered task parameters; evidence records the scope.
     """
     tasks = list(tasks)
     if variant_seed is not None and (isinstance(variant_seed, bool) or not isinstance(variant_seed, int)):
@@ -76,12 +115,16 @@ def prepare_task_variants(tasks, variant_seed=None, heldout_tests=None):
             supplied[entry.name] = tests
         if not supplied:
             raise ValueError("heldout_tests contains no task suites")
-    if variant_seed is not None and 'tier1_crc16' in supplied:
-        raise ValueError('Cannot combine --variant-seed with a tier1_crc16 held-out suite: expectations may use a different polynomial')
+    if variant_seed is not None:
+        for task_id in sorted(supplied.keys() & TASK_VARIANT_VERSIONS.keys()):
+            parameter = "polynomial" if task_id == "tier1_crc16" else "registers or chip ID"
+            raise ValueError(f"Cannot combine --variant-seed with a {task_id} held-out suite: expectations may use a different {parameter}")
     evidence: dict[str, Any] = {"variant_version": VARIANT_VERSION, "variant_seed": variant_seed,
                 "heldout_tests_used": bool(supplied),
                 "heldout_sha256": heldout_digest.hexdigest() if supplied else None,
-                "variant_parameters": {}}
+                "variant_parameters": {}, "variant_task_versions": {},
+                "unvaried_tasks": [task.id for task in tasks
+                                  if variant_seed is None or task.id not in TASK_VARIANT_VERSIONS]}
     if variant_seed is None and not supplied:
         yield tasks, evidence
         return
@@ -95,11 +138,19 @@ def prepare_task_variants(tasks, variant_seed=None, heldout_tests=None):
                 if task.id == "tier1_crc16":
                     current, parameters = _crc_variant(current, variant_seed)
                     evidence["variant_parameters"][task.id] = parameters
+                elif task.id == "tier3_i2c_sensor":
+                    current, parameters = _i2c_variant(current, variant_seed)
+                    evidence["variant_parameters"][task.id] = parameters
+                if task.id in TASK_VARIANT_VERSIONS:
+                    evidence["variant_task_versions"][task.id] = TASK_VARIANT_VERSIONS[task.id]
                 # Even unchanged tasks record seed identity in their task asset
                 # fingerprint; provenance can distinguish authoring conditions.
                 metadata_path = destination / "task.json"
                 metadata = json.loads(metadata_path.read_text(encoding="utf-8"))
-                metadata["variant"] = {"version": VARIANT_VERSION, "seed": variant_seed}
+                metadata["variant"] = {"version": VARIANT_VERSION, "seed": variant_seed,
+                                       "task_version": TASK_VARIANT_VERSIONS.get(task.id),
+                                       "parameters": evidence["variant_parameters"].get(task.id),
+                                       "varied": task.id in TASK_VARIANT_VERSIONS}
                 metadata_path.write_text(json.dumps(metadata, indent=2) + "\n", encoding="utf-8")
             if task.id in supplied:
                 shutil.rmtree(destination / "tests")

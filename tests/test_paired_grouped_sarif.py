@@ -87,7 +87,7 @@ class TestPairedGroupedSarif(unittest.TestCase):
 
     def test_persistent_source_hash_uri_fingerprints_and_sample_deduplication(self):
         result = BenchmarkReporter.from_json_dict(fixture_report())[0]
-        result.safety_metrics.findings = [dict(rule_id='probe', engine='builtin', severity='warning', message='diagnostic', file='candidate.c', line=2)]
+        result.safety_metrics.findings = [dict(rule_id='probe', engine='builtin', severity='warning', message='diagnostic', file='candidate.c', line=2, source_origin='candidate')]
         source = 'int answer(void){\nreturn 0;\n}\n'
         result.provenance = {'candidate_sha256': text_sha256(source), 'sample_run_id': 'first'}
         second = copy.deepcopy(result)

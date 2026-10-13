@@ -21,4 +21,61 @@ void test_empty_pop_preserves_output(void){can_frame_t before=out;TEST_ASSERT_EQ
 void test_dispatch_acceptance_and_rejection(void){TEST_ASSERT_EQUAL(CAN_OK,can_queue_init(&q,storage,2));can_filter_t filter={0x120,0x7f0,false};can_mailbox_t r=raw(0x133,false,false,1);TEST_ASSERT_EQUAL(CAN_FILTERED,can_dispatch(&q,&r,&filter));TEST_ASSERT_EQUAL_UINT(0,q.count);r=raw(0x123,false,false,1);TEST_ASSERT_EQUAL(CAN_OK,can_dispatch(&q,&r,&filter));TEST_ASSERT_EQUAL(CAN_OK,can_queue_pop(&q,&out));TEST_ASSERT_EQUAL_UINT(0x123,out.id);}
 void test_invalid_dispatch_and_queue_state_are_side_effect_free(void){TEST_ASSERT_EQUAL(CAN_OK,can_queue_init(&q,storage,2));can_filter_t filter={0,0,false};can_mailbox_t r=raw(0,false,false,9);TEST_ASSERT_EQUAL(CAN_ARGUMENT,can_dispatch(&q,&r,&filter));r.control=1;filter.mask=0x800;TEST_ASSERT_EQUAL(CAN_ARGUMENT,can_dispatch(&q,&r,&filter));TEST_ASSERT_EQUAL_UINT(0,q.count);TEST_ASSERT_FALSE(q.overrun);can_frame_t f=frame(0x800);TEST_ASSERT_EQUAL(CAN_ARGUMENT,can_queue_push(&q,&f));q.head=2;TEST_ASSERT_EQUAL(CAN_ARGUMENT,can_queue_push(&q,&f));TEST_ASSERT_EQUAL(CAN_ARGUMENT,can_queue_clear_overrun(NULL));TEST_ASSERT_EQUAL(CAN_ARGUMENT,can_queue_push(NULL,&f));}
 void test_direct_remote_push_discards_payload(void){TEST_ASSERT_EQUAL(CAN_OK,can_queue_init(&q,storage,2));can_frame_t f=frame(3);f.remote=true;f.dlc=8;memset(f.data,0xff,8);TEST_ASSERT_EQUAL(CAN_OK,can_queue_push(&q,&f));TEST_ASSERT_EQUAL(CAN_OK,can_queue_pop(&q,&out));TEST_ASSERT_TRUE(out.remote);for(uint8_t i=0;i<8;++i)TEST_ASSERT_EQUAL_HEX8(0,out.data[i]);}
-int main(void){UNITY_BEGIN();RUN_TEST(test_standard_ids_and_little_endian_payload);RUN_TEST(test_extended_id_boundaries);RUN_TEST(test_invalid_raw_preserves_whole_output);RUN_TEST(test_remote_frames_keep_dlc_without_payload);RUN_TEST(test_zero_and_partial_dlc_zero_unused_bytes);RUN_TEST(test_mask_filter_and_format_matching);RUN_TEST(test_invalid_filters_and_frames);RUN_TEST(test_queue_initialization_validation);RUN_TEST(test_fifo_wrap_preserves_order);RUN_TEST(test_overrun_latches_and_preserves_full_queue);RUN_TEST(test_empty_pop_preserves_output);RUN_TEST(test_dispatch_acceptance_and_rejection);RUN_TEST(test_invalid_dispatch_and_queue_state_are_side_effect_free);RUN_TEST(test_direct_remote_push_discards_payload);return UNITY_END();}
+static void assert_storage_guards(const can_frame_t *guarded, size_t capacity) {
+    can_frame_t sentinel;
+    memset(&sentinel, 0xa6, sizeof(sentinel));
+    TEST_ASSERT_EQUAL(0, memcmp(&sentinel, &guarded[0], sizeof(sentinel)));
+    for (size_t i = capacity + 1; i < 18; ++i)
+        TEST_ASSERT_EQUAL(0, memcmp(&sentinel, &guarded[i], sizeof(sentinel)));
+}
+void test_every_capacity_full_overflow_drain_and_wrap(void) {
+    for (size_t capacity = 1; capacity <= 16; ++capacity) {
+        can_frame_t guarded[18], before_storage[18];
+        memset(guarded, 0xa6, sizeof(guarded));
+        TEST_ASSERT_EQUAL(CAN_OK, can_queue_init(&q, &guarded[1], capacity));
+        TEST_ASSERT_EQUAL_UINT(capacity, q.capacity);
+        for (size_t i = 0; i < capacity; ++i) {
+            can_frame_t f = frame((uint32_t)(i + 1));
+            TEST_ASSERT_EQUAL(CAN_OK, can_queue_push(&q, &f));
+        }
+        can_queue_t before_queue;
+        memcpy(&before_queue, &q, sizeof(q));
+        memcpy(before_storage, guarded, sizeof(guarded));
+        can_frame_t extra = frame(999);
+        TEST_ASSERT_EQUAL(CAN_ERR_OVERRUN, can_queue_push(&q, &extra));
+        TEST_ASSERT_TRUE(q.overrun);
+        before_queue.overrun = true;
+        TEST_ASSERT_EQUAL(0, memcmp(&before_queue, &q, sizeof(q)));
+        TEST_ASSERT_EQUAL(0, memcmp(before_storage, guarded, sizeof(guarded)));
+        /* Keep the queue full while both indices wrap several times. */
+        uint32_t expected = 1, next = (uint32_t)capacity + 1;
+        for (size_t i = 0; i < capacity * 3 + 1; ++i) {
+            TEST_ASSERT_EQUAL(CAN_OK, can_queue_pop(&q, &out));
+            TEST_ASSERT_EQUAL_UINT(expected++, out.id);
+            TEST_ASSERT_EQUAL_HEX8((uint8_t)out.id, out.data[0]);
+            can_frame_t f = frame(next++);
+            TEST_ASSERT_EQUAL(CAN_OK, can_queue_push(&q, &f));
+            TEST_ASSERT_EQUAL_UINT(capacity, q.count);
+            assert_storage_guards(guarded, capacity);
+        }
+        while (expected < next) {
+            TEST_ASSERT_EQUAL(CAN_OK, can_queue_pop(&q, &out));
+            TEST_ASSERT_EQUAL_UINT(expected++, out.id);
+            TEST_ASSERT_EQUAL_HEX8((uint8_t)out.id, out.data[0]);
+        }
+        TEST_ASSERT_EQUAL_UINT(0, q.count);
+        TEST_ASSERT_TRUE(q.overrun);
+        can_frame_t before_output;
+        memcpy(&before_output, &out, sizeof(out));
+        memcpy(&before_queue, &q, sizeof(q));
+        memcpy(before_storage, guarded, sizeof(guarded));
+        TEST_ASSERT_EQUAL(CAN_EMPTY, can_queue_pop(&q, &out));
+        TEST_ASSERT_EQUAL(0, memcmp(&before_output, &out, sizeof(out)));
+        TEST_ASSERT_EQUAL(0, memcmp(&before_queue, &q, sizeof(q)));
+        TEST_ASSERT_EQUAL(0, memcmp(before_storage, guarded, sizeof(guarded)));
+        TEST_ASSERT_EQUAL(CAN_OK, can_queue_clear_overrun(&q));
+        TEST_ASSERT_FALSE(q.overrun);
+        assert_storage_guards(guarded, capacity);
+    }
+}
+int main(void){UNITY_BEGIN();RUN_TEST(test_every_capacity_full_overflow_drain_and_wrap);RUN_TEST(test_standard_ids_and_little_endian_payload);RUN_TEST(test_extended_id_boundaries);RUN_TEST(test_invalid_raw_preserves_whole_output);RUN_TEST(test_remote_frames_keep_dlc_without_payload);RUN_TEST(test_zero_and_partial_dlc_zero_unused_bytes);RUN_TEST(test_mask_filter_and_format_matching);RUN_TEST(test_invalid_filters_and_frames);RUN_TEST(test_queue_initialization_validation);RUN_TEST(test_fifo_wrap_preserves_order);RUN_TEST(test_overrun_latches_and_preserves_full_queue);RUN_TEST(test_empty_pop_preserves_output);RUN_TEST(test_dispatch_acceptance_and_rejection);RUN_TEST(test_invalid_dispatch_and_queue_state_are_side_effect_free);RUN_TEST(test_direct_remote_push_discards_payload);return UNITY_END();}

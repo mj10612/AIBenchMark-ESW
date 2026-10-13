@@ -38,6 +38,11 @@ def evaluate_task(task: TaskConfig, solution_code: str, reference_code: Optional
     size = SizeMetrics(measured=False)
     reference_elapsed = 0.0
     cache_hit = False
+    stack = None
+    if getattr(executor, 'stack_usage', False):
+        from aibenchmark_esw.sandbox.stack_usage import unavailable_stack_usage
+        stack = {role: unavailable_stack_usage('Not evaluated', {'target': executor.cross.target if executor.cross else 'host'})
+                 for role in ('candidate', 'reference')}
     with tempfile.TemporaryDirectory(prefix="aibenchmark_eval_") as directory:
         object_findings = []
         work_dir = Path(directory)
@@ -51,6 +56,8 @@ def evaluate_task(task: TaskConfig, solution_code: str, reference_code: Optional
         if comp.success:
             try:
                 candidate = executor.compile_object(task, solution_code, work_dir / "candidate", "candidate")
+                if stack is not None:
+                    stack['candidate'] = candidate.stack_usage
                 object_findings = candidate.findings
                 if not candidate.success:
                     raise ValueError(candidate.output or "Candidate object compilation failed")
@@ -61,6 +68,8 @@ def evaluate_task(task: TaskConfig, solution_code: str, reference_code: Optional
                     cache = reference_cache if reference_cache is not None else executor_reference_cache(executor)
                     existing = (comp, tests, candidate) if reference_code == solution_code else None
                     reference, cache_hit = cache.validate(task, reference_code, executor, existing)
+                    if stack is not None:
+                        stack['reference'] = reference.stack_usage or unavailable_stack_usage(reference.error or 'Reference stack records unavailable')
                 finally:
                     reference_elapsed = time.perf_counter() - reference_start
                 if reference.error:
@@ -92,4 +101,5 @@ def evaluate_task(task: TaskConfig, solution_code: str, reference_code: Optional
         reference_validation_time_sec=reference_elapsed,
         provenance={"reference_cache_hit": cache_hit},
         footprint_target=executor.cross.target if executor.cross is not None else "host",
+        stack_usage=stack,
     )

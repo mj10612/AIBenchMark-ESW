@@ -2,6 +2,7 @@
 
 import copy
 import re
+import threading
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 
@@ -25,6 +26,8 @@ def replay_candidates(origin_report, solutions_dir, tasks, executor, analyzer=No
     original = BenchmarkReporter.from_json_dict(origin_report)
     if isinstance(jobs, bool) or not isinstance(jobs, int) or jobs < 1:
         raise ValueError('Replay jobs must be a positive integer')
+    if executor.cancel_event is None:
+        executor.cancel_event = threading.Event()
     if origin_report.get('samples'):
         raise ValueError('Replay requires one explicit sample report, not a multi-sample collection')
     task_map = {task.id: task for task in tasks}
@@ -79,6 +82,11 @@ def replay_candidates(origin_report, solutions_dir, tasks, executor, analyzer=No
     def attach(result, task):
         old = original_map[task.id]
         result.generation = None
+        result.footprint_target = executor.cross.target if executor.cross else 'host'
+        if result.stack_usage is None and getattr(executor, 'stack_usage', False):
+            from aibenchmark_esw.sandbox.stack_usage import unavailable_stack_usage
+            result.stack_usage = {role: unavailable_stack_usage('Not evaluated', {'target': result.footprint_target})
+                                  for role in ('candidate', 'reference')}
         result.provenance = dict(result.provenance or {}, task_sha256=metadata['task_fingerprints'][task.id],
                                  candidate_sha256=(old.provenance or {}).get('candidate_sha256'),
                                  origin_run_id=metadata['origin_run_id'], origin_generation=copy.deepcopy(old.generation),
@@ -118,6 +126,7 @@ def replay_candidates(origin_report, solutions_dir, tasks, executor, analyzer=No
             for future in as_completed(futures):
                 complete(futures[future], future.result())
     except KeyboardInterrupt:
+        executor.cancel_event.set()
         metadata['run_status'] = 'interrupted'
         checkpoint()
         if pool is not None:
@@ -125,11 +134,14 @@ def replay_candidates(origin_report, solutions_dir, tasks, executor, analyzer=No
                 future.cancel()
         raise
     except Exception:
+        executor.cancel_event.set()
         metadata['run_status'] = 'aborted'
         checkpoint()
         raise
     finally:
         if pool is not None:
             pool.shutdown(wait=True, cancel_futures=True)
+        if metadata['run_status'] in ('interrupted', 'aborted'):
+            checkpoint()
     metadata['run_status'] = 'completed'
     return checkpoint()

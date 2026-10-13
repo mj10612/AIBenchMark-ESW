@@ -204,6 +204,8 @@ class BenchmarkReporter:
             size = item["size_metrics"]
             safety = item["safety_metrics"]
             scores = item["scores"]
+            from aibenchmark_esw.sandbox.stack_usage import validate_stack_usage
+            validate_stack_usage(item.get('stack_usage'))
             results.append(TaskEvaluationResult(
                 task_id=item["task_id"], tier=item["tier"],
                 model_name=item["model_name"] if "model_name" in item else data.get("model_name", "unknown"),
@@ -227,6 +229,7 @@ class BenchmarkReporter:
                 candidate_time_sec=item.get("candidate_time_sec"),
                 reference_validation_time_sec=item.get("reference_validation_time_sec"),
                 footprint_target=item.get("footprint_target", "host"),
+                stack_usage=item.get('stack_usage'),
             ))
             validate_composite_score(results[-1])
         if len({result.task_id for result in results}) != len(results):
@@ -361,6 +364,10 @@ class BenchmarkReporter:
                 md.append(f"\nFootprint target: {r.footprint_target}; {r.task_id} budget Flash/RAM="
                           f"{r.limits.max_flash_bytes}/{r.limits.max_ram_bytes}B\n")
 
+        from aibenchmark_esw.sandbox.stack_usage import stack_usage_lines
+        stack_lines = stack_usage_lines(results)
+        if stack_lines:
+            md += ['', '### Compiler stack evidence', '', *stack_lines]
         from aibenchmark_esw.metrics.measurements import render_measurements
         measurements = render_measurements(results, (metadata or {}).get('collection_generation_summary'))
         if measurements:
