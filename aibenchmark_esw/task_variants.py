@@ -75,8 +75,8 @@ def _i2c_variant(task, seed):
     if prompt.count(chip_hook) != 2:
         raise ValueError("I2C variant requires chip ID hooks in hardware and errors")
     prompt = prompt.replace(chip_hook, f"`SENSOR_EXPECTED_CHIP_ID` (`0x{parameters['SENSOR_EXPECTED_CHIP_ID']:02X}`)")
-    header_path.write_text(header, encoding="utf-8", newline="\n")
-    (task.task_dir / "prompt.md").write_text(prompt, encoding="utf-8", newline="\n")
+    header_path.write_bytes(header.encode("utf-8"))
+    (task.task_dir / "prompt.md").write_bytes(prompt.encode("utf-8"))
     return replace(task, prompt=prompt), parameters
 
 
