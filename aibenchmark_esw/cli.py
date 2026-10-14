@@ -889,15 +889,14 @@ def cmd_report(args: argparse.Namespace) -> int:
         validate_output_paths([getattr(args, "output", None)], protected_files=[report_file], protected_roots=_benchmark_roots())
         from aibenchmark_esw.metrics.exports import generate_sarif
         from aibenchmark_esw.metrics.github_summary import github_summary
-        from aibenchmark_esw.metrics.junit import render_collection_junit
+        from aibenchmark_esw.metrics.junit import (
+            collection_results,
+            render_collection_junit,
+        )
         export_results = results
         if "samples" in data:
-            export_results = []
-            for sample in data["samples"]:
-                child_results = BenchmarkReporter.from_json_dict(sample)
-                for result in child_results:
-                    result.provenance = {**(result.provenance or {}), "sample_run_id": sample["metadata"]["run_id"]}
-                export_results.extend(child_results)
+            export_results = [result for result in collection_results(data)
+                              if not (result.provenance or {}).get('sample_pending')]
         source_mapping = None
         if args.format == 'sarif':
             from aibenchmark_esw.metrics.sarif_sources import resolve_sarif_sources
