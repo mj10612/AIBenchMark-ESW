@@ -784,6 +784,14 @@ def cmd_run(args):
     if getattr(args, "dry_run", False) and getattr(args, "resume", None):
         raise ValueError("--dry-run cannot replace a resume checkpoint; select tasks directly")
     saved = load_resume(args) if getattr(args, "resume", None) else None
+    if saved and getattr(args, "junit_output", None):
+        resume_inputs = [Path(args.resume)]
+        if "sampling" in saved:
+            resume_root = Path(str(args.resume) + ".samples")
+            resume_inputs.extend(resume_root / f"sample-{index + 1:04d}.json"
+                                 for index in range(saved["sampling"]["requested"]))
+        # JSON output may intentionally update the checkpoint; JUnit must not.
+        validate_output_paths([args.junit_output], protected_files=resume_inputs)
     if saved and "sampling" in saved:
         if "--samples" in args._explicit_options and args.samples != saved["sampling"]["requested"]:
             raise ValueError("Resume --samples conflicts with saved collection")
