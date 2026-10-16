@@ -1,5 +1,6 @@
 """In-process reference validation keyed by the actual evaluation inputs."""
 
+import copy
 import json
 import threading
 from dataclasses import dataclass
@@ -37,7 +38,7 @@ class ReferenceCache:
             lock = self._locks.setdefault(key, threading.Lock())
         with lock:
             if key in self._records:
-                return self._records[key], True
+                return copy.deepcopy(self._records[key]), True
             try:
                 with TemporaryDirectory(prefix="aibenchmark_reference_") as directory:
                     root = Path(directory)
@@ -58,12 +59,13 @@ class ReferenceCache:
                         raise ValueError(f"Reference validation failed: Flash footprint {size.flash_bytes} exceeds budget {task.limits.max_flash_bytes}")
                     if size.ram_bytes > task.limits.max_ram_bytes:
                         raise ValueError(f"Reference validation failed: RAM footprint {size.ram_bytes} exceeds budget {task.limits.max_ram_bytes}")
-                    record = ReferenceValidation(size.flash_bytes, size.ram_bytes, stack_usage=getattr(obj, 'stack_usage', None))
+                    record = ReferenceValidation(size.flash_bytes, size.ram_bytes,
+                        stack_usage=copy.deepcopy(getattr(obj, 'stack_usage', None)))
             except (OSError, ValueError) as error:
                 record = ReferenceValidation(error=str(error))
             if record.error is None:
                 self._records[key] = record
-            return record, False
+            return copy.deepcopy(record), False
 
 
 _creation_lock = threading.Lock()
