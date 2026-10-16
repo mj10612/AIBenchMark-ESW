@@ -1,10 +1,10 @@
 {
   "schema_version": 2,
   "metadata": {
-    "run_id": "2ffb0ad88ccc4b31bbe4994286b07bf9",
-    "created_at_utc": "2026-10-15T13:21:49.318776+00:00",
+    "run_id": "044a7b3e35e24d2693554099b47b6ae9",
+    "created_at_utc": "2026-10-16T12:12:36.458806+00:00",
     "benchmark_version": "0.1.0",
-    "evaluator_sha256": "acb105830688e6bca8c32138d9eb5ba62fe6dd8984d3853468e722533e067fd0",
+    "evaluator_sha256": "b3ba374135112359516c354698c3b1e030f07571024092ca67daa4061f937651",
     "python_version": "3.11.15",
     "platform": {
       "system": "Windows",
@@ -61,7 +61,7 @@
         ]
       }
     },
-    "source_revision": "a54fde54441166db40573600267cd70e0bf9d746",
+    "source_revision": "8c051d18ddeabdfddb3eaca941bccb7f7cbd1dfa",
     "source_dirty": false,
     "selected_tasks": [
       "tier1_crc16",
@@ -405,7 +405,7 @@
         "safety": 100.0,
         "total": 100.0
       },
-      "execution_time_sec": 0.32,
+      "execution_time_sec": 1.023,
       "error_log": null,
       "weights": {
         "functional": 0.6,
@@ -426,8 +426,8 @@
         "max_ram_bytes": 128,
         "timeout_seconds": 5
       },
-      "candidate_time_sec": 0.32038280000006125,
-      "reference_validation_time_sec": 0.03578319999996893,
+      "candidate_time_sec": 1.0227891999993517,
+      "reference_validation_time_sec": 0.0820411000004242,
       "footprint_target": "host"
     },
     {
@@ -465,7 +465,7 @@
         "safety": 100.0,
         "total": 100.0
       },
-      "execution_time_sec": 0.306,
+      "execution_time_sec": 0.726,
       "error_log": null,
       "weights": {
         "functional": 0.6,
@@ -486,8 +486,8 @@
         "max_ram_bytes": 0,
         "timeout_seconds": 5
       },
-      "candidate_time_sec": 0.30590819999952146,
-      "reference_validation_time_sec": 0.037490600000182894,
+      "candidate_time_sec": 0.7261194999991858,
+      "reference_validation_time_sec": 0.0754547000005914,
       "footprint_target": "host"
     },
     {
@@ -525,7 +525,7 @@
         "safety": 100.0,
         "total": 100.0
       },
-      "execution_time_sec": 0.328,
+      "execution_time_sec": 0.751,
       "error_log": null,
       "weights": {
         "functional": 0.6,
@@ -546,8 +546,8 @@
         "max_ram_bytes": 128,
         "timeout_seconds": 5
       },
-      "candidate_time_sec": 0.32801770000014585,
-      "reference_validation_time_sec": 0.047841000000062195,
+      "candidate_time_sec": 0.7514722000005349,
+      "reference_validation_time_sec": 0.08415959999911138,
       "footprint_target": "host"
     },
     {
@@ -585,7 +585,7 @@
         "safety": 100.0,
         "total": 100.0
       },
-      "execution_time_sec": 0.312,
+      "execution_time_sec": 0.767,
       "error_log": null,
       "weights": {
         "functional": 0.6,
@@ -606,8 +606,8 @@
         "max_ram_bytes": 256,
         "timeout_seconds": 5
       },
-      "candidate_time_sec": 0.3115093000001252,
-      "reference_validation_time_sec": 0.03704019999986485,
+      "candidate_time_sec": 0.7670930000003864,
+      "reference_validation_time_sec": 0.06542909999916446,
       "footprint_target": "host"
     },
     {
@@ -645,7 +645,7 @@
         "safety": 100.0,
         "total": 100.0
       },
-      "execution_time_sec": 0.309,
+      "execution_time_sec": 0.695,
       "error_log": null,
       "weights": {
         "functional": 0.6,
@@ -666,8 +666,8 @@
         "max_ram_bytes": 0,
         "timeout_seconds": 5
       },
-      "candidate_time_sec": 0.30883940000012444,
-      "reference_validation_time_sec": 0.04182619999983217,
+      "candidate_time_sec": 0.6950323000000935,
+      "reference_validation_time_sec": 0.06644930000038585,
       "footprint_target": "host"
     },
     {
@@ -705,7 +705,7 @@
         "safety": 100.0,
         "total": 100.0
       },
-      "execution_time_sec": 0.332,
+      "execution_time_sec": 0.626,
       "error_log": null,
       "weights": {
         "functional": 0.6,
@@ -726,8 +726,8 @@
         "max_ram_bytes": 128,
         "timeout_seconds": 5
       },
-      "candidate_time_sec": 0.3315607999998065,
-      "reference_validation_time_sec": 0.03623340000012831,
+      "candidate_time_sec": 0.6255032000008214,
+      "reference_validation_time_sec": 0.06930339999962598,
       "footprint_target": "host"
     },
     {
@@ -765,7 +765,7 @@
         "safety": 100.0,
         "total": 100.0
       },
-      "execution_time_sec": 0.301,
+      "execution_time_sec": 0.562,
       "error_log": null,
       "weights": {
         "functional": 0.6,
@@ -786,8 +786,8 @@
         "max_ram_bytes": 128,
         "timeout_seconds": 5
       },
-      "candidate_time_sec": 0.30058539999981804,
-      "reference_validation_time_sec": 0.03646160000016607,
+      "candidate_time_sec": 0.5616564000001745,
+      "reference_validation_time_sec": 0.07278489999953308,
       "footprint_target": "host"
     },
     {
@@ -825,7 +825,7 @@
         "safety": 100.0,
         "total": 100.0
       },
-      "execution_time_sec": 0.306,
+      "execution_time_sec": 0.59,
       "error_log": null,
       "weights": {
         "functional": 0.6,
@@ -846,8 +846,8 @@
         "max_ram_bytes": 0,
         "timeout_seconds": 5
       },
-      "candidate_time_sec": 0.3057371999998395,
-      "reference_validation_time_sec": 0.03934769999978016,
+      "candidate_time_sec": 0.5902274999998554,
+      "reference_validation_time_sec": 0.06720210000003135,
       "footprint_target": "host"
     },
     {
@@ -885,7 +885,7 @@
         "safety": 100.0,
         "total": 100.0
       },
-      "execution_time_sec": 0.305,
+      "execution_time_sec": 0.548,
       "error_log": null,
       "weights": {
         "functional": 0.6,
@@ -906,8 +906,8 @@
         "max_ram_bytes": 256,
         "timeout_seconds": 5
       },
-      "candidate_time_sec": 0.3049175999999534,
-      "reference_validation_time_sec": 0.03571560000000318,
+      "candidate_time_sec": 0.5481129999998302,
+      "reference_validation_time_sec": 0.05434250000052998,
       "footprint_target": "host"
     },
     {
@@ -945,7 +945,7 @@
         "safety": 100.0,
         "total": 100.0
       },
-      "execution_time_sec": 0.309,
+      "execution_time_sec": 0.578,
       "error_log": null,
       "weights": {
         "functional": 0.6,
@@ -966,8 +966,8 @@
         "max_ram_bytes": 128,
         "timeout_seconds": 5
       },
-      "candidate_time_sec": 0.30882189999965703,
-      "reference_validation_time_sec": 0.03678140000010899,
+      "candidate_time_sec": 0.5784978999990926,
+      "reference_validation_time_sec": 0.06653150000056485,
       "footprint_target": "host"
     },
     {
@@ -1005,7 +1005,7 @@
         "safety": 100.0,
         "total": 100.0
       },
-      "execution_time_sec": 0.303,
+      "execution_time_sec": 0.556,
       "error_log": null,
       "weights": {
         "functional": 0.6,
@@ -1026,8 +1026,8 @@
         "max_ram_bytes": 256,
         "timeout_seconds": 5
       },
-      "candidate_time_sec": 0.30307390000007217,
-      "reference_validation_time_sec": 0.03574819999994361,
+      "candidate_time_sec": 0.5560390999999072,
+      "reference_validation_time_sec": 0.05851989999973739,
       "footprint_target": "host"
     },
     {
@@ -1065,7 +1065,7 @@
         "safety": 100.0,
         "total": 100.0
       },
-      "execution_time_sec": 0.308,
+      "execution_time_sec": 0.594,
       "error_log": null,
       "weights": {
         "functional": 0.6,
@@ -1086,8 +1086,8 @@
         "max_ram_bytes": 128,
         "timeout_seconds": 5
       },
-      "candidate_time_sec": 0.30827190000036353,
-      "reference_validation_time_sec": 0.03613949999999022,
+      "candidate_time_sec": 0.5938005999996676,
+      "reference_validation_time_sec": 0.06600950000029115,
       "footprint_target": "host"
     },
     {
@@ -1125,7 +1125,7 @@
         "safety": 100.0,
         "total": 100.0
       },
-      "execution_time_sec": 0.293,
+      "execution_time_sec": 0.56,
       "error_log": null,
       "weights": {
         "functional": 0.6,
@@ -1146,8 +1146,8 @@
         "max_ram_bytes": 128,
         "timeout_seconds": 5
       },
-      "candidate_time_sec": 0.292687499999829,
-      "reference_validation_time_sec": 0.03679779999993116,
+      "candidate_time_sec": 0.560096600000179,
+      "reference_validation_time_sec": 0.0551207999997132,
       "footprint_target": "host"
     },
     {
@@ -1185,7 +1185,7 @@
         "safety": 100.0,
         "total": 100.0
       },
-      "execution_time_sec": 0.321,
+      "execution_time_sec": 0.579,
       "error_log": null,
       "weights": {
         "functional": 0.6,
@@ -1206,8 +1206,8 @@
         "max_ram_bytes": 128,
         "timeout_seconds": 5
       },
-      "candidate_time_sec": 0.32149070000014035,
-      "reference_validation_time_sec": 0.04331589999992502,
+      "candidate_time_sec": 0.5788055000011809,
+      "reference_validation_time_sec": 0.05911189999915223,
       "footprint_target": "host"
     },
     {
@@ -1245,7 +1245,7 @@
         "safety": 100.0,
         "total": 100.0
       },
-      "execution_time_sec": 0.32,
+      "execution_time_sec": 0.487,
       "error_log": null,
       "weights": {
         "functional": 0.6,
@@ -1266,8 +1266,8 @@
         "max_ram_bytes": 128,
         "timeout_seconds": 5
       },
-      "candidate_time_sec": 0.3203459000001203,
-      "reference_validation_time_sec": 0.036005999999815685,
+      "candidate_time_sec": 0.4865808000004108,
+      "reference_validation_time_sec": 0.048652199999196455,
       "footprint_target": "host"
     }
   ],
