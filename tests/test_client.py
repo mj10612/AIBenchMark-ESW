@@ -75,6 +75,39 @@ class TestLLMClient(unittest.TestCase):
                 response = "\n".join(f"```c\n{code}\n```" for code in blocks)
                 self.assertEqual(LLMClient.extract_c_code(response), full)
 
+    def test_final_api_implementation_wins_over_larger_obsolete_blocks(self):
+        corrected = "int compute(void){return 1;}"
+        obsolete_blocks = (
+            "static int helper(void){return 0;}\nint compute(void){return helper();}",
+            "int compute(void){int obsolete_result = 0; return obsolete_result;}",
+        )
+        for obsolete in obsolete_blocks:
+            with self.subTest(obsolete=obsolete):
+                response = (
+                    f"Initial incorrect implementation:\n```c\n{obsolete}\n```\n"
+                    f"Corrected complete implementation (use this):\n```c\n{corrected}\n```"
+                )
+                self.assertEqual(LLMClient.extract_c_code(response, {"compute"}), corrected)
+
+    def test_api_coverage_wins_over_later_partial_implementation(self):
+        complete = "int compute(void){return 1;}\nvoid reset(void){}"
+        partial = "int compute(void){return 2;}"
+        response = f"```c\n{complete}\n```\n```c\n{partial}\n```"
+        self.assertEqual(LLMClient.extract_c_code(response, {"compute", "reset"}), complete)
+
+    def test_api_implementation_wins_over_header_and_usage_example(self):
+        implementation = "int compute(void){return 1;}"
+        alternatives = (
+            "int compute(void);",
+            "static int example(void){return compute();}\nint main(void){return example();}",
+            implementation + "\nint main(void){return compute();}",
+        )
+        for alternative in alternatives:
+            for blocks in ((implementation, alternative), (alternative, implementation)):
+                with self.subTest(blocks=blocks):
+                    response = "\n".join(f"```c\n{code}\n```" for code in blocks)
+                    self.assertEqual(LLMClient.extract_c_code(response, {"compute"}), implementation)
+
     def test_language_identifiers_are_removed(self):
         code = "#include <stdint.h>"
         for tag in ("c", "C", "cpp", "CPP", "c++", "C++", "c filename=solution.c"):
