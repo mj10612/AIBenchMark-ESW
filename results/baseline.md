@@ -24,15 +24,15 @@
 | baseline | by_category | flash_management | 1 | 1 | 100.0 | 100.0 | Unavailable |
 | baseline | by_category | fsm_and_protocols | 5 | 5 | 100.0 | 100.0 | Unavailable |
 ### Reproducibility
-- **Run (UTC)**: 2026-10-16T12:09:24.731784+00:00
+- **Run (UTC)**: 2026-10-18T11:21:21.937893+00:00
 - **Run status**: completed
 - **Benchmark / Python**: 0.1.0 / 3.11.15
-- **Compiler**: gcc / gcc (Ubuntu 9.4.0-1ubuntu1~20.04.2) 9.4.0 (-Os)
+- **Compiler**: tcc / tcc version 0.9.27 (x86_64 Windows) (native)
 - **Static analysis**: builtin / No cppcheck version recorded
 - **Dataset SHA-256**: `96b16b5b2685cdb873c04e4f83b0123cf5af92226bd236aa44f20a1adcdede50`
-- **Evaluator SHA-256**: `22d3bbacc92ec0827544f8ac9759fae41e3871bc1d80e5a320998767c3b9419d`
-- **Source revision**: `Unavailable in installed distribution`
-- **Source had local changes**: None
+- **Evaluator SHA-256**: `0f1e16c38c2078d65e11ff5298321daeebbda9809b35bf68fc9db9a531a08e37`
+- **Source revision**: `0d356350e9513be16c0fc5fe578b87a0ec39fccf`
+- **Source had local changes**: False
 
 ### Dimensional Scores
 | Dimension | Average Score | Weight |
@@ -49,18 +49,18 @@ Weights below are functional/memory/safety. Memory and safety contributions are 
 
 | Tier | Task ID | Standard | Weights | Compile | Tests Passed | Flash/RAM (B) | Safety | Score | Time |
 | :---: | :--- | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: |
-| 1 | tier1_crc16 | c99 | 60%/20%/20% | PASS | 7/7 | 227 / 0 | Err:0, Warn:0 | **100.0** | 0.50s |
-| 1 | tier1_q15_math | c99 | 60%/20%/20% | PASS | 16/16 | 291 / 0 | Err:0, Warn:0 | **100.0** | 0.52s |
-| 1 | tier1_ring_buffer | c99 | 60%/20%/20% | PASS | 11/11 | 598 / 0 | Err:0, Warn:0 | **100.0** | 0.57s |
-| 2 | tier2_can_frame | c99 | 60%/20%/20% | PASS | 15/15 | 1242 / 0 | Err:0, Warn:0 | **100.0** | 0.84s |
-| 2 | tier2_cobs_codec | c99 | 60%/20%/20% | PASS | 9/9 | 604 / 0 | Err:0, Warn:0 | **100.0** | 0.63s |
-| 2 | tier2_debounce_fsm | c99 | 60%/20%/20% | PASS | 7/7 | 476 / 0 | Err:0, Warn:0 | **100.0** | 0.53s |
-| 2 | tier2_fixed_control | c99 | 60%/20%/20% | PASS | 7/7 | 473 / 0 | Err:0, Warn:0 | **100.0** | 0.49s |
-| 2 | tier2_tick_timer | c99 | 60%/20%/20% | PASS | 16/16 | 355 / 0 | Err:0, Warn:0 | **100.0** | 0.58s |
-| 2 | tier2_windowed_watchdog | c99 | 60%/20%/20% | PASS | 15/15 | 521 / 0 | Err:0, Warn:0 | **100.0** | 0.57s |
-| 3 | tier3_flash_update | c99 | 60%/20%/20% | PASS | 7/7 | 850 / 0 | Err:0, Warn:0 | **100.0** | 0.70s |
-| 3 | tier3_i2c_sensor | c99 | 60%/20%/20% | PASS | 11/11 | 559 / 0 | Err:0, Warn:0 | **100.0** | 0.60s |
-| 3 | tier3_spi_flash | c99 | 60%/20%/20% | PASS | 8/8 | 1262 / 0 | Err:0, Warn:0 | **100.0** | 0.62s |
-| 4 | tier4_bitmask_fix | c99 | 60%/20%/20% | PASS | 5/5 | 350 / 0 | Err:0, Warn:0 | **100.0** | 0.52s |
-| 4 | tier4_dma_buffer | c11 | 60%/20%/20% | PASS | 8/8 | 808 / 0 | Err:0, Warn:0 | **100.0** | 0.60s |
-| 4 | tier4_uart_frame_fix | c99 | 60%/20%/20% | PASS | 8/8 | 603 / 0 | Err:0, Warn:0 | **100.0** | 0.58s |
+| 1 | tier1_crc16 | c99 | 60%/20%/20% | PASS | 7/7 | 361 / 0 | Err:0, Warn:0 | **100.0** | 0.61s |
+| 1 | tier1_q15_math | c99 | 60%/20%/20% | PASS | 16/16 | 270 / 0 | Err:0, Warn:0 | **100.0** | 0.51s |
+| 1 | tier1_ring_buffer | c99 | 60%/20%/20% | PASS | 11/11 | 1474 / 0 | Err:0, Warn:0 | **100.0** | 0.60s |
+| 2 | tier2_can_frame | c99 | 60%/20%/20% | PASS | 15/15 | 2600 / 0 | Err:0, Warn:0 | **100.0** | 0.52s |
+| 2 | tier2_cobs_codec | c99 | 60%/20%/20% | PASS | 9/9 | 1186 / 0 | Err:0, Warn:0 | **100.0** | 0.52s |
+| 2 | tier2_debounce_fsm | c99 | 60%/20%/20% | PASS | 7/7 | 1134 / 0 | Err:0, Warn:0 | **100.0** | 0.50s |
+| 2 | tier2_fixed_control | c99 | 60%/20%/20% | PASS | 7/7 | 941 / 0 | Err:0, Warn:0 | **100.0** | 0.51s |
+| 2 | tier2_tick_timer | c99 | 60%/20%/20% | PASS | 16/16 | 636 / 0 | Err:0, Warn:0 | **100.0** | 0.58s |
+| 2 | tier2_windowed_watchdog | c99 | 60%/20%/20% | PASS | 15/15 | 1136 / 0 | Err:0, Warn:0 | **100.0** | 0.67s |
+| 3 | tier3_flash_update | c99 | 60%/20%/20% | PASS | 7/7 | 1980 / 0 | Err:0, Warn:0 | **100.0** | 0.71s |
+| 3 | tier3_i2c_sensor | c99 | 60%/20%/20% | PASS | 11/11 | 830 / 0 | Err:0, Warn:0 | **100.0** | 0.69s |
+| 3 | tier3_spi_flash | c99 | 60%/20%/20% | PASS | 8/8 | 1913 / 0 | Err:0, Warn:0 | **100.0** | 0.67s |
+| 4 | tier4_bitmask_fix | c99 | 60%/20%/20% | PASS | 5/5 | 462 / 0 | Err:0, Warn:0 | **100.0** | 0.70s |
+| 4 | tier4_dma_buffer | c11 | 60%/20%/20% | PASS | 8/8 | 1590 / 0 | Err:0, Warn:0 | **100.0** | 0.73s |
+| 4 | tier4_uart_frame_fix | c99 | 60%/20%/20% | PASS | 8/8 | 760 / 0 | Err:0, Warn:0 | **100.0** | 0.78s |
