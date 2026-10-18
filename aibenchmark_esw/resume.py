@@ -151,6 +151,10 @@ def merge_generation_history(previous, current):
     history = previous.pop("history", [])
     if not isinstance(history, list) or any(not isinstance(item, dict) for item in history):
         raise ValueError("Generation history must be an array of objects")
+    if "attempt_usage" in previous and "attempt_usage_coverage" not in previous:
+        # Older mergers stored aggregate session counts here, not coverage for
+        # this latest session. Recover its requests below instead.
+        previous.pop("usage_coverage", None)
     previous["usage"] = previous.pop("attempt_usage", previous.get("usage"))
     previous["known_usage"] = previous.pop("attempt_known_usage", previous.get("known_usage"))
     previous["cost_usd"] = previous.pop("attempt_cost_usd", previous.get("cost_usd"))
@@ -183,18 +187,21 @@ def merge_generation_history(previous, current):
         request_counts = []
         for session in attempts:
             requests = session.get("attempts")
-            if requests is not None:
+            recorded = (session.get("usage_coverage") or {}).get(key)
+            if recorded is not None:
+                request_counts.append(recorded)
+            elif requests is not None:
                 # Raw provider attempts also recover coverage from older merged
                 # checkpoints that discarded the per-session coverage fields.
+                request_values = [(request.get("usage") or {}).get(key) for request in requests]
                 request_counts.append({
-                    "known_attempts": sum((request.get("usage") or {}).get(key) is not None
-                                          for request in requests),
+                    "known_attempts": sum(isinstance(value, int) and not isinstance(value, bool) and value >= 0
+                                          for value in request_values),
                     "total_attempts": len(requests)})
             else:
-                recorded = (session.get("usage_coverage") or {}).get(key)
                 # Legacy sessions without request evidence retain the original
                 # one-attempt interpretation; never apply it to modern retries.
-                request_counts.append(recorded if recorded is not None else {
+                request_counts.append({
                     "known_attempts": int((session.get("usage") or {}).get(key) is not None),
                     "total_attempts": 1})
         coverage[key] = {name: sum(count[name] for count in request_counts)

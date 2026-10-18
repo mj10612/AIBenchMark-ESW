@@ -6,6 +6,7 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 from types import SimpleNamespace
 
+from aibenchmark_esw.llm.client import LLMClient
 from aibenchmark_esw.resume import (
     load_resume,
     merge_generation_history,
@@ -29,6 +30,56 @@ def checkpoint():
 
 
 class TestResumeState(unittest.TestCase):
+    def test_history_recovers_raw_requests_from_old_merged_checkpoint(self):
+        previous = {
+            'usage': {'total_tokens': None}, 'known_usage': {'total_tokens': 40},
+            'attempt_usage': {'total_tokens': 30}, 'attempt_known_usage': {'total_tokens': 30},
+            # Older mergers recorded session coverage here, without saving
+            # attempt_usage_coverage for the latest session.
+            'usage_coverage': {'total_tokens': {'known_attempts': 1, 'total_attempts': 2}},
+            'attempts': [{'usage': {'total_tokens': 10}} for _ in range(3)],
+            'history': [{
+                'usage': {'total_tokens': None}, 'known_usage': {'total_tokens': 10},
+                'attempts': [{'usage': {'total_tokens': 10}}, {'usage': None}],
+            }],
+        }
+        original = copy.deepcopy(previous)
+        current = {'usage': {'total_tokens': 5}, 'attempts': [{'usage': {'total_tokens': 5}}]}
+        merged = merge_generation_history(previous, current)
+        self.assertEqual(merged['usage_coverage']['total_tokens'],
+                         {'known_attempts': 5, 'total_attempts': 6})
+        self.assertEqual(merged['known_usage']['total_tokens'], 45)
+        self.assertIsNone(merged['usage']['total_tokens'])
+        self.assertEqual(previous, original)
+
+    def test_history_retains_provider_token_validity_with_and_without_recorded_coverage(self):
+        def session(value):
+            client = LLMClient('mock')
+            client.last_generation = {'attempts': [{
+                'usage': dict.fromkeys(('prompt_tokens', 'completion_tokens', 'total_tokens'), value),
+                'cost_usd': None, 'latency_seconds': 0,
+            }]}
+            client._summarize_measurements()
+            return client.last_generation
+
+        for invalid in (-1, True, 1.5, '10', None):
+            for recorded in (True, False):
+                with self.subTest(invalid=invalid, recorded=recorded):
+                    current = session(invalid)
+                    if not recorded:
+                        current.pop('usage_coverage')
+                    original = copy.deepcopy(current)
+                    merged = merge_generation_history(session(0), current)
+                    self.assertEqual(merged['usage_coverage']['total_tokens'],
+                                     {'known_attempts': 1, 'total_attempts': 2})
+                    self.assertIsNone(merged['usage']['total_tokens'])
+                    self.assertEqual(merged['known_usage']['total_tokens'], 0)
+                    merged = merge_generation_history(merged, session(10))
+                    self.assertEqual(merged['usage_coverage']['total_tokens'],
+                                     {'known_attempts': 2, 'total_attempts': 3})
+                    self.assertEqual(merged['known_usage']['total_tokens'], 10)
+                    self.assertEqual(current, original)
+
     def test_history_preserves_request_coverage_across_two_resumes(self):
         def generation(tokens):
             usage = {}
