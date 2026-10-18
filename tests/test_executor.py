@@ -294,7 +294,7 @@ int main(void) {
         self.assertTrue(result.success)
         self.assertEqual(result.effective_standard, "c11")
 
-    def test_compiler_output_with_invalid_encoding_remains_a_failed_result(self):
+    def test_compiler_output_decoding_preserves_failure_and_locale_diagnostics(self):
         task = self.loader.get_task("tier1_crc16")
         def failing_compiler(command, **kwargs):
             # Exercise decoding rather than mocking a decoded CompletedProcess.
@@ -302,11 +302,14 @@ int main(void) {
                              "import sys; sys.stdout.buffer.write(b'bad byte: \\xff'); sys.exit(1)"],
                             **kwargs)
         with TemporaryDirectory() as directory:
-            with patch("aibenchmark_esw.sandbox.executor.run_bounded", side_effect=failing_compiler):
-                result = self.sandbox.compile_object(task, "invalid C", Path(directory))
-        self.assertFalse(result.success)
-        self.assertIn("bad byte:", result.output)
-        self.assertIn("\\xff", result.output)
+            for encoding, expected in (('utf-8', '\\xff'), ('cp1252', '\u00ff')):
+                with self.subTest(encoding=encoding), \
+                        patch("aibenchmark_esw.sandbox.executor.run_bounded", side_effect=failing_compiler), \
+                        patch("aibenchmark_esw.sandbox.executor.locale.getpreferredencoding", return_value=encoding):
+                    result = self.sandbox.compile_object(task, "invalid C", Path(directory))
+                self.assertFalse(result.success)
+                self.assertIn("bad byte:", result.output)
+                self.assertIn(expected, result.output)
 
 
 if __name__ == "__main__":
