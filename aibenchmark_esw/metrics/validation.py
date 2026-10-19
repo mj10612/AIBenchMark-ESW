@@ -174,6 +174,17 @@ def validate_composite_score(result):
 
 
 def validate_run_state(metadata, results):
+    fingerprints = metadata.get("task_fingerprints")
+    if fingerprints is not None:
+        _object(fingerprints, "Metadata task_fingerprints")
+    for result in results:
+        recorded = (fingerprints or {}).get(result.task_id)
+        actual = (result.provenance or {}).get("task_sha256")
+        for fingerprint in (recorded, actual):
+            if fingerprint is not None:
+                _name(fingerprint, "Task fingerprint for " + result.task_id)
+        if recorded is not None and actual is not None and recorded != actual:
+            raise ValueError("Task fingerprints disagree for " + result.task_id)
     task_ids = {result.task_id for result in results}
     selected = metadata.get("selected_tasks")
     if selected is not None:
