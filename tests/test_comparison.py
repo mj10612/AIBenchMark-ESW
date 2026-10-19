@@ -7,11 +7,41 @@ from contextlib import redirect_stderr, redirect_stdout
 from pathlib import Path
 from tempfile import TemporaryDirectory
 
+from test_aggregation import fixture_report
+from test_collection_exports import collection
+
 from aibenchmark_esw import cli
 from aibenchmark_esw.metrics.comparison import compare_runs, render_comparison
 
 
 class TestComparison(unittest.TestCase):
+    def test_incomplete_memory_dimension_is_unavailable_despite_raw_measurement(self):
+        for compiled in (True, False):
+            for sampled in (False, True):
+                with self.subTest(compiled=compiled, sampled=sampled):
+                    report = fixture_report(100, 'incomplete')
+                    task = report['tasks'][0]
+                    task['compiled'] = compiled
+                    task['test_result'].update(completed=False, all_passed=False)
+                    task['scores'] = dict.fromkeys(('functional', 'memory', 'safety', 'total'), 0)
+                    report['overall_score'] = report['pass_at_1_pct'] = 0
+                    if sampled:
+                        report = collection([report, fixture_report(100, 'completed')])
+                    comparison = compare_runs([report, fixture_report(100, 'other', 'other')])
+                    row = next(row for row in comparison['task_rows'] if row['model'] == 'provider/alias')
+                    self.assertIsNone(row['memory'])
+                    self.assertFalse(row['measured'])
+                    model = next(model for model in comparison['models'] if model['model'] == 'provider/alias')
+                    self.assertIsNone(model['memory'])
+                    healthy = next(row for row in comparison['task_rows'] if row['model'] == 'other')
+                    self.assertEqual(healthy['memory'], 100)
+                    self.assertTrue(healthy['measured'])
+                    self.assertTrue(task['size_metrics']['measured'])
+                    self.assertIn('Memory unavailable', render_comparison(comparison))
+                    rows = list(csv.DictReader(io.StringIO(render_comparison(comparison, 'csv-long'))))
+                    task_row = next(row for row in rows if row['model'] == 'provider/alias' and row.get('task_id') == 'one')
+                    self.assertEqual(task_row['memory'], '')
+
     def report(self, name):
         data = json.loads(Path("results/baseline.json").read_text(encoding="utf-8"))
         data["model_name"] = name
