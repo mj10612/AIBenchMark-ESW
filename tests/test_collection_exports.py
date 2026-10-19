@@ -92,8 +92,10 @@ class TestCollectionExports(unittest.TestCase):
         second['tasks'][0]['error_log'] = 'measurement unavailable'
         report = collection([first, second])
         report['model_name'] = '<model>|`label`'
+        report['tasks'][0]['model_name'] = report['model_name']
         for sample in report['samples']:
             sample['model_name'] = report['model_name']
+            sample['tasks'][0]['model_name'] = report['model_name']
         summary = github_summary(report)
         self.assertIn('2/2 | 0 | 1 | 100.00', summary)
         self.assertIn('&lt;model&gt;\\|\\`label\\`', summary)
