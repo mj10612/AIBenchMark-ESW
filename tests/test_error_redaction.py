@@ -60,3 +60,42 @@ class TestErrorRedaction(unittest.TestCase):
         self.assertEqual(diagnostic,
             'ValueError: https://one.invalid/?key=[REDACTED]#details&token=section-name '
             'https://two.invalid/?token=[REDACTED]&mode=json#details?key=section-name')
+
+    def test_adjacent_urls_keep_independent_queries_and_fragments(self):
+        cases = (
+            ("'https://one.invalid/?key=FIRST#details','https://two.invalid/?token=SECOND'",
+             "ValueError: 'https://one.invalid/?key=[REDACTED]#details','https://two.invalid/?token=[REDACTED]'"),
+            ("['https://one.invalid/?key=FIRST#details','https://two.invalid/?token=SECOND']",
+             "ValueError: ['https://one.invalid/?key=[REDACTED]#details','https://two.invalid/?token=[REDACTED]']"),
+            ('["https://one.invalid/?key=FIRST#details","https://two.invalid/?token=SECOND"]',
+             'ValueError: ["https://one.invalid/?key=[REDACTED]#details","https://two.invalid/?token=[REDACTED]"]'),
+            ("{'one':'https://one.invalid/?key=FIRST','two':'https://two.invalid/?token=SECOND'}",
+             "ValueError: {'one':'https://one.invalid/?key=[REDACTED]','two':'https://two.invalid/?token=[REDACTED]'}"),
+            ('https://one.invalid/?key=FIRST#details,https://two.invalid/?token=SECOND',
+             'ValueError: https://one.invalid/?key=[REDACTED]#details,https://two.invalid/?token=[REDACTED]'),
+            ("'https://one.invalid/?key=prefix'FIRST#detail's?key=section-name','https://two.invalid/?token=SECOND'",
+             "ValueError: 'https://one.invalid/?key=[REDACTED]#detail's?key=section-name','https://two.invalid/?token=[REDACTED]'"),
+        )
+        for text, expected in cases:
+            with self.subTest(text=text):
+                self.assertEqual(error_diagnostic(ValueError(text)), expected)
+
+    def test_quoted_url_keeps_sentence_period(self):
+        diagnostic = error_diagnostic(ValueError(
+            "request failed 'https://example.invalid/?token=FAKE_AUDIT_VALUE'."))
+        self.assertEqual(diagnostic,
+            "ValueError: request failed 'https://example.invalid/?token=[REDACTED]'.")
+
+    def test_at_sign_in_query_credentials_is_not_url_userinfo(self):
+        for name in ('key', 'token'):
+            with self.subTest(name=name):
+                diagnostic = error_diagnostic(ValueError(
+                    f'https://example.invalid?{name}=FAKE_AUDIT@VALUE&mode=json'))
+                self.assertEqual(diagnostic,
+                    f'ValueError: https://example.invalid?{name}=[REDACTED]&mode=json')
+
+    def test_url_userinfo_and_query_credentials_are_both_redacted(self):
+        diagnostic = error_diagnostic(ValueError(
+            'https://FAKE_USER:FAKE_PASSWORD@example.invalid?token=FAKE_AUDIT@VALUE&mode=json'))
+        self.assertEqual(diagnostic,
+            'ValueError: https://[REDACTED]@example.invalid?token=[REDACTED]&mode=json')
