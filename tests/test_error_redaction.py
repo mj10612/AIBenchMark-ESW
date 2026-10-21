@@ -94,6 +94,14 @@ class TestErrorRedaction(unittest.TestCase):
                 self.assertEqual(diagnostic,
                     f'ValueError: https://example.invalid?{name}=[REDACTED]&mode=json')
 
+    def test_quoted_credential_punctuation_is_not_a_collection_boundary(self):
+        for separator in (",", ";"):
+            with self.subTest(separator=separator):
+                diagnostic = error_diagnostic(ValueError(
+                    f"'https://example.invalid/?token=prefix'{separator}'FAKE_AUDIT_VALUE&mode=json'"))
+                self.assertEqual(diagnostic,
+                    "ValueError: 'https://example.invalid/?token=[REDACTED]&mode=json'")
+
     def test_url_userinfo_and_query_credentials_are_both_redacted(self):
         diagnostic = error_diagnostic(ValueError(
             'https://FAKE_USER:FAKE_PASSWORD@example.invalid?token=FAKE_AUDIT@VALUE&mode=json'))

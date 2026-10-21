@@ -21,10 +21,13 @@ def redact(text, secrets=()):
             text = text.replace(secret, '[REDACTED]')
     text = re.sub(r'\bsk-[A-Za-z0-9_-]+', '[REDACTED]', text)
     text = re.sub(r'(?i)\bBearer\s+[^\s,;"\'<>]+', 'Bearer [REDACTED]', text)
-    # A diagnostic quote closes at message/collection punctuation, while an
-    # apostrophe followed by URL content remains part of the credential or fragment.
+    # Collection punctuation closes a quoted URL only when another HTTP(S)
+    # URL follows; otherwise quoted punctuation can belong to the credential.
     text = re.sub(r'''(?ix)
-        'https?://[^\s"<>]*?'(?=[.,;!?)}\]]*(?:\s|$)|[,;]['"(\[{])
+        'https?://[^\s"<>]*?'(?=
+            [.,;!?)}\]]*(?:\s|$)
+            |[,;][(\[{]*(?:['"][^'"]+['"]:\s*)?['"]?https?://
+        )
         |https?://(?:(?![,;]'?https?://)[^\s"<>])+
         ''', _redact_url_query, text)
     text = re.sub(r'(?i)(https?://)[^/\s@]+@', r'\1[REDACTED]@', text)
