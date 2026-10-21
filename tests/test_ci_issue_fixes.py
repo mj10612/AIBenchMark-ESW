@@ -70,6 +70,8 @@ class TestCIIssueFixes(unittest.TestCase):
             self.assertIn('tier1_crc16', output.read_text(encoding='utf-8'))
         report = json.loads(Path('results/baseline.json').read_text(encoding='utf-8'))
         report['model_name'] = '<img src=x>|`model`'
+        for task in report['tasks']:
+            task['model_name'] = report['model_name']
         summary = github_summary(report)
         self.assertIn('&lt;img', summary)
         self.assertNotIn('<img', summary)
