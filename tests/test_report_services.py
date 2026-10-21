@@ -12,6 +12,24 @@ from aibenchmark_esw.metrics.reporter import BenchmarkReporter
 
 
 class ReportIntegrityTests(unittest.TestCase):
+    def test_task_model_must_match_declared_report_model(self):
+        report = fixture_report()
+        report['tasks'][0]['model_name'] = 'different/provider'
+        with self.assertRaisesRegex(ValueError, 'Task model names must match the run model'):
+            BenchmarkReporter.from_json_dict(report)
+
+    def test_legacy_task_without_model_inherits_report_model(self):
+        report = fixture_report()
+        del report['tasks'][0]['model_name']
+        results = BenchmarkReporter.from_json_dict(report)
+        self.assertEqual(results[0].model_name, report['model_name'])
+
+    def test_legacy_report_without_wrapper_model_preserves_task_model(self):
+        report = fixture_report()
+        expected = report.pop('model_name')
+        results = BenchmarkReporter.from_json_dict(report)
+        self.assertEqual(results[0].model_name, expected)
+
     def test_provenance_shape_checked_before_policy_use(self):
         for value in ('bad', [1], 1):
             report = fixture_report()
