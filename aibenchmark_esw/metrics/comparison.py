@@ -68,6 +68,11 @@ def validate_collection_conditions(wrapper, child):
         for key in ('limits', 'weights', 'target_standard', 'footprint_target'):
             if item.get(key) != other.get(key):
                 raise ValueError('Collection child has incompatible task ' + key)
+        # Unexecuted and legacy tasks may not record an effective standard.
+        # Recorded compiler modes must agree with the collection declaration.
+        if (item.get('effective_standard') is not None and other.get('effective_standard') is not None
+                and item['effective_standard'] != other['effective_standard']):
+            raise ValueError('Collection child has incompatible task effective_standard')
         if (item.get('provenance') or {}).get('task_sha256') != (other.get('provenance') or {}).get('task_sha256'):
             raise ValueError('Collection child has incompatible task fingerprint')
 
@@ -202,13 +207,14 @@ def compare_runs(reports, *, _allow_repeated_models=False, _check_generation=Tru
             task_pass_k = {str(k): round(pass_at_k(count, passed, k) * 100, 6) for k in ks}
             for k, value in task_pass_k.items():
                 model_pass_k[k].append(value)
+            dimensions = dimension_summary(attempts)
             task_rows.append({"model": report["model_name"], "task_id": result.task_id,
                 'tier': result.tier, 'category': ((report.get('metadata') or {}).get('task_categories') or {}).get(result.task_id, 'Unknown (legacy report)'),
                 "total": round(sum(attempt.scores.total_score for attempt in attempts) / count, 6),
                 "functional": round(sum(attempt.scores.functional_score for attempt in attempts) / count, 6),
-                "memory": round(sum(attempt.scores.memory_score for attempt in attempts) / count, 6) if all(attempt.size_metrics.measured for attempt in attempts) else None,
-                "safety": dimension_summary(attempts)['safety'],
-                "measured": all(attempt.size_metrics.measured for attempt in attempts),
+                "memory": dimensions['memory'],
+                "safety": dimensions['safety'],
+                "measured": dimensions['memory'] is not None,
                 "pass_at_1": passed == count, "samples": count, "passed_samples": passed,
                 "pass_at_k": task_pass_k})
         statistics = score_statistics([BenchmarkReporter.to_json_dict(sample, report['model_name'])['overall_score'] for sample in sample_results])

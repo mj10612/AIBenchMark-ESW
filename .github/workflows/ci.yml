@@ -96,23 +96,27 @@ jobs:
         run: aibenchmark-esw validate
       - name: Check published evidence fingerprints
         run: python -m aibenchmark_esw.baseline_check results/baseline.json
-      - name: Lint and type-check Python
-        run: |
-          ruff check aibenchmark_esw tests
-          mypy aibenchmark_esw
+      - name: Lint Python
+        run: ruff check aibenchmark_esw tests
+      - name: Type-check Python
+        run: mypy aibenchmark_esw
       - name: Run full suite including distribution validation
-        run: |
-          coverage run -m unittest discover -s tests -v
-          coverage report
-          coverage xml -o artifacts/coverage.xml
+        run: coverage run -m unittest discover -s tests -v
+      - name: Check coverage threshold
+        run: coverage report
+      - name: Export coverage XML
+        run: coverage xml -o artifacts/coverage.xml
       - name: Check mutation adequacy
         run: aibenchmark-esw mutations --output artifacts/mutations.json
-      - name: Check TCC C11 task readiness and preflight
+      - name: Check TCC C11 task readiness
         if: runner.os == 'Windows'
-        run: |
-          aibenchmark-esw doctor --tasks tier4_dma_buffer --check-references
-          aibenchmark-esw run --model baseline --tasks tier4_dma_buffer --preflight --quiet
-          aibenchmark-esw run --model baseline --preflight --quiet --output artifacts/tcc-preflight.json
+        run: aibenchmark-esw doctor --tasks tier4_dma_buffer --check-references
+      - name: Check TCC C11 task preflight
+        if: runner.os == 'Windows'
+        run: aibenchmark-esw run --model baseline --tasks tier4_dma_buffer --preflight --quiet
+      - name: Check TCC full preflight
+        if: runner.os == 'Windows'
+        run: aibenchmark-esw run --model baseline --preflight --quiet --output artifacts/tcc-preflight.json
       - name: Check cross-target object evidence
         if: runner.os == 'Linux'
         run: |
@@ -124,10 +128,11 @@ jobs:
           aibenchmark-esw run --model baseline --target arm:cortex-m0 --cross-compiler clang --output artifacts/arm-all-tasks.json
           aibenchmark-esw run --model baseline --target avr:atmega328p --cross-compiler avr-gcc --output artifacts/avr-all-tasks.json
       - name: Record reference baseline
-        run: |
-          aibenchmark-esw run --model baseline --output artifacts/baseline.json
-          python -m aibenchmark_esw.baseline_check artifacts/baseline.json results/baseline.json
-          python .github/scripts/check_documentation.py artifacts/baseline.json
+        run: aibenchmark-esw run --model baseline --output artifacts/baseline.json
+      - name: Check reference baseline
+        run: python -m aibenchmark_esw.baseline_check artifacts/baseline.json results/baseline.json
+      - name: Check documentation counts
+        run: python .github/scripts/check_documentation.py artifacts/baseline.json
       - name: Render reference report
         shell: bash
         run: aibenchmark-esw report --results artifacts/baseline.json --format markdown > artifacts/baseline.md
@@ -196,13 +201,16 @@ jobs:
               "$($matches[1])=$($matches[2])" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
             }
           }
-      - name: Install benchmark and validate native MSVC evaluation
-        run: |
-          python .github/scripts/install_locked.py
-          aibenchmark-esw validate
-          aibenchmark-esw run --model baseline --compiler cl --allow-standard-fallback --output artifacts/msvc-baseline.json
-          aibenchmark-esw mutations --compiler cl --allow-standard-fallback --output artifacts/msvc-mutations.json
-          aibenchmark-esw validate-report artifacts/msvc-baseline.json
+      - name: Install benchmark for MSVC
+        run: python .github/scripts/install_locked.py
+      - name: Validate MSVC task assets
+        run: aibenchmark-esw validate
+      - name: Record MSVC reference baseline
+        run: aibenchmark-esw run --model baseline --compiler cl --allow-standard-fallback --output artifacts/msvc-baseline.json
+      - name: Check MSVC mutation adequacy
+        run: aibenchmark-esw mutations --compiler cl --allow-standard-fallback --output artifacts/msvc-mutations.json
+      - name: Validate MSVC baseline report
+        run: aibenchmark-esw validate-report artifacts/msvc-baseline.json
       - name: Verify Windows Clang runtime output limits
         shell: pwsh
         run: |

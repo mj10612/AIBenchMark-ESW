@@ -170,6 +170,8 @@ class BenchmarkReporter:
             if not isinstance(item, dict):
                 raise ValueError("Each task result must be an object")
             validate_task_result(item, data.get("model_name", "unknown"))
+            if "model_name" in data and item.get("model_name", data["model_name"]) != data["model_name"]:
+                raise ValueError("Task model names must match the run model")
             if policy is not None:
                 expected = policy["tasks"].get(item["task_id"])
                 if not isinstance(expected, dict) or any(item.get(key) != expected.get(key) or item.get(key) is None
