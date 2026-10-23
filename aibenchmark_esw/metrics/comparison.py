@@ -31,6 +31,20 @@ def generation_conditions(metadata):
     return {key: settings.get(key, defaults.get(key)) for key in GENERATION_CONDITIONS}
 
 
+def effective_standards(report, task_id):
+    """Collect known standards from a validated report and its sample evidence.
+
+    The wrapper displays the first sample, which may not have compiled. Missing
+    standards remain unknown rather than being inferred from the target standard.
+    """
+    evidence = [report, *report.get('samples', [])]
+    active = (report.get('sampling') or {}).get('active_report')
+    if active is not None:
+        evidence.append(active)
+    return {item['effective_standard'] for source in evidence for item in source['tasks']
+            if item['task_id'] == task_id and item.get('effective_standard') is not None}
+
+
 def validate_collection_conditions(wrapper, child):
     """A collection's declared conditions must describe its contributing runs."""
     first, second = wrapper.get('metadata') or {}, child.get('metadata') or {}
@@ -122,7 +136,7 @@ def compare_runs(reports, *, _allow_repeated_models=False, _check_generation=Tru
             raise ValueError(f"Incompatible footprint targets for {task_id}")
         weights = {tuple(asdict(entry.weights).values()) for entry in entries if entry.weights is not None}
         standards = {entry.target_standard for entry in entries if entry.target_standard is not None}
-        effective = {entry.effective_standard for entry in entries if entry.effective_standard is not None}
+        effective = set().union(*(effective_standards(run[0], task_id) for run in runs))
         if len(weights) > 1 or len(standards) > 1 or len(effective) > 1:
             raise ValueError(f"Incompatible weights or C standards for {task_id}")
         if any(entry.weights is None or entry.target_standard is None for entry in entries):

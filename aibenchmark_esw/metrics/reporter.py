@@ -237,6 +237,11 @@ class BenchmarkReporter:
         if len({result.task_id for result in results}) != len(results):
             raise ValueError("Duplicate task IDs in a report")
         validate_run_state(data.get("metadata") or {}, results)
+        if 'samples' in data:
+            from aibenchmark_esw.metrics.comparison import effective_standards
+            for result in results:
+                if len(effective_standards(data, result.task_id)) > 1:
+                    raise ValueError('Collection child has incompatible task effective_standard: ' + result.task_id)
         from aibenchmark_esw.metrics.measurements import measurement_summary
         expected_summary = measurement_summary(results)
         if 'samples' in data:

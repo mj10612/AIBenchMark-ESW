@@ -323,7 +323,11 @@ class LLMClient:
 
     @staticmethod
     def extract_c_code(response_text: Optional[str], expected_functions=None) -> str:
-        """Prefer implementations of the API over declarations and usage examples."""
+        """Prefer API implementations, choosing the last with equal API coverage.
+
+        Declarations and usage examples rank lower. Without an API match,
+        prefer more substantial implementations as a fallback.
+        """
         if not response_text:
             return ""
         blocks = re.findall(r"```([^\r\n`]*)\r?\n(.*?)```", response_text, flags=re.DOTALL)
@@ -337,6 +341,7 @@ class LLMClient:
             definitions = set(re.findall(r"\b([A-Za-z_]\w*)\s*\([^;{}]*\)\s*\{", mask_noncode(code)))
             definitions -= {"if", "for", "while", "switch"}
             implementation = definitions - {"main", "setUp", "tearDown"}
-            return (len(expected & definitions), bool(implementation), "main" not in definitions,
-                    len(implementation), len(code))
+            api_coverage = len(expected & definitions)
+            return (api_coverage, bool(implementation), "main" not in definitions,
+                    0 if api_coverage else len(implementation), 0 if api_coverage else len(code))
         return max(reversed(candidates), key=rank) if candidates else response_text.strip()

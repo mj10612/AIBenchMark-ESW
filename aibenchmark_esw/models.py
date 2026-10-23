@@ -1,3 +1,4 @@
+import copy
 import math
 import re
 from dataclasses import asdict, dataclass, field
@@ -300,5 +301,5 @@ class TaskEvaluationResult:
             "candidate_time_sec": self.candidate_time_sec,
             "reference_validation_time_sec": self.reference_validation_time_sec,
             "footprint_target": self.footprint_target,
-            **({"stack_usage": self.stack_usage} if self.stack_usage is not None else {}),
+            **({"stack_usage": copy.deepcopy(self.stack_usage)} if self.stack_usage is not None else {}),
         }
