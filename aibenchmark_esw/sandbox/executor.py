@@ -130,13 +130,15 @@ class ExecutionSandbox:
             read_stack_usage,
             unavailable_stack_usage,
         )
+        if self.cancel_event is not None and self.cancel_event.is_set():
+            return unavailable_stack_usage('Stack collection cancelled')
+        if not compilation.success:
+            return unavailable_stack_usage('Object compilation did not succeed')
         compiler = self.cross.settings() if self.cross else self.compiler_identity()
         provenance = {'target': self.cross.target if self.cross else 'host', 'compiler': compiler,
                       'flags': list(flags), 'measurement': 'compiler-per-function'}
         if not self.stack_usage_flags():
             return unavailable_stack_usage('Unsupported stack-usage compiler', provenance)
-        if not compilation.success:
-            return unavailable_stack_usage('Object compilation did not succeed', provenance)
         return read_stack_usage(Path(output).with_suffix('.su'), self.max_output_bytes, provenance)
 
     def _run_contained(self, command, **options):
@@ -150,7 +152,8 @@ class ExecutionSandbox:
         try:
             with tempfile.TemporaryDirectory(prefix="aibenchmark_compiler_probe_") as directory:
                 runner = self._run_contained if self.containment else run_bounded
-                result = runner(command, cwd=directory, timeout=10, max_output_bytes=65536)
+                result = runner(command, cwd=directory, timeout=10, max_output_bytes=65536,
+                                cancel_event=self.cancel_event)
                 output = result.stdout.decode(locale.getpreferredencoding(False), errors="backslashreplace")
                 lines = output.strip().splitlines()
                 version = lines[0] if result.returncode == 0 and lines else None
