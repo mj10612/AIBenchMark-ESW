@@ -1,6 +1,8 @@
 import copy
 import importlib.util
+import subprocess
 import tempfile
+import threading
 import unittest
 from pathlib import Path
 from unittest.mock import patch
@@ -12,6 +14,35 @@ from aibenchmark_esw.sandbox.executor import ExecutionSandbox
 
 
 class TestStackUsage(unittest.TestCase):
+    def test_compiler_probe_forwards_cancellation_to_runner(self):
+        for contained in (False, True):
+            with self.subTest(contained=contained):
+                executor = ExecutionSandbox(compiler_path='clang', stack_usage=True)
+                executor.cancel_event = threading.Event()
+                target = '_run_contained' if contained else None
+                if contained:
+                    executor.containment = object()
+                probe = (patch.object(executor, target) if target else
+                         patch('aibenchmark_esw.sandbox.executor.run_bounded'))
+                with probe as runner:
+                    runner.return_value = subprocess.CompletedProcess([], 0, b'clang version test\n')
+                    self.assertEqual(executor.compiler_identity()['version'], 'clang version test')
+                    self.assertIs(runner.call_args.kwargs['cancel_event'], executor.cancel_event)
+
+    def test_failed_or_cancelled_stack_collection_does_not_probe_compiler(self):
+        from aibenchmark_esw.models import CompilationResult
+
+        for success, cancelled in ((False, False), (False, True), (True, True)):
+            with self.subTest(success=success, cancelled=cancelled):
+                executor = ExecutionSandbox(compiler_path='clang', stack_usage=True)
+                executor.cancel_event = threading.Event()
+                if cancelled:
+                    executor.cancel_event.set()
+                with patch.object(executor, 'compiler_identity') as identity:
+                    evidence = executor.collect_stack_usage(CompilationResult(success, ''), Path('missing.o'), [])
+                identity.assert_not_called()
+                self.assertEqual(evidence['status'], 'unavailable')
+
     def stack_module(self):
         self.assertIsNotNone(importlib.util.find_spec('aibenchmark_esw.sandbox.stack_usage'))
         from aibenchmark_esw.sandbox import stack_usage
