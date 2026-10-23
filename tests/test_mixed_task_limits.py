@@ -46,7 +46,7 @@ class TestMixedTaskLimits(unittest.TestCase):
                         DatasetLoader(root)
                     loader = DatasetLoader(root, strict=False)
                     self.assertEqual(loader.list_tasks(), [])
-                    self.assertIn('limits.' + field, loader.load_errors[str(task_dir)])
+                    self.assertIn('limits.' + field, loader.load_errors[str(task_dir.resolve())])
 
     def test_supported_limit_shapes_preserve_explicit_values(self):
         for limits in (
