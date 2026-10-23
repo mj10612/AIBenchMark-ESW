@@ -114,6 +114,9 @@ class TaskConfig:
             raise ValueError("Task limits must be an object")
         limit_fields = {'max_flash_bytes', 'max_ram_bytes', 'timeout_seconds'}
         _known_fields(limits_data, limit_fields | {'default', 'targets'}, 'limits.')
+        if 'default' in limits_data and limit_fields.intersection(limits_data):
+            mixed = ', '.join('limits.' + name for name in sorted(limit_fields.intersection(limits_data)))
+            raise ValueError(f'{mixed} cannot be combined with limits.default; move flat fields into limits.default')
         targets = limits_data.get("targets", {})
         if not isinstance(targets, dict):
             raise ValueError("limits.targets must be an object")
