@@ -28,6 +28,37 @@ def collection(samples, active=None, status='completed', requested=2):
 
 
 class TestCollectionExports(unittest.TestCase):
+    def test_collection_rejects_child_effective_standard_mismatch(self):
+        first, second = fixture_report(100, 'first'), fixture_report(100, 'second')
+        report = collection([first, second])
+        for sample in report['samples']:
+            sample['tasks'][0]['effective_standard'] = 'c11'
+        with self.assertRaisesRegex(ValueError, 'incompatible task effective_standard'):
+            BenchmarkReporter.from_json_dict(report)
+
+    def test_collection_allows_unknown_effective_standard_for_pending_child(self):
+        active = fixture_report(0, 'active')
+        active['metadata'].update(run_status='interrupted', pending_tasks=['one'])
+        active['tasks'][0]['test_result'].update(total=0, passed=0, failed=0, completed=False, returncode=None)
+        active['tasks'][0]['scores'] = dict.fromkeys(('functional', 'memory', 'safety', 'total'), 0)
+        active['tasks'][0]['effective_standard'] = None
+        report = collection([fixture_report(100, 'done')], active, 'interrupted')
+        BenchmarkReporter.from_json_dict(report)
+
+    def test_collection_checks_recorded_standard_in_active_child(self):
+        active = fixture_report(100, 'active')
+        active['metadata']['run_status'] = 'aborted'
+        active['tasks'][0]['effective_standard'] = 'c11'
+        report = collection([fixture_report(100, 'done')], active, 'aborted')
+        with self.assertRaisesRegex(ValueError, 'incompatible task effective_standard'):
+            BenchmarkReporter.from_json_dict(report)
+
+    def test_collection_preserves_legacy_missing_effective_standards(self):
+        report = collection([fixture_report(100, 'first'), fixture_report(100, 'second')])
+        del report['tasks'][0]['effective_standard']
+        del report['samples'][1]['tasks'][0]['effective_standard']
+        BenchmarkReporter.from_json_dict(report)
+
     def test_xml_control_characters_cannot_merge_distinct_sample_ids(self):
         from aibenchmark_esw.metrics.junit import render_collection_junit
         report = collection([fixture_report(100, 'a\x00b'), fixture_report(100, 'ab')])

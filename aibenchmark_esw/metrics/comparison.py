@@ -54,6 +54,11 @@ def validate_collection_conditions(wrapper, child):
         for key in ('limits', 'weights', 'target_standard', 'footprint_target'):
             if item.get(key) != other.get(key):
                 raise ValueError('Collection child has incompatible task ' + key)
+        # Unexecuted and legacy tasks may not record an effective standard.
+        # Recorded compiler modes must agree with the collection declaration.
+        if (item.get('effective_standard') is not None and other.get('effective_standard') is not None
+                and item['effective_standard'] != other['effective_standard']):
+            raise ValueError('Collection child has incompatible task effective_standard')
         if (item.get('provenance') or {}).get('task_sha256') != (other.get('provenance') or {}).get('task_sha256'):
             raise ValueError('Collection child has incompatible task fingerprint')
 
