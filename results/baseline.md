@@ -24,14 +24,14 @@
 | baseline | by_category | flash_management | 1 | 1 | 100.0 | 100.0 | Unavailable |
 | baseline | by_category | fsm_and_protocols | 5 | 5 | 100.0 | 100.0 | Unavailable |
 ### Reproducibility
-- **Run (UTC)**: 2026-10-23T13:20:33.832174+00:00
+- **Run (UTC)**: 2026-10-23T13:22:00.562508+00:00
 - **Run status**: completed
 - **Benchmark / Python**: 0.1.0 / 3.11.15
 - **Compiler**: tcc / tcc version 0.9.27 (x86_64 Windows) (native)
 - **Static analysis**: builtin / No cppcheck version recorded
 - **Dataset SHA-256**: `96b16b5b2685cdb873c04e4f83b0123cf5af92226bd236aa44f20a1adcdede50`
-- **Evaluator SHA-256**: `bf3f058fb240d3df4a9d5f9966705cdc3681f734c00e7b03ca07d4877e92dabc`
-- **Source revision**: `4a1cb265ba9bc2916031e382662ec137d307560d`
+- **Evaluator SHA-256**: `608330b454399314f38251b90607dded294ddc5e3fb09ba0b48700c32ccb89cb`
+- **Source revision**: `41abe6e187fbbba4c678bccfe3fce239a25e95db`
 - **Source had local changes**: False
 
 ### Dimensional Scores
@@ -50,17 +50,17 @@ Weights below are functional/memory/safety. Memory and safety contributions are 
 | Tier | Task ID | Standard | Weights | Compile | Tests Passed | Flash/RAM (B) | Safety | Score | Time |
 | :---: | :--- | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: |
 | 1 | tier1_crc16 | c99 | 60%/20%/20% | PASS | 7/7 | 361 / 0 | Err:0, Warn:0 | **100.0** | 0.38s |
-| 1 | tier1_q15_math | c99 | 60%/20%/20% | PASS | 16/16 | 270 / 0 | Err:0, Warn:0 | **100.0** | 0.37s |
-| 1 | tier1_ring_buffer | c99 | 60%/20%/20% | PASS | 11/11 | 1474 / 0 | Err:0, Warn:0 | **100.0** | 0.36s |
-| 2 | tier2_can_frame | c99 | 60%/20%/20% | PASS | 15/15 | 2600 / 0 | Err:0, Warn:0 | **100.0** | 0.36s |
-| 2 | tier2_cobs_codec | c99 | 60%/20%/20% | PASS | 9/9 | 1186 / 0 | Err:0, Warn:0 | **100.0** | 0.35s |
-| 2 | tier2_debounce_fsm | c99 | 60%/20%/20% | PASS | 7/7 | 1134 / 0 | Err:0, Warn:0 | **100.0** | 0.36s |
-| 2 | tier2_fixed_control | c99 | 60%/20%/20% | PASS | 7/7 | 941 / 0 | Err:0, Warn:0 | **100.0** | 0.41s |
-| 2 | tier2_tick_timer | c99 | 60%/20%/20% | PASS | 16/16 | 636 / 0 | Err:0, Warn:0 | **100.0** | 0.39s |
-| 2 | tier2_windowed_watchdog | c99 | 60%/20%/20% | PASS | 15/15 | 1136 / 0 | Err:0, Warn:0 | **100.0** | 0.36s |
+| 1 | tier1_q15_math | c99 | 60%/20%/20% | PASS | 16/16 | 270 / 0 | Err:0, Warn:0 | **100.0** | 0.36s |
+| 1 | tier1_ring_buffer | c99 | 60%/20%/20% | PASS | 11/11 | 1474 / 0 | Err:0, Warn:0 | **100.0** | 0.33s |
+| 2 | tier2_can_frame | c99 | 60%/20%/20% | PASS | 15/15 | 2600 / 0 | Err:0, Warn:0 | **100.0** | 0.34s |
+| 2 | tier2_cobs_codec | c99 | 60%/20%/20% | PASS | 9/9 | 1186 / 0 | Err:0, Warn:0 | **100.0** | 0.36s |
+| 2 | tier2_debounce_fsm | c99 | 60%/20%/20% | PASS | 7/7 | 1134 / 0 | Err:0, Warn:0 | **100.0** | 0.33s |
+| 2 | tier2_fixed_control | c99 | 60%/20%/20% | PASS | 7/7 | 941 / 0 | Err:0, Warn:0 | **100.0** | 0.33s |
+| 2 | tier2_tick_timer | c99 | 60%/20%/20% | PASS | 16/16 | 636 / 0 | Err:0, Warn:0 | **100.0** | 0.35s |
+| 2 | tier2_windowed_watchdog | c99 | 60%/20%/20% | PASS | 15/15 | 1136 / 0 | Err:0, Warn:0 | **100.0** | 0.38s |
 | 3 | tier3_flash_update | c99 | 60%/20%/20% | PASS | 7/7 | 1980 / 0 | Err:0, Warn:0 | **100.0** | 0.35s |
-| 3 | tier3_i2c_sensor | c99 | 60%/20%/20% | PASS | 11/11 | 830 / 0 | Err:0, Warn:0 | **100.0** | 0.33s |
-| 3 | tier3_spi_flash | c99 | 60%/20%/20% | PASS | 8/8 | 1913 / 0 | Err:0, Warn:0 | **100.0** | 0.40s |
+| 3 | tier3_i2c_sensor | c99 | 60%/20%/20% | PASS | 11/11 | 830 / 0 | Err:0, Warn:0 | **100.0** | 0.34s |
+| 3 | tier3_spi_flash | c99 | 60%/20%/20% | PASS | 8/8 | 1913 / 0 | Err:0, Warn:0 | **100.0** | 0.34s |
 | 4 | tier4_bitmask_fix | c99 | 60%/20%/20% | PASS | 5/5 | 462 / 0 | Err:0, Warn:0 | **100.0** | 0.33s |
-| 4 | tier4_dma_buffer | c11 | 60%/20%/20% | PASS | 8/8 | 1590 / 0 | Err:0, Warn:0 | **100.0** | 0.35s |
-| 4 | tier4_uart_frame_fix | c99 | 60%/20%/20% | PASS | 8/8 | 760 / 0 | Err:0, Warn:0 | **100.0** | 0.36s |
+| 4 | tier4_dma_buffer | c11 | 60%/20%/20% | PASS | 8/8 | 1590 / 0 | Err:0, Warn:0 | **100.0** | 0.33s |
+| 4 | tier4_uart_frame_fix | c99 | 60%/20%/20% | PASS | 8/8 | 760 / 0 | Err:0, Warn:0 | **100.0** | 0.32s |
