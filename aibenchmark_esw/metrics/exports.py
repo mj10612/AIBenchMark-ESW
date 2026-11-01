@@ -30,10 +30,10 @@ input,select{padding:8px;margin:8px}tr[hidden]{display:none} .score{min-width:10
 ''' if task_filters else '') + '''
 <label>Minimum score <input id="minscore" type="number" min="0" max="100" value="0"></label>
 ''' + content + '''<script>
-const categories=[...new Set([...document.querySelectorAll('tbody tr')].map(r=>r.dataset.category).filter(Boolean))].sort();
+const categories=[...new Set([...document.querySelectorAll('tbody tr[data-score]')].map(r=>r.dataset.category).filter(Boolean))].sort();
 categories.forEach(c=>document.querySelector('#category')?.add(new Option(c,c)));
 function filterRows(){const q=document.querySelector('#filter').value.toLowerCase(),s=document.querySelector('#status')?.value||'',t=document.querySelector('#tier')?.value||'',c=document.querySelector('#category')?.value||'',n=Number(document.querySelector('#minscore').value);
-document.querySelectorAll('tbody tr').forEach(r=>r.hidden=!r.textContent.toLowerCase().includes(q)||(s&&r.dataset.status!==s)||(t&&r.dataset.tier!==t)||(c&&r.dataset.category!==c)||Number(r.dataset.score||0)<n);}
+document.querySelectorAll('tbody tr[data-score]').forEach(r=>r.hidden=!r.textContent.toLowerCase().includes(q)||(s&&r.dataset.status!==s)||(t&&r.dataset.tier!==t)||(c&&r.dataset.category!==c)||Number(r.dataset.score||0)<n);}
 ['filter','minscore'].forEach(id=>document.getElementById(id).addEventListener('input',filterRows));
 ['status','tier','category'].forEach(id=>document.getElementById(id)?.addEventListener('change',filterRows));
 document.querySelectorAll('th[data-sort]').forEach(h=>h.addEventListener('click',()=>{const b=h.closest('table').querySelector('tbody'),i=h.cellIndex,d=h.dataset.direction==='asc'?-1:1;
