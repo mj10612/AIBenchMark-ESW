@@ -30,10 +30,10 @@ input,select{padding:8px;margin:8px}tr[hidden]{display:none} .score{min-width:10
 ''' if task_filters else '') + '''
 <label>Minimum score <input id="minscore" type="number" min="0" max="100" value="0"></label>
 ''' + content + '''<script>
-const categories=[...new Set([...document.querySelectorAll('tbody tr')].map(r=>r.dataset.category).filter(Boolean))].sort();
+const categories=[...new Set([...document.querySelectorAll('tbody tr[data-score]')].map(r=>r.dataset.category).filter(Boolean))].sort();
 categories.forEach(c=>document.querySelector('#category')?.add(new Option(c,c)));
 function filterRows(){const q=document.querySelector('#filter').value.toLowerCase(),s=document.querySelector('#status')?.value||'',t=document.querySelector('#tier')?.value||'',c=document.querySelector('#category')?.value||'',n=Number(document.querySelector('#minscore').value);
-document.querySelectorAll('tbody tr').forEach(r=>r.hidden=!r.textContent.toLowerCase().includes(q)||(s&&r.dataset.status!==s)||(t&&r.dataset.tier!==t)||(c&&r.dataset.category!==c)||Number(r.dataset.score||0)<n);}
+document.querySelectorAll('tbody tr[data-score]').forEach(r=>r.hidden=!r.textContent.toLowerCase().includes(q)||(s&&r.dataset.status!==s)||(t&&r.dataset.tier!==t)||(c&&r.dataset.category!==c)||Number(r.dataset.score||0)<n);}
 ['filter','minscore'].forEach(id=>document.getElementById(id).addEventListener('input',filterRows));
 ['status','tier','category'].forEach(id=>document.getElementById(id)?.addEventListener('change',filterRows));
 document.querySelectorAll('th[data-sort]').forEach(h=>h.addEventListener('click',()=>{const b=h.closest('table').querySelector('tbody'),i=h.cellIndex,d=h.dataset.direction==='asc'?-1:1;
@@ -139,8 +139,16 @@ def comparison_junit(comparison, baseline_model=None, regression_threshold=0.0):
     suite.set('failures', str(failures))
     from aibenchmark_esw.metrics.paired import paired_comparisons
     paired = paired_comparisons(comparison, baseline_model)
+    # Reserve the identities actually emitted after XML text normalization.
+    identities = {(case.get('classname'), case.get('name')) for case in suite.findall('testcase')}
     for row in paired['comparisons']:
-        case = ET.SubElement(suite, 'testcase', classname=_xml_text(row['model']), name='paired-task-statistics')
+        classname, name = _xml_text(row['model']), 'paired-task-statistics'
+        suffix = 1
+        while (classname, name) in identities:
+            name = f'paired-task-statistics-{suffix}'
+            suffix += 1
+        identities.add((classname, name))
+        case = ET.SubElement(suite, 'testcase', classname=classname, name=name)
         ET.SubElement(case, 'system-out').text = _xml_text(json.dumps(row, ensure_ascii=False))
     suite.set('tests', str(len(suite.findall('testcase'))))
     return ET.tostring(suite, encoding='unicode', xml_declaration=True) + '\n'

@@ -17,6 +17,9 @@ Ruff enforces bugbear, import ordering and Python 3.9 modernization on both the
 package and tests. Additional simplify/style families are separate decisions.
 Live documentation counts are checked against generated evidence in CI.
 
+HTML filter regression tests execute the generated JavaScript with Node.js 18 or
+newer when available. These optional tests are skipped when Node.js is absent.
+
 Categories form a closed vocabulary: `general`, `core_fundamentals`,
 `fsm_and_protocols`, `device_drivers`, `bug_fix_and_safety`, `fixed_point_control`,
 `flash_management`, and `concurrency`. Choose the task's primary tested contract;
