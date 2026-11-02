@@ -205,6 +205,8 @@ jobs:
         run: python .github/scripts/install_locked.py
       - name: Validate MSVC task assets
         run: aibenchmark-esw validate
+      - name: Warm MSVC compiler and linker
+        run: aibenchmark-esw eval --task tier1_crc16 --reference --compiler cl --allow-standard-fallback --compile-timeout 120 --output artifacts/msvc-warmup.json
       - name: Record MSVC reference baseline
         run: aibenchmark-esw run --model baseline --compiler cl --allow-standard-fallback --output artifacts/msvc-baseline.json
       - name: Check MSVC mutation adequacy
@@ -220,6 +222,9 @@ jobs:
           if (-not (Test-Path -LiteralPath $compiler)) { throw 'Installed Visual Studio Clang was not found' }
           $env:AIBENCHMARK_ESW_COMPILER = $compiler
           $env:PYTHONPATH = 'tests'
+          # Absorb hosted-runner compiler startup before the default-budget tests.
+          aibenchmark-esw eval --task tier1_crc16 --reference --compiler $compiler --compile-timeout 120 --output artifacts/windows-clang-warmup.json
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           python -m unittest test_runtime_controls.TestRuntimeControls.test_test_output_overflow_is_incomplete test_runtime_controls.TestRuntimeControls.test_candidate_fseek_stdout_cannot_bypass_output_limit -v
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
       - name: Upload MSVC evidence
