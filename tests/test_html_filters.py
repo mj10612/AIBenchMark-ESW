@@ -113,3 +113,14 @@ class TestHtmlFilters(unittest.TestCase):
         for state, expected in zip(states, ([False, True], [True, False], [False, False])):
             self.assertEqual([state[index] for index in model_rows], expected)
             self.assertTrue(all(not hidden for index, hidden in enumerate(state) if index not in model_rows))
+
+    def test_filters_leave_nonfilterable_summary_rows_visible(self):
+        report = fixture_report(50)
+        document = FilterDocument(report_html(BenchmarkReporter.from_json_dict(report),
+                                              report['model_name'], report['metadata']))
+        states = self.filter_states(document, [
+            {'minscore': '75'}, {'status': 'PASS'}, {'tier': '2'},
+            {'category': 'other'}, {'filter': 'unmatched'},
+        ])
+        for state in states:
+            self.assertEqual(state, [False, False, True])
