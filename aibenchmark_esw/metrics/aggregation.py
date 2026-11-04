@@ -122,7 +122,8 @@ def aggregate_runs(reports):
             "resolved_model_sequence": list(identity) if identity else [],
             "generation_settings": json.loads(settings_key), "runs": count,
             "run_ids": [report["metadata"]["run_id"] for report, _ in samples],
-            "statistics": {key: score_statistics(values) for key, values in dimensions.items()},
+            "statistics": {key: dict(score_statistics(values), contributing_runs=len(values),
+                                     excluded_runs=count - len(values)) for key, values in dimensions.items()},
             "task_success": [{"task_id": task_id, "passed_runs": passed, "runs": count,
                               "pass_rate_pct": round(passed / count * 100, 6)}
                              for task_id, passed in sorted(task_passes.items())],
@@ -155,6 +156,8 @@ def render_aggregation(summary, format_name="markdown"):
                   "usage_known_attempts", "usage_total_attempts", "usage_attempt_coverage_tasks", "usage_known_turns", "usage_total_turns", "usage_turn_coverage_tasks",
                   "cost_tasks", "cost_partial_tasks", "cost_per_passed_task", "resolved_model_sequence", "generation_seconds", "duration_tasks", "task_attempts"]
         fields += [dimension + '_mean_ci95_' + bound for dimension in ('score','functional','memory','safety','pass_at_1_pct') for bound in ('lower','upper')]
+        fields += [dimension + '_' + name for dimension in ('score','functional','memory','safety','pass_at_1_pct')
+                   for name in ('contributing_runs', 'excluded_runs')]
         writer = csv.DictWriter(stream, fieldnames=fields, lineterminator="\n")
         writer.writeheader()
         for group in summary["groups"]:
@@ -163,6 +166,8 @@ def render_aggregation(summary, format_name="markdown"):
             for key, stats in group["statistics"].items():
                 row[key + "_mean"] = stats["mean"]
                 row[key + "_sample_stddev"] = stats["sample_stddev"]
+                for name in ('contributing_runs', 'excluded_runs'):
+                    row[key + '_' + name] = stats[name]
                 interval = stats['mean_ci95_approx']
                 for bound in ('lower','upper'):
                     row[key + '_mean_ci95_' + bound] = interval[bound] if interval else None
@@ -191,6 +196,10 @@ def render_aggregation(summary, format_name="markdown"):
                   f"{group['cost_tasks']}/{group['task_attempts']} attempts; cost per passing task {group['cost_per_passed_task']}",
                   "Dimension means (F/M/S): " + "/".join(dimension_text(group['statistics'][key]['mean'])
                                                            for key in ("functional", "memory", "safety")),
+                  "Complete-case dimension statistics (contributing runs): " + "; ".join(
+                      f"{key} {group['statistics'][key]['contributing_runs']}/{group['runs']} "
+                      f"({group['statistics'][key]['excluded_runs']} excluded)"
+                      for key in ('functional', 'memory', 'safety')),
                   f"Measured dimensions: memory {group['memory_measured_attempts']}/{group['task_attempts']}, "
                   f"safety {group['safety_measured_attempts']}/{group['task_attempts']} task attempts.",
                   "Dimension sample SD (F/M/S): " + "/".join(

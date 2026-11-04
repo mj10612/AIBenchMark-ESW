@@ -312,13 +312,16 @@ def run_mutations(tasks, loader, executor=None, *, auto=False, max_mutants=20, j
     tasks = list(tasks)
     executor = executor or ExecutionSandbox()
     metadata = collect_run_metadata(tasks, executor)
-    report = {key: metadata.get(key) for key in ("compiler", "evaluator_sha256", "source_revision")}
-    report.update(tasks=[], passed=bool(tasks))
+    report = {key: metadata.get(key) for key in (
+        "compiler", "evaluator_sha256", "source_revision", "source_dirty", "dataset_sha256",
+        "task_fingerprints", "execution_settings", "platform", "benchmark_version",
+        "run_id", "created_at_utc", "unreadable_assets")}
+    report.update(schema_version=1, mutation_policy_version="reviewed-v1", tasks=[], passed=bool(tasks))
     if auto:
         report.update(generator_version=GENERATOR_VERSION,
                       automatic_settings={"max_mutants": max_mutants, "jobs": jobs, "min_score": min_score})
     for task in tasks:
-        row = {"task_id": task.id, "reference_passed": False,
+        row = {"task_id": task.id, "task_sha256": metadata['task_fingerprints'].get(task.id), "reference_passed": False,
                "killed": 0, "survived": 0, "invalid": 0, "mutants": []}
         report["tasks"].append(row)
         try:

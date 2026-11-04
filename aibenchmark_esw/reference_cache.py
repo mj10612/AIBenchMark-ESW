@@ -7,6 +7,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from typing import Optional
+from weakref import WeakValueDictionary
 
 from aibenchmark_esw.provenance import task_sha256, text_sha256
 from aibenchmark_esw.sandbox.size_analyzer import SizeAnalyzer
@@ -23,7 +24,9 @@ class ReferenceValidation:
 class ReferenceCache:
     def __init__(self):
         self._records = {}
-        self._locks = {}
+        # Owners and waiters keep a strong local reference. Once the last user
+        # leaves, discard the idle lock without retaining failed-input keys.
+        self._locks: WeakValueDictionary = WeakValueDictionary()
         self._guard = threading.Lock()
 
     def validate(self, task, code, executor, existing=None):

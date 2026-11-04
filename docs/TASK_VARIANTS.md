@@ -136,3 +136,11 @@ are not assumed equivalent: `equivalent_suspect` stays zero until an independent
 equivalence review exists. The generator version and effective cap, parallelism
 and threshold are recorded. This bounded lexical experiment is not a C AST
 mutation engine or evidence that untested fault classes are covered.
+
+Saved mutation reports declare `schema_version: 1` and the reviewed registry
+policy `mutation_policy_version: reviewed-v1`. They retain dataset and per-task
+fingerprints, evaluator/compiler identity, execution settings, platform, run
+identity and source revision. Each task row also records its `task_sha256`.
+These fields identify the inputs behind adequacy evidence; automatic probes
+add their separate generator version and settings described above. Unreadable
+assets remain explicit and can leave the dataset fingerprint unavailable.
