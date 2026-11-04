@@ -83,6 +83,9 @@ def trend_runs(reports, regression_threshold=0.0):
                     if delta < -regression_threshold:
                         regressions.append({'task_id': task_id, 'delta': delta, 'previous_run_id':last['run_id']})
             row = {'run_id':metadata['run_id'], 'created_at_utc':metadata['created_at_utc'], 'model':report['model_name'],
+                   'run_mode': checked['models'][0]['run_mode'],
+                   'origin_run_id': metadata.get('origin_run_id'),
+                   'origin_model_name': metadata.get('origin_model_name'),
                    'source_revision':metadata.get('source_revision'), 'score':checked['models'][0]['score'],
                    'sample_count': len(samples), 'task_attempts': sum(map(len, task_sequences.values())),
                    'task_scores':scores, 'regressions':regressions, 'generation_settings':generation_conditions(metadata),
@@ -105,7 +108,7 @@ def render_trend(summary, format_name='markdown'):
         return summary_html('Benchmark history', rows, summary)
     if format_name == 'csv':
         stream=io.StringIO(newline='')
-        fields=['compatibility_sha256','run_id','created_at_utc','model','source_revision','score','sample_count','task_attempts','task_scores','regressions','generation_settings','resolved_model_sequences','resolved_model_sequences_by_task']
+        fields=['compatibility_sha256','run_id','created_at_utc','model','run_mode','origin_run_id','origin_model_name','source_revision','score','sample_count','task_attempts','task_scores','regressions','generation_settings','resolved_model_sequences','resolved_model_sequences_by_task']
         writer=csv.DictWriter(stream,fieldnames=fields,lineterminator='\n')
         writer.writeheader()
         for row in rows:
@@ -114,10 +117,11 @@ def render_trend(summary, format_name='markdown'):
     if format_name not in ('markdown','cli'):
         raise ValueError('Unknown trend format: '+format_name)
     lines=['# Benchmark history' if format_name=='markdown' else 'Benchmark history', '',
-           'Runs are compared only within matching dataset, evaluator and per-task model pipeline proportions.']
+           'Runs are compared only within matching dataset, evaluator and per-task model pipeline proportions.',
+           'Replay is fixed-candidate grading: no new generation or spend.']
     for group in summary['groups']:
-        lines += ['', 'Compatibility group: '+group['compatibility_sha256'], '| UTC | Model | Run | Score | Samples | Task attempts | Regression |','| :--- | :--- | :--- | ---: | ---: | ---: | :--- |']
+        lines += ['', 'Compatibility group: '+group['compatibility_sha256'], '| UTC | Model | Run | Mode | Origin run | Score | Samples | Task attempts | Regression |','| :--- | :--- | :--- | :--- | :--- | ---: | ---: | ---: | :--- |']
         for row in group['runs']:
-            cells=[row['created_at_utc'],row['model'],row['run_id'],f"{row['score']:.2f}",row['sample_count'],row['task_attempts'],json.dumps(row['regressions'])]
+            cells=[row['created_at_utc'],row['model'],row['run_id'],row.get('run_mode', 'unknown'),row.get('origin_run_id') or '',f"{row['score']:.2f}",row['sample_count'],row['task_attempts'],json.dumps(row['regressions'])]
             lines.append('| '+' | '.join(markdown_text(cell) for cell in cells)+' |')
     return '\n'.join(lines)
