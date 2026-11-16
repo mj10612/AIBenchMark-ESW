@@ -294,7 +294,8 @@ class ExecutionSandbox:
                          for source in owned if source.is_relative_to(root)}
         findings = []
         for diagnostic in log.splitlines():
-            match = re.match(r"^(.*?):(\d+)(?::\d+)?:\s*warning:\s*(.*)", diagnostic)
+            match = re.match(r"^(.*?):(\d+)(?::\d+)?:\s*warning:\s*(.*)", diagnostic) or re.match(
+                r"^(.*?)\((\d+)(?:,\d+)?\):\s*warning:\s*(.*)", diagnostic)
             msvc = re.match(r"^(.*?)\((\d+)(?:,\d+)?\):\s*warning\s+(C\d+):\s*(.*)", diagnostic)
             if match:
                 file, line, message = match.groups()
