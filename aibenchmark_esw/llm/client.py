@@ -85,6 +85,7 @@ class LLMClient:
         self.input_cost_per_million, self.output_cost_per_million = input_cost_per_million, output_cost_per_million
         self.budget = budget
         self.last_generation: Any = None
+        self._initial_message_count = 0
         self.expected_functions: set[str] = set()
         self.cancel_event = None
 
@@ -93,7 +94,7 @@ class LLMClient:
                 "request_timeout_seconds": self.request_timeout,
                 "max_retries": self.max_retries, "retry_backoff_seconds": self.retry_backoff_seconds,
                 "prompt_strategy": self.prompt_strategy, "review_turn": self.review_turn,
-                'repair_turns': self.repair_turns, 'context_window_policy': 'trim-optional-once-v1',
+                'repair_turns': self.repair_turns, 'context_window_policy': 'trim-optional-once-v2',
                 "input_cost_per_million": self.input_cost_per_million,
                 "output_cost_per_million": self.output_cost_per_million}
 
@@ -134,15 +135,15 @@ class LLMClient:
         if self.cancel_event is not None and self.cancel_event.is_set():
             raise InterruptedError("Generation cancelled")
 
-    def _trim_optional(self, messages):
-        if len(messages) <= 3:
+    def _trim_optional(self, messages, turn_kind):
+        tail_count = 2 if turn_kind in ('review', 'repair') else 1
+        if len(messages) <= self._initial_message_count + tail_count:
             return False
-        last = messages[-1]
-        messages[:] = messages[:2] + ([last] if last['role'] == 'user' else [])
+        messages[:] = messages[:self._initial_message_count] + messages[-tail_count:]
         self.last_generation['context_trimmed'] = True
         return True
 
-    def _context_check(self, provider, messages):
+    def _context_check(self, provider, messages, turn_kind):
         info = model_info(provider, self.model_name)
         limit = info.get('max_input_tokens') or info.get('max_tokens')
         count = getattr(provider, 'token_counter', None)
@@ -156,13 +157,13 @@ class LLMClient:
             return
         available = limit if info.get('max_input_tokens') else limit - (self.max_tokens or 0)
         if tokens > available:
-            if self._trim_optional(messages):
-                self._context_check(provider, messages)
+            if self._trim_optional(messages, turn_kind):
+                self._context_check(provider, messages, turn_kind)
                 return
             raise ContextWindowError(f'Prompt requires {tokens} tokens, context allows {available}; reduce task/header content or --max-tokens')
 
     def _complete(self, provider, messages, turn_kind='implement', context_retry=False):
-        self._context_check(provider, messages)
+        self._context_check(provider, messages, turn_kind)
         kwargs = {"model": self.model_name, "messages": copy.deepcopy(messages), "timeout": self.request_timeout}
         if self.temperature is not None:
             kwargs["temperature"] = self.temperature
@@ -220,7 +221,7 @@ class LLMClient:
                     settlement = 0.0
                 else:
                     record['budget_charge_policy'] = 'unknown-attempt-full-reservation'
-                if type(error).__name__ == 'ContextWindowExceededError' and not context_retry and self._trim_optional(messages):
+                if type(error).__name__ == 'ContextWindowExceededError' and not context_retry and self._trim_optional(messages, turn_kind):
                     record['context_retry'] = True
                     delay = 0
                 elif not is_transient_provider_error(error) or is_fatal_provider_error(error) or attempt >= self.max_retries:
@@ -282,6 +283,7 @@ class LLMClient:
         self.last_generation['latency_seconds'] = sum(durations) if attempts and len(durations) == len(attempts) else None
 
     def generate_solution(self, messages: list[dict[str, str]]) -> str:
+        self._initial_message_count = len(messages)
         self.last_generation = {"requested_model": self.model_name, "resolved_model": None,
                                 **self.settings(), "latency_seconds": None, "finish_reason": None,
                                 "usage": None, "attempts": [], "turns": [],

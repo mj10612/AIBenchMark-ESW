@@ -26,11 +26,14 @@ reconstruct an unknown surcharge. See [LiteLLM cost documentation](https://docs.
 
 Context prechecks use the model's local metadata and verified tokenizer count.
 Byte bounds used for budget estimates are not treated as exact tokenizer counts.
-When optional plan/review history causes overflow it is discarded while preserving
-the original task and final instruction. An actual provider context error similarly
-gets one retry with optional history removed. Irreducible oversized prompts fail
-with an actionable error; unavailable metadata/tokenization leaves the provider
-responsible for context validation. The context policy is recorded for comparison.
+When optional planning or earlier turn history causes overflow it is discarded
+while preserving every initial prompt message and the final instruction. Review
+and compile-repair turns also retain the latest implementation that the instruction
+depends on. An actual provider context error gets at most one retry when optional
+history can be removed; required implementation content is never removed to retry.
+Irreducible oversized prompts fail with an actionable error; unavailable metadata
+or tokenization leaves the provider responsible for context validation. The context
+policy is recorded as `trim-optional-once-v2` for comparison.
 
 `--repair-turns N` (0..10, default 0) requests bounded additional generations only
 after a compile failure. Each repair receives at most 2048 characters of scrubbed
