@@ -1,5 +1,4 @@
 import os
-import shutil
 import struct
 import subprocess
 import unittest
@@ -7,7 +6,7 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 from unittest.mock import patch
 
-from compiler_tools import find_clang
+from compiler_tools import find_clang, find_msvc
 
 from aibenchmark_esw.sandbox.size_analyzer import SizeAnalyzer
 
@@ -170,18 +169,9 @@ class TestSizeAnalyzer(unittest.TestCase):
 
     @unittest.skipUnless(os.name == "nt", "MSVC object integration requires Windows")
     def test_real_msvc_common_and_static_bss_are_counted(self):
-        compiler = shutil.which("cl")
+        compiler = find_msvc()
         if compiler is None:
-            vswhere = Path(os.environ.get("ProgramFiles(x86)", "C:/Program Files (x86)")) / "Microsoft Visual Studio/Installer/vswhere.exe"
-            if vswhere.is_file():
-                discovery = subprocess.run([str(vswhere), "-latest", "-products", "*", "-find",
-                                            "VC/Tools/MSVC/**/bin/Hostx64/x64/cl.exe"],
-                                           capture_output=True, text=True, timeout=10)
-                candidates = discovery.stdout.splitlines()
-                if discovery.returncode == 0 and candidates:
-                    compiler = candidates[-1]
-        if compiler is None:
-            self.skipTest("MSVC is not installed")
+            self.skipTest("MSVC is unavailable")
         for declaration in ("unsigned char buffer[2048];", "static volatile unsigned char buffer[2048];"):
             with self.subTest(declaration=declaration), TemporaryDirectory() as directory:
                 source = Path(directory) / "memory.c"
