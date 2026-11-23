@@ -17,6 +17,24 @@ NEW_TASKS = {
 
 
 class TestFirmwareTasks(unittest.TestCase):
+    def test_flash_update_accepts_contract_valid_smaller_chunks(self):
+        loader = DatasetLoader()
+        task = loader.get_task('tier3_flash_update')
+        reference = loader.get_reference_solution(task.id)
+        executor = ExecutionSandbox()
+        chunk_cap = 'if (chunk > 64U) chunk = 64U;'
+        self.assertEqual(reference.count(chunk_cap), 2)
+        write_code, read_code, tail = reference.split(chunk_cap)
+        for write_size, read_size in ((32, 32), (1, 17)):
+            with self.subTest(write_size=write_size, read_size=read_size):
+                candidate = (write_code + f'if (chunk > {write_size}U) chunk = {write_size}U;'
+                             + read_code + f'if (chunk > {read_size}U) chunk = {read_size}U;' + tail)
+                compiled, result = executor.compile_and_test(task, candidate)
+                self.addCleanup(compiled.cleanup)
+                self.assertTrue(compiled.success, compiled.output)
+                self.assertTrue(result.completed, result.output)
+                self.assertEqual(result.passed_tests, NEW_TASKS[task.id], result.output)
+
     def test_flash_update_rejects_mutant_with_truncated_valid_length_range(self):
         loader = DatasetLoader()
         task = loader.get_task('tier3_flash_update')
