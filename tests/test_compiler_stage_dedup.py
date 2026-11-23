@@ -18,6 +18,33 @@ from aibenchmark_esw.sandbox.static_analyzer import StaticAnalyzer
 
 
 class TestCompilerStageDedup(unittest.TestCase):
+    def test_object_only_diagnostics_keep_their_multiplicity(self):
+        for origin in ('candidate', 'unknown'):
+            with self.subTest(origin=origin):
+                # Distinct columns can yield identical records because columns
+                # are not currently retained by the compiler diagnostic parser.
+                warning = dict(rule_id='compiler.-Wunused-value', engine='compiler', severity='warning',
+                    message='expression result unused', line=2, file='/objects/candidate.c', source_origin=origin)
+                findings = _compiler_findings([], [warning, dict(warning)])
+                self.assertEqual(len(findings), 2)
+                self.assertEqual(findings, [warning, warning])
+
+    def test_real_cross_target_only_warnings_are_not_collapsed(self):
+        compiler = find_clang()
+        if not compiler:
+            self.skipTest('Clang unavailable')
+        loader = DatasetLoader()
+        task = loader.get_task('tier1_crc16')
+        reference = loader.get_reference_solution(task.id)
+        source = '#ifdef __arm__\nint target_warning(void) { 42; 42; return 0; }\n#endif\n' + reference
+        executor = ExecutionSandbox(compiler_path=compiler, warnings=True,
+                                   target='arm:cortex-m0', cross_compiler=compiler)
+        result = evaluate_task(task, source, reference, 'mock', executor, StaticAnalyzer(cppcheck_cmd='off'))
+        self.assertTrue(result.test_result.passed, result.error_log)
+        findings = [finding for finding in result.safety_metrics.findings
+                    if finding['rule_id'] == 'compiler.-Wunused-value']
+        self.assertEqual(len(findings), 2)
+
     def test_real_clang_warning_is_retained_once_across_both_compilations(self):
         compiler = find_clang()
         if not compiler:

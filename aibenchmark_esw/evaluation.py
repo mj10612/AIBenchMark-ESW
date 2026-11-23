@@ -34,7 +34,7 @@ def _compiler_findings(test_findings, object_findings):
             occurrence = {'stage': 'footprint-object', 'file': finding['file']}
             if occurrence not in occurrences:
                 occurrences.append(occurrence)
-        elif finding not in findings:
+        elif finding not in test_findings:
             findings.append(dict(finding))
     return findings
 
