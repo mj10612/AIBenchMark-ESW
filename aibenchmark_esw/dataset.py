@@ -1,12 +1,21 @@
 import json
 import logging
 from pathlib import Path
-from typing import Optional
+from typing import Any, Optional
 
 from aibenchmark_esw.models import TaskConfig
 from aibenchmark_esw.resources import data_root
 
 logger = logging.getLogger(__name__)
+
+
+def _unique_task_members(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
+    members: dict[str, Any] = {}
+    for name, value in pairs:
+        if name in members:
+            raise ValueError(f"task.json contains duplicate JSON member {name!r}")
+        members[name] = value
+    return members
 
 
 def validate_task_assets(task: TaskConfig) -> list[str]:
@@ -66,7 +75,7 @@ class DatasetLoader:
                 if integrity:
                     raise ValueError("; ".join(integrity))
                 with open(task_json, encoding="utf-8") as f:
-                    data = json.load(f)
+                    data = json.load(f, object_pairs_hook=_unique_task_members)
 
                 prompt_file = task_dir / "prompt.md"
                 prompt_content = ""

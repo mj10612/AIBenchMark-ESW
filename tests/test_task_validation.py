@@ -23,6 +23,64 @@ class TestTaskValidation(unittest.TestCase):
         path.write_text(json.dumps(data), encoding="utf-8")
         return destination
 
+    def test_duplicate_json_members_are_rejected_in_each_task_object(self):
+        fragments = (
+            ('"limits": {}, "limits": {}', "limits"),
+            ('"limits": {"max_flash_bytes": 1, "max_flash_bytes": 2048}', "max_flash_bytes"),
+            ('"limits": {"default": {"timeout_seconds": 1, "timeout_seconds": 10}}', "timeout_seconds"),
+            ('"limits": {"targets": {"arm:cortex-m0": {"max_ram_bytes": 0, "max_ram_bytes": 256}}}',
+             "max_ram_bytes"),
+            (r'"weights": {"functional": 0, "funct\u0069onal": 0.6}', "functional"),
+        )
+        with TemporaryDirectory() as directory:
+            root = Path(directory) / "tasks"
+            invalid = self.copy_task(root, "a_invalid")
+            valid = self.copy_task(root, "z_valid")
+            valid_config = valid / "task.json"
+            valid_data = json.loads(valid_config.read_text(encoding="utf-8"))
+            valid_data["limits"] = {
+                "default": {"max_flash_bytes": 2048},
+                "targets": {"arm:cortex-m0": {"max_flash_bytes": 4096}},
+            }
+            valid_data["prompt_overrides"] = {"extra_rules": ["Keep the API", "Keep the API"]}
+            valid_config.write_text(json.dumps(valid_data), encoding="utf-8")
+
+            config = invalid / "task.json"
+            data = json.loads(config.read_text(encoding="utf-8"))
+            del data["limits"]
+            data.pop("weights", None)
+            base = json.dumps(data)
+            for fragment, key in fragments:
+                with self.subTest(fragment=fragment):
+                    config.write_text("{" + fragment + ", " + base[1:], encoding="utf-8")
+                    message = f"task.json contains duplicate JSON member {key!r}"
+                    with self.assertRaisesRegex(ValueError, "a_invalid") as raised:
+                        DatasetLoader(root)
+                    self.assertIn(message, str(raised.exception))
+                    loader = DatasetLoader(root, strict=False)
+                    self.assertEqual(loader.load_errors, {str(invalid.resolve()): message})
+                    self.assertEqual([task.id for task in loader.list_tasks()], ["z_valid"])
+                    task = loader.list_tasks()[0]
+                    self.assertEqual(task.limits.max_flash_bytes, 2048)
+                    self.assertEqual(task.target_limits["arm:cortex-m0"].max_flash_bytes, 4096)
+                    self.assertEqual(task.prompt_overrides["extra_rules"], ["Keep the API", "Keep the API"])
+
+    def test_run_rejects_duplicate_metadata_before_generating_or_replacing_report(self):
+        with TemporaryDirectory() as directory:
+            root = Path(directory) / "tasks"
+            task = self.copy_task(root)
+            config = task / "task.json"
+            data = config.read_text(encoding="utf-8")
+            config.write_text('{"id": "discarded", ' + data[1:], encoding="utf-8")
+            report = Path(directory) / "result.json"
+            report.write_bytes(b"previous report")
+            args = cli.build_parser().parse_args(["run", "--tasks-root", str(root),
+                "--model", "mock", "--output", str(report)])
+            with patch.object(cli, "_new_client", side_effect=AssertionError("provider initialized")):
+                with self.assertRaisesRegex(ValueError, "duplicate JSON member 'id'"):
+                    cli.cmd_run(args)
+            self.assertEqual(report.read_bytes(), b"previous report")
+
     def test_validate_bundled_tasks_without_compiler_or_provider(self):
         args = cli.build_parser().parse_args(["validate"])
         with patch.object(cli, "ExecutionSandbox") as compiler, patch.object(cli, "LLMClient") as provider:
