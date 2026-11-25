@@ -69,12 +69,15 @@ def aggregate_runs(reports):
         settings_key = json.dumps(settings, sort_keys=True)
         identities = set()
         for result in results:
-            value = generation_sequence(result.generation or {})
-            if value:
-                identities.add(value)
+            sequence = generation_sequence(result.generation or {})
+            # A repeat of the same known model is another turn, not a model switch.
+            normalized = tuple(model for index, model in enumerate(sequence)
+                               if model is None or index == 0 or model != sequence[index - 1])
+            if normalized:
+                identities.add(normalized)
         if len(identities) > 1:
             raise ValueError("A single run contains different resolved model identities")
-        identity = next(iter(identities), None)
+        identity = next(iter(identities)) if identities else None
         requested = report["model_name"]
         key = (requested, settings_key)
         if identity is not None:

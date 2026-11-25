@@ -161,6 +161,10 @@ reports mean/sample standard deviation, coverage and per-task pass frequency;
 Independent sampling collections also carry unbiased Pass@k estimates. A single
 run has no standard-deviation or confidence-interval estimate.
 
+For aggregation, consecutive turns resolved to the same known model count as
+one model in the grouping sequence. Model switches stay in order, and turn
+coverage counts every recorded turn.
+
 `doctor --check-references` validates local tools with a trusted fixture before
 requests. An absent optional analyzer is valid builtin mode; a broken explicitly
 configured analyzer fails preflight. Mutations cover 47 hand-reviewed faulty
