@@ -107,7 +107,7 @@ class ReportIntegrityTests(unittest.TestCase):
         second['tasks'][0]['generation'].update(resolved_model='B', turns=[{'resolved_model':'B'}, {'resolved_model':'B'}])
         groups = aggregate_runs([first, second])['groups']
         self.assertEqual(len(groups), 2)
-        self.assertEqual({tuple(group['resolved_model_sequence']) for group in groups}, {('A','B'), ('B','B')})
+        self.assertEqual({tuple(group['resolved_model_sequence']) for group in groups}, {('A','B'), ('B',)})
 
     def test_cross_compiler_path_and_stamp_are_informational(self):
         first, second = fixture_report(), fixture_report(model='other')

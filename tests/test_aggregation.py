@@ -51,6 +51,49 @@ def fixture_report(score=100, run_id="run-1", model="provider/alias"):
 
 
 class TestAggregation(unittest.TestCase):
+    def test_adaptive_repairs_with_same_model_group_across_runs(self):
+        first, second = fixture_report(100), fixture_report(0, 'run-2')
+        for report, turns in ((first, 1), (second, 2)):
+            report['metadata']['generation_settings']['repair_turns'] = 1
+            report['tasks'][0]['generation']['turns'] = [{'resolved_model': 'snapshot-1'}] * turns
+
+        groups = aggregate_runs([first, second])['groups']
+        self.assertEqual(len(groups), 1)
+        self.assertEqual(groups[0]['resolved_model_sequence'], ['snapshot-1'])
+        self.assertEqual(groups[0]['runs'], 2)
+        self.assertEqual(groups[0]['statistics']['score']['mean'], 50)
+        self.assertEqual(groups[0]['usage_total_turns'], 3)
+
+    def test_adaptive_repairs_with_same_model_group_within_run(self):
+        report = fixture_report()
+        metadata = report['metadata']
+        metadata['generation_settings']['repair_turns'] = 1
+        metadata['selected_tasks'].append('two')
+        metadata['scoring_policy']['tasks']['two'] = copy.deepcopy(metadata['scoring_policy']['tasks']['one'])
+        first = report['tasks'][0]
+        first['generation']['turns'] = [{'resolved_model': 'snapshot-1'}]
+        second = copy.deepcopy(first)
+        second.update(task_id='two', provenance={'task_sha256': 'task-two'})
+        second['generation']['turns'].append({'resolved_model': 'snapshot-1'})
+        report['tasks'].append(second)
+
+        groups = aggregate_runs([report])['groups']
+        self.assertEqual(len(groups), 1)
+        self.assertEqual(groups[0]['resolved_model_sequence'], ['snapshot-1'])
+        self.assertEqual(groups[0]['task_attempts'], 2)
+        self.assertEqual(groups[0]['usage_total_turns'], 3)
+
+    def test_adaptive_repairs_preserve_model_switches_and_returns(self):
+        pipelines = (('A', 'A', 'B', 'B', 'A'), ('A', 'B', 'B'))
+        reports = [fixture_report(run_id=str(index)) for index in range(len(pipelines))]
+        for report, pipeline in zip(reports, pipelines):
+            report['metadata']['generation_settings']['repair_turns'] = 4
+            report['tasks'][0]['generation']['turns'] = [{'resolved_model': model} for model in pipeline]
+
+        groups = aggregate_runs(reports)['groups']
+        self.assertEqual({tuple(group['resolved_model_sequence']) for group in groups},
+                         {('A', 'B', 'A'), ('A', 'B')})
+
     def test_repeat_samples_include_failures_and_use_sample_standard_deviation(self):
         summary = aggregate_runs([fixture_report(score, str(i)) for i, score in enumerate((100, 0, 50))])
         group = summary["groups"][0]
