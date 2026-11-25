@@ -49,22 +49,42 @@ def measurement_summary(results):
             if value is not None and (isinstance(value, bool) or not isinstance(value, (int, float))
                                       or not math.isfinite(value) or value < 0):
                 raise ValueError('Invalid generation ' + key)
-        for key in ('usage', 'known_usage'):
-            for field in ('prompt_tokens', 'completion_tokens', 'total_tokens'):
-                value = (generation.get(key) or {}).get(field)
+        usage = generation.get('usage') or {}
+        known_usage = generation.get('known_usage') or {}
+        coverage = generation.get('usage_coverage') or {}
+        token_fields = ('prompt_tokens', 'completion_tokens', 'total_tokens')
+        for field in token_fields:
+            exact, subtotal = usage.get(field), known_usage.get(field)
+            for value in (exact, subtotal):
                 if value is not None and (isinstance(value, bool) or not isinstance(value, int) or value < 0):
                     raise ValueError('Invalid generation token measurement')
-        coverage = (generation.get('usage_coverage') or {}).get('total_tokens')
-        if coverage is not None:
-            if not isinstance(coverage, dict):
-                raise ValueError('Usage coverage must be an object')
-            known, count = coverage.get('known_attempts'), coverage.get('total_attempts')
+            if exact is not None and field in known_usage and subtotal != exact:
+                raise ValueError(f'Generation known_usage.{field} must equal usage.{field} when complete')
+            counts = coverage.get(field)
+            if counts is None:
+                continue
+            if not isinstance(counts, dict):
+                raise ValueError(f'Generation usage_coverage.{field} must be an object')
+            known, count = counts.get('known_attempts'), counts.get('total_attempts')
             if (isinstance(known, bool) or not isinstance(known, int) or known < 0
                     or isinstance(count, bool) or not isinstance(count, int) or count < 0 or known > count):
-                raise ValueError('Usage coverage request counts are invalid')
-            known_attempts += known
-            total_attempts += count
-            attempt_tasks += 1
+                raise ValueError(f'Generation usage_coverage.{field} has invalid request counts')
+            if (known > 0) != (exact is not None or subtotal is not None) or (
+                    (0 < known == count) != (exact is not None)):
+                raise ValueError(f'Generation usage_coverage.{field} contradicts token measurements')
+            if field == 'total_tokens':
+                known_attempts += known
+                total_attempts += count
+                attempt_tasks += 1
+        if (known_usage or coverage) and 'usage_complete' in generation:
+            if generation['usage_complete'] != all(usage.get(field) is not None for field in token_fields):
+                raise ValueError('Generation usage_complete contradicts token measurements')
+        cost = generation.get('cost_usd')
+        known_cost = generation.get('known_cost_usd', cost)
+        if 'cost_complete' in generation and generation['cost_complete'] != (cost is not None):
+            raise ValueError('Generation cost_complete contradicts cost_usd')
+        if cost is not None and known_cost != cost:
+            raise ValueError('Generation known_cost_usd must equal cost_usd when complete')
         turns = generation.get('turns')
         if turns is not None:
             if not isinstance(turns, list) or any(not isinstance(turn, dict) for turn in turns):
@@ -74,18 +94,16 @@ def measurement_summary(results):
             total_turns += len(turns)
             known_turns += sum((turn.get('usage') or {}).get('total_tokens') is not None for turn in turns)
             turn_tasks += 1
-        usage = generation.get('usage') or {}
-        total = usage.get('total_tokens')
+        exact_total = usage.get('total_tokens')
+        total = exact_total
         if total is None:
-            total = (generation.get('known_usage') or {}).get('total_tokens')
-        cost = generation.get('cost_usd')
-        known_cost = generation.get('known_cost_usd', cost)
+            total = known_usage.get('total_tokens')
         duration = generation.get('latency_seconds')
         if total is not None:
             if isinstance(total, bool) or not isinstance(total, int) or total < 0:
                 raise ValueError('Invalid token usage in report')
             tokens.append(total)
-            if generation.get('usage_complete', True):
+            if exact_total is not None and generation.get('usage_complete', True):
                 complete_tokens += 1
             else:
                 partial_tokens += 1
