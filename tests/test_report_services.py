@@ -46,6 +46,61 @@ class ReportIntegrityTests(unittest.TestCase):
             with self.assertRaises(ValueError):
                 BenchmarkReporter.from_json_dict(report)
 
+    def test_contradictory_generation_accounting_is_rejected(self):
+        usage = {'prompt_tokens': 60, 'completion_tokens': 40, 'total_tokens': 100}
+        complete = {
+            'cost_usd': 10, 'known_cost_usd': 10, 'cost_complete': True,
+            'usage': usage, 'known_usage': usage, 'usage_complete': True,
+            'usage_coverage': {field: {'known_attempts': 2, 'total_attempts': 2} for field in usage},
+        }
+        report = fixture_report()
+        report['tasks'][0]['generation'].update(complete)
+        results = BenchmarkReporter.from_json_dict(report)
+        saved = BenchmarkReporter.to_json_dict(results, report['model_name'], report['metadata'])
+        for overrides, field in (
+            ({'known_cost_usd': 0}, 'known_cost_usd'),
+            ({'cost_usd': None}, 'cost_complete'),
+            ({'cost_complete': False}, 'cost_complete'),
+            ({'known_usage': {**usage, 'total_tokens': 1}}, 'known_usage.total_tokens'),
+            ({'known_usage': {**usage, 'prompt_tokens': None}}, 'known_usage.prompt_tokens'),
+            ({'usage_complete': False}, 'usage_complete'),
+            ({'usage_coverage': {'total_tokens': {'known_attempts': 0, 'total_attempts': 2}}},
+             'usage_coverage.total_tokens'),
+            ({'usage_coverage': {'prompt_tokens': {'known_attempts': 1, 'total_attempts': 2}}},
+             'usage_coverage.prompt_tokens'),
+        ):
+            with self.subTest(overrides=overrides):
+                invalid = copy.deepcopy(saved)
+                invalid['tasks'][0]['generation'].update(overrides)
+                if field == 'known_cost_usd':
+                    # Reproduce a summary derived from the contradictory subtotal.
+                    invalid['generation_summary'].update(total_cost_usd=0, known_cost_usd=0, cost_per_passed_task=0)
+                else:
+                    del invalid['generation_summary']
+                with self.assertRaisesRegex(ValueError, field.replace('.', r'\.')):
+                    BenchmarkReporter.from_json_dict(invalid)
+
+    def test_partial_generation_accounting_preserves_measured_zero(self):
+        report = fixture_report()
+        report['tasks'][0]['generation'].update(
+            usage=None, known_usage={'total_tokens': 0},
+            usage_coverage={'total_tokens': {'known_attempts': 1, 'total_attempts': 2}},
+            cost_usd=None, known_cost_usd=0, cost_complete=False,
+        )
+        group = aggregate_runs([report])['groups'][0]
+        self.assertIsNone(group['total_tokens'])
+        self.assertIsNone(group['total_cost_usd'])
+        self.assertEqual((group['known_total_tokens'], group['known_cost_usd']), (0, 0))
+        self.assertEqual((group['usage_known_attempts'], group['usage_total_attempts']), (1, 2))
+
+    def test_legacy_unknown_request_coverage_is_accepted(self):
+        report = fixture_report()
+        report['tasks'][0]['generation'].update(usage={'total_tokens': 100},
+                                                usage_coverage={'total_tokens': None})
+        group = aggregate_runs([report])['groups'][0]
+        self.assertIsNone(group['usage_total_attempts'])
+        self.assertEqual(group['total_tokens'], 100)
+
     def test_unknown_subobject_fields_raise_value_error(self):
         for field in ('size_metrics', 'safety_metrics', 'weights', 'limits'):
             report = fixture_report()
