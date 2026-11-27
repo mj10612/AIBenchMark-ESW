@@ -66,7 +66,7 @@ def _rate_limit_retry_after(error: Exception) -> Optional[float]:
                     if date.tzinfo is None:
                         date = date.replace(tzinfo=timezone.utc)
                     delay = date.timestamp() - time.time()
-            except (ValueError, OverflowError, OSError):
+            except (TypeError, ValueError, OverflowError, OSError):
                 continue
             if math.isfinite(delay) and delay >= 0:
                 return min(delay, _MAX_RETRY_DELAY_SECONDS)
